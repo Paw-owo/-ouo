@@ -1,0 +1,1802 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>AI 手机桌面系统</title>
+  <link rel="stylesheet" href="./style.css">
+
+  <style>
+    :root {
+      --os-bg: #fff8fb;
+      --os-bg-2: #f7eff6;
+      --os-card: rgba(255, 255, 255, 0.68);
+      --os-card-strong: rgba(255, 255, 255, 0.88);
+      --os-text: #4d3f4a;
+      --os-muted: #7e6d79;
+      --os-line: rgba(110, 88, 104, 0.14);
+      --os-accent: #eaa6c4;
+      --os-accent-2: #f3bfd4;
+      --os-soft: rgba(243, 191, 212, 0.24);
+      --os-danger: #d98798;
+      --os-shadow: 0 18px 44px rgba(105, 78, 96, 0.13);
+      --os-shadow-soft: 0 10px 26px rgba(105, 78, 96, 0.10);
+      --os-dock-height: 92px;
+      --safe-top: env(safe-area-inset-top, 0px);
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: var(--os-bg);
+      color: var(--os-text);
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Helvetica Neue", Arial, sans-serif;
+    }
+
+    button,
+    input,
+    textarea,
+    select {
+      font: inherit;
+      color: inherit;
+    }
+
+    button {
+      border: 0;
+      background: transparent;
+      cursor: pointer;
+    }
+
+    button:active {
+      transform: scale(0.97);
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    .app-root {
+      position: fixed;
+      inset: 0;
+      overflow: hidden;
+      background: var(--os-bg);
+    }
+
+    .desktop {
+      position: fixed;
+      inset: 0;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 16% 9%, rgba(243, 191, 212, 0.34), transparent 28%),
+        radial-gradient(circle at 86% 18%, rgba(255, 255, 255, 0.78), transparent 30%),
+        linear-gradient(180deg, #fffafd 0%, #f7eff6 100%);
+      color: var(--os-text);
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    .desktop.has-wallpaper {
+      background-image:
+        linear-gradient(180deg, rgba(255, 250, 253, 0.16), rgba(247, 239, 246, 0.16)),
+        var(--desktop-wallpaper);
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+    }
+
+    .desktop::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0.08)),
+        radial-gradient(circle at 50% 100%, rgba(234, 166, 196, 0.18), transparent 42%);
+      z-index: 0;
+    }
+
+    .status-bar {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 0;
+      z-index: 20;
+      height: calc(42px + var(--safe-top));
+      padding: calc(10px + var(--safe-top)) 20px 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 13px;
+      font-weight: 650;
+      letter-spacing: 0.01em;
+      color: var(--os-text);
+    }
+
+    .status-icons {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--os-text);
+      opacity: 0.82;
+    }
+
+    .signal-icon {
+      width: 20px;
+      height: 13px;
+      display: inline-flex;
+      align-items: flex-end;
+      gap: 2px;
+    }
+
+    .signal-icon::before,
+    .signal-icon::after {
+      content: "";
+    }
+
+    .signal-icon,
+    .signal-icon::before,
+    .signal-icon::after {
+      background: none;
+    }
+
+    .signal-icon i {
+      display: block;
+      width: 3px;
+      border-radius: 10px;
+      background: currentColor;
+    }
+
+    .signal-icon i:nth-child(1) {
+      height: 4px;
+      opacity: 0.45;
+    }
+
+    .signal-icon i:nth-child(2) {
+      height: 7px;
+      opacity: 0.62;
+    }
+
+    .signal-icon i:nth-child(3) {
+      height: 10px;
+      opacity: 0.78;
+    }
+
+    .signal-icon i:nth-child(4) {
+      height: 13px;
+    }
+
+    .wifi-icon {
+      position: relative;
+      width: 17px;
+      height: 13px;
+    }
+
+    .wifi-icon::before,
+    .wifi-icon::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      border: 2px solid currentColor;
+      border-top: 0;
+      border-left-color: transparent;
+      border-right-color: transparent;
+      transform: translateX(-50%);
+      opacity: 0.82;
+    }
+
+    .wifi-icon::before {
+      bottom: 1px;
+      width: 16px;
+      height: 9px;
+      border-radius: 0 0 16px 16px;
+    }
+
+    .wifi-icon::after {
+      bottom: 1px;
+      width: 8px;
+      height: 5px;
+      border-radius: 0 0 8px 8px;
+    }
+
+    .battery-icon {
+      position: relative;
+      width: 25px;
+      height: 13px;
+      border: 1.5px solid currentColor;
+      border-radius: 5px;
+    }
+
+    .battery-icon::before {
+      content: "";
+      position: absolute;
+      left: 2px;
+      top: 2px;
+      bottom: 2px;
+      width: 72%;
+      border-radius: 3px;
+      background: currentColor;
+    }
+
+    .battery-icon::after {
+      content: "";
+      position: absolute;
+      right: -4px;
+      top: 4px;
+      width: 2px;
+      height: 5px;
+      border-radius: 2px;
+      background: currentColor;
+    }
+
+    .user-widget {
+      position: absolute;
+      left: 16px;
+      right: 16px;
+      top: calc(54px + var(--safe-top));
+      z-index: 5;
+      min-height: 126px;
+      padding: 18px;
+      border-radius: 30px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      text-align: left;
+      color: var(--os-text);
+      background: rgba(255, 255, 255, 0.58);
+      border: 1px solid rgba(255, 255, 255, 0.62);
+      box-shadow: var(--os-shadow);
+      backdrop-filter: blur(26px);
+      -webkit-backdrop-filter: blur(26px);
+    }
+
+    .user-widget-avatar {
+      width: 68px;
+      height: 68px;
+      flex: 0 0 auto;
+      border-radius: 24px;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--os-accent);
+      font-size: 24px;
+      font-weight: 800;
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.90), rgba(255, 255, 255, 0.45)),
+        var(--os-soft);
+      border: 1px solid rgba(255, 255, 255, 0.70);
+      box-shadow: var(--os-shadow-soft);
+    }
+
+    .user-widget-avatar img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .user-widget-main {
+      min-width: 0;
+      flex: 1;
+    }
+
+    .user-widget-kicker {
+      margin-bottom: 6px;
+      color: var(--os-muted);
+      font-size: 12px;
+      line-height: 1.3;
+    }
+
+    .user-widget-name {
+      display: block;
+      font-size: 20px;
+      font-weight: 820;
+      line-height: 1.18;
+      letter-spacing: -0.02em;
+    }
+
+    .user-widget-desc {
+      display: block;
+      margin-top: 8px;
+      color: var(--os-muted);
+      font-size: 13px;
+      line-height: 1.55;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .desktop-content {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: calc(196px + var(--safe-top));
+      bottom: calc(var(--os-dock-height) + 44px + var(--safe-bottom));
+      z-index: 4;
+      overflow: hidden;
+    }
+
+    .desktop-pages {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      width: 200%;
+      height: 100%;
+      transition: transform 260ms cubic-bezier(0.2, 0.8, 0.2, 1);
+      will-change: transform;
+    }
+
+    .desktop-page {
+      position: relative;
+      width: 50%;
+      height: 100%;
+      flex: 0 0 50%;
+      overflow: hidden;
+    }
+
+    .app-surface {
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+    }
+
+    .desktop-app {
+      position: absolute;
+      width: 76px;
+      min-height: 88px;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 7px;
+      color: var(--os-text);
+      touch-action: none;
+      transition: transform 120ms ease, opacity 120ms ease;
+    }
+
+    .desktop-app.dragging {
+      z-index: 40;
+      opacity: 0.86;
+      transform: scale(1.06);
+    }
+
+    .desktop-icon-shell,
+    .dock-icon-shell {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      color: var(--os-accent);
+      background: rgba(255, 255, 255, 0.62);
+      border: 1px solid rgba(255, 255, 255, 0.72);
+      box-shadow: 0 12px 24px rgba(105, 78, 96, 0.12);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+    }
+
+    .desktop-icon-shell {
+      width: 60px;
+      height: 60px;
+      border-radius: 21px;
+    }
+
+    .dock-icon-shell {
+      width: 56px;
+      height: 56px;
+      border-radius: 20px;
+    }
+
+    .app-icon-image svg,
+    .dock-icon-shell svg,
+    .desktop-icon-shell svg {
+      width: 31px;
+      height: 31px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 1.75;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .desktop-icon-shell img,
+    .dock-icon-shell img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .app-icon-name {
+      max-width: 76px;
+      color: var(--os-text);
+      font-size: 11px;
+      line-height: 1.2;
+      text-align: center;
+      text-shadow: 0 1px 8px rgba(255, 255, 255, 0.70);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .desktop-page-indicator {
+      position: absolute;
+      left: 50%;
+      bottom: calc(var(--os-dock-height) + 18px + var(--safe-bottom));
+      z-index: 22;
+      transform: translateX(-50%);
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 7px 10px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.52);
+      border: 1px solid rgba(255, 255, 255, 0.58);
+      box-shadow: var(--os-shadow-soft);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+    }
+
+    .desktop-page-dot {
+      width: 7px;
+      height: 7px;
+      padding: 0;
+      border-radius: 999px;
+      background: rgba(126, 109, 121, 0.28);
+      transition: width 200ms ease, background 200ms ease;
+    }
+
+    .desktop-page-dot.active {
+      width: 19px;
+      background: var(--os-accent);
+    }
+
+    .dock {
+      position: absolute;
+      left: 14px;
+      right: 14px;
+      bottom: calc(10px + var(--safe-bottom));
+      z-index: 23;
+      height: var(--os-dock-height);
+      padding: 11px 18px 10px;
+      border-radius: 30px;
+      display: flex;
+      align-items: center;
+      justify-content: space-around;
+      gap: 10px;
+      background: rgba(255, 255, 255, 0.68);
+      border: 1px solid rgba(255, 255, 255, 0.68);
+      box-shadow: var(--os-shadow);
+      backdrop-filter: blur(28px);
+      -webkit-backdrop-filter: blur(28px);
+    }
+
+    .dock-app {
+      width: 62px;
+      height: 66px;
+      padding: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--os-accent);
+      transition: transform 120ms ease, opacity 120ms ease;
+    }
+
+    .context-menu {
+      position: fixed;
+      z-index: 100;
+      min-width: 168px;
+      padding: 8px;
+      border-radius: 20px;
+      background: rgba(255, 255, 255, 0.92);
+      border: 1px solid rgba(255, 255, 255, 0.72);
+      box-shadow: 0 22px 60px rgba(80, 60, 74, 0.20);
+      backdrop-filter: blur(28px);
+      -webkit-backdrop-filter: blur(28px);
+    }
+
+    .context-menu button {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 14px;
+      color: var(--os-text);
+      text-align: left;
+      font-size: 13px;
+    }
+
+    .context-menu button:active,
+    .context-menu button:hover {
+      background: var(--os-soft);
+      color: var(--os-accent);
+    }
+
+    .context-menu-divider {
+      height: 1px;
+      margin: 5px 4px;
+      background: var(--os-line);
+    }
+
+    .app-window {
+      position: fixed;
+      inset: 0;
+      z-index: 60;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 18% 8%, rgba(243, 191, 212, 0.32), transparent 30%),
+        linear-gradient(180deg, rgba(255, 250, 253, 0.98), rgba(247, 239, 246, 0.98));
+      color: var(--os-text);
+      animation: appIn 180ms ease both;
+    }
+
+    @keyframes appIn {
+      from {
+        opacity: 0;
+        transform: translateY(18px) scale(0.985);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+
+    .app-header {
+      height: calc(58px + var(--safe-top));
+      padding: calc(12px + var(--safe-top)) 16px 8px;
+      display: grid;
+      grid-template-columns: 42px 1fr 42px;
+      align-items: center;
+      gap: 8px;
+      flex: 0 0 auto;
+      position: relative;
+      z-index: 4;
+    }
+
+    .icon-button {
+      width: 38px;
+      height: 38px;
+      border-radius: 15px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--os-text);
+      font-size: 24px;
+      line-height: 1;
+      background: rgba(255, 255, 255, 0.62);
+      border: 1px solid rgba(255, 255, 255, 0.64);
+      box-shadow: var(--os-shadow-soft);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+    }
+
+    .app-title {
+      margin: 0;
+      text-align: center;
+      font-size: 16px;
+      font-weight: 780;
+      line-height: 1.2;
+      color: var(--os-text);
+    }
+
+    .app-body {
+      position: relative;
+      z-index: 2;
+      flex: 1;
+      min-height: 0;
+      overflow: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .empty-state {
+      margin: 18px;
+      padding: 34px 18px;
+      border-radius: 28px;
+      text-align: center;
+      color: var(--os-muted);
+      background: rgba(255, 255, 255, 0.64);
+      border: 1px solid rgba(255, 255, 255, 0.66);
+      box-shadow: var(--os-shadow-soft);
+      backdrop-filter: blur(22px);
+      -webkit-backdrop-filter: blur(22px);
+    }
+
+    .empty-state-title {
+      margin-bottom: 10px;
+      color: var(--os-text);
+      font-size: 16px;
+      font-weight: 760;
+    }
+
+    .empty-state p {
+      margin: 0;
+      font-size: 13px;
+      line-height: 1.7;
+    }
+
+    .desktop-toast {
+      position: fixed;
+      left: 50%;
+      bottom: calc(116px + var(--safe-bottom));
+      z-index: 120;
+      max-width: min(78vw, 360px);
+      padding: 11px 14px;
+      border-radius: 16px;
+      color: #fff;
+      background: rgba(55, 43, 52, 0.88);
+      box-shadow: 0 12px 34px rgba(55, 43, 52, 0.20);
+      transform: translateX(-50%) translateY(14px);
+      opacity: 0;
+      pointer-events: none;
+      white-space: pre-wrap;
+      text-align: center;
+      font-size: 12px;
+      line-height: 1.5;
+      transition: 180ms ease;
+    }
+
+    .desktop-toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    @media (min-width: 720px) {
+      .desktop {
+        max-width: 430px;
+        max-height: 932px;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        border-radius: 38px;
+        box-shadow: 0 28px 80px rgba(80, 60, 74, 0.18);
+      }
+
+      .app-window {
+        max-width: 430px;
+        max-height: 932px;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        border-radius: 38px;
+        box-shadow: 0 28px 80px rgba(80, 60, 74, 0.18);
+      }
+
+      @keyframes appIn {
+        from {
+          opacity: 0;
+          transform: translate(-50%, calc(-50% + 18px)) scale(0.985);
+        }
+        to {
+          opacity: 1;
+          transform: translate(-50%, -50%) scale(1);
+        }
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div id="appRoot" class="app-root">
+    <main id="desktop" class="desktop">
+      <header class="status-bar">
+        <div id="statusTime">00:00</div>
+        <div class="status-icons" aria-hidden="true">
+          <span class="signal-icon">
+            <i></i>
+            <i></i>
+            <i></i>
+            <i></i>
+          </span>
+          <span class="wifi-icon"></span>
+          <span class="battery-icon"></span>
+        </div>
+      </header>
+
+      <button id="userWidget" class="user-widget" type="button" title="更换用户头像">
+        <span class="user-widget-avatar">
+          <img id="userAvatarImage" alt="用户头像" class="hidden">
+          <span id="userAvatarFallback">我</span>
+        </span>
+        <span class="user-widget-main">
+          <span id="desktopDateText" class="user-widget-kicker">私人 AI 桌面</span>
+          <span id="userWidgetName" class="user-widget-name">我的桌面</span>
+          <span class="user-widget-desc">点击这里更换头像，长按应用可更换图标或移动桌面</span>
+        </span>
+      </button>
+
+      <section class="desktop-content" aria-label="桌面应用">
+        <div id="desktopPages" class="desktop-pages">
+          <section class="desktop-page" data-page="0">
+            <div id="appSurface0" class="app-surface"></div>
+          </section>
+
+          <section class="desktop-page" data-page="1">
+            <div id="appSurface1" class="app-surface"></div>
+          </section>
+        </div>
+      </section>
+
+      <div id="desktopPageIndicator" class="desktop-page-indicator" aria-label="桌面页码">
+        <button class="desktop-page-dot active" type="button" data-page="0" title="桌面一"></button>
+        <button class="desktop-page-dot" type="button" data-page="1" title="桌面二"></button>
+      </div>
+
+      <nav id="dock" class="dock" aria-label="常用应用"></nav>
+    </main>
+  </div>
+
+  <input id="wallpaperInput" type="file" accept="image/*" class="hidden">
+  <input id="iconInput" type="file" accept="image/*" class="hidden">
+  <input id="avatarInput" type="file" accept="image/*" class="hidden">
+
+  <script type="module">
+    import * as Theme from "./core/theme.js";
+    import * as UI from "./core/ui.js";
+
+    const STORAGE_KEYS = {
+      wallpaper: "ai_phone_wallpaper",
+      userAvatar: "ai_phone_user_avatar",
+      appIcons: "ai_phone_app_icons",
+      appPages: "ai_phone_app_pages",
+      appPositions: "ai_phone_app_positions_v2",
+      desktopPage: "ai_phone_desktop_page"
+    };
+
+    const DESKTOP_PAGE_COUNT = 2;
+    const ICON_SIZE = 76;
+
+    const ICONS = {
+      chat: `
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M5 6.5C5 4.57 6.57 3 8.5 3h7C17.43 3 19 4.57 19 6.5v5C19 13.43 17.43 15 15.5 15H11l-4.5 4v-4.1A3.5 3.5 0 0 1 5 12V6.5Z"></path>
+          <path d="M8.5 7.5h7"></path>
+          <path d="M8.5 10.5h4.5"></path>
+        </svg>
+      `,
+      moments: `
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 3.5v17"></path>
+          <path d="M4.5 12h15"></path>
+          <path d="M6.7 6.7l10.6 10.6"></path>
+          <path d="M17.3 6.7L6.7 17.3"></path>
+          <circle cx="12" cy="12" r="3.2"></circle>
+        </svg>
+      `,
+      call: `
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M8.2 4.5 10 8.7 8.4 10a11.5 11.5 0 0 0 5.6 5.6l1.3-1.6 4.2 1.8c.5.2.8.8.6 1.3l-.9 2.4c-.2.5-.7.8-1.2.8C10.2 20.3 3.7 13.8 3.7 6c0-.5.3-1 .8-1.2l2.4-.9c.5-.2 1.1.1 1.3.6Z"></path>
+          <path d="M14.5 5.5c1.8.5 3.2 1.9 3.8 3.7"></path>
+          <path d="M14.8 2.7c3.1.7 5.7 3.2 6.5 6.4"></path>
+        </svg>
+      `,
+      characters: `
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="12" cy="8" r="4"></circle>
+          <path d="M5 20c.8-4 3.3-6 7-6s6.2 2 7 6"></path>
+          <path d="M8.8 8.2h.1"></path>
+          <path d="M15.1 8.2h.1"></path>
+          <path d="M10 10.8c1.2.8 2.8.8 4 0"></path>
+        </svg>
+      `,
+      settings: `
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="12" cy="12" r="3"></circle>
+          <path d="M19.4 15a1.8 1.8 0 0 0 .36 1.98l.04.04a2.1 2.1 0 0 1-2.97 2.97l-.04-.04A1.8 1.8 0 0 0 14.8 19.6a1.8 1.8 0 0 0-1.3 1.72V21.4a2.1 2.1 0 0 1-4.2 0v-.08A1.8 1.8 0 0 0 8 19.6a1.8 1.8 0 0 0-1.98.36l-.04.04a2.1 2.1 0 0 1-2.97-2.97l.04-.04A1.8 1.8 0 0 0 3.4 15.2a1.8 1.8 0 0 0-1.72-1.3H1.6a2.1 2.1 0 0 1 0-4.2h.08A1.8 1.8 0 0 0 3.4 8a1.8 1.8 0 0 0-.36-1.98L3 5.98a2.1 2.1 0 0 1 2.97-2.97l.04.04A1.8 1.8 0 0 0 7.8 3.4a1.8 1.8 0 0 0 1.3-1.72V1.6a2.1 2.1 0 0 1 4.2 0v.08a1.8 1.8 0 0 0 1.3 1.72 1.8 1.8 0 0 0 1.98-.36l.04-.04a2.1 2.1 0 0 1 2.97 2.97l-.04.04A1.8 1.8 0 0 0 19.6 8c.25.78.95 1.32 1.72 1.32h.08a2.1 2.1 0 0 1 0 4.2h-.08A1.8 1.8 0 0 0 19.4 15Z"></path>
+        </svg>
+      `
+    };
+
+    const APPS = [
+      {
+        id: "chat",
+        name: "消息",
+        iconSvg: ICONS.chat,
+        module: "./apps/chat.js",
+        dock: true,
+        defaultPage: 0
+      },
+      {
+        id: "moments",
+        name: "朋友圈",
+        iconSvg: ICONS.moments,
+        module: "./apps/moments.js",
+        dock: true,
+        defaultPage: 0
+      },
+      {
+        id: "call",
+        name: "电话",
+        iconSvg: ICONS.call,
+        module: "./apps/call.js",
+        dock: true,
+        defaultPage: 0
+      },
+      {
+        id: "characters",
+        name: "角色管理",
+        iconSvg: ICONS.characters,
+        module: "./apps/characters.js",
+        dock: false,
+        defaultPage: 1
+      },
+      {
+        id: "settings",
+        name: "设置",
+        iconSvg: ICONS.settings,
+        module: "./apps/settings.js",
+        dock: true,
+        defaultPage: 1
+      }
+    ];
+
+    const appRoot = document.getElementById("appRoot");
+    const desktop = document.getElementById("desktop");
+    const desktopPages = document.getElementById("desktopPages");
+    const desktopPageIndicator = document.getElementById("desktopPageIndicator");
+    const statusTime = document.getElementById("statusTime");
+    const desktopDateText = document.getElementById("desktopDateText");
+    const appSurface0 = document.getElementById("appSurface0");
+    const appSurface1 = document.getElementById("appSurface1");
+    const dock = document.getElementById("dock");
+    const userWidget = document.getElementById("userWidget");
+    const userAvatarImage = document.getElementById("userAvatarImage");
+    const userAvatarFallback = document.getElementById("userAvatarFallback");
+
+    const wallpaperInput = document.getElementById("wallpaperInput");
+    const iconInput = document.getElementById("iconInput");
+    const avatarInput = document.getElementById("avatarInput");
+
+    let pendingIconAppId = null;
+    let activeWindow = null;
+    let contextMenuCloseTimer = null;
+    let currentDesktopPage = 0;
+    let touchStartX = 0;
+    let touchStartY = 0;
+    let touchEndX = 0;
+    let touchEndY = 0;
+    let toastTimer = 0;
+    let suppressClickUntil = 0;
+
+    function readJson(key, fallback) {
+      try {
+        const value = localStorage.getItem(key);
+        if (!value) return fallback;
+        return JSON.parse(value);
+      } catch {
+        return fallback;
+      }
+    }
+
+    function writeJson(key, value) {
+      try {
+        localStorage.setItem(key, JSON.stringify(value));
+        return true;
+      } catch {
+        showAlertSafe("本地空间不够，图片或布局保存失败。可以先清理旧壁纸和旧图标。");
+        return false;
+      }
+    }
+
+    function setLocalValue(key, value) {
+      try {
+        localStorage.setItem(key, value);
+        return true;
+      } catch {
+        showAlertSafe("本地空间不够，保存失败。可以换一张更小的图片。");
+        return false;
+      }
+    }
+
+    function showAlertSafe(message) {
+      if (typeof UI.showAlert === "function") {
+        UI.showAlert(String(message));
+        return;
+      }
+
+      showNotice(message);
+    }
+
+    function showNotice(message) {
+      let toast = document.getElementById("desktopToast");
+
+      if (!toast) {
+        toast = document.createElement("div");
+        toast.id = "desktopToast";
+        toast.className = "desktop-toast";
+        document.body.appendChild(toast);
+      }
+
+      toast.textContent = String(message);
+      toast.classList.add("show");
+
+      window.clearTimeout(toastTimer);
+      toastTimer = window.setTimeout(() => {
+        toast.classList.remove("show");
+      }, 2400);
+    }
+
+    function clamp(value, min, max) {
+      return Math.max(min, Math.min(max, value));
+    }
+
+    function getSurface(pageIndex) {
+      return pageIndex === 0 ? appSurface0 : appSurface1;
+    }
+
+    function getTimeContext() {
+      const now = new Date();
+      const weekNames = ["星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"];
+
+      return {
+        timestamp: now.toISOString(),
+        localText: `${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日 ${weekNames[now.getDay()]} ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`,
+        year: now.getFullYear(),
+        month: now.getMonth() + 1,
+        day: now.getDate(),
+        hour: now.getHours(),
+        minute: now.getMinutes(),
+        week: weekNames[now.getDay()]
+      };
+    }
+
+    function updateStatusTime() {
+      const now = new Date();
+      const hour = String(now.getHours()).padStart(2, "0");
+      const minute = String(now.getMinutes()).padStart(2, "0");
+      const weekNames = ["星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"];
+
+      statusTime.textContent = `${hour}:${minute}`;
+      desktopDateText.textContent = `${now.getMonth() + 1}月${now.getDate()}日 ${weekNames[now.getDay()]}`;
+    }
+
+    function loadWallpaper() {
+      const wallpaper = localStorage.getItem(STORAGE_KEYS.wallpaper);
+
+      if (wallpaper) {
+        desktop.classList.add("has-wallpaper");
+        desktop.style.setProperty("--desktop-wallpaper", `url("${String(wallpaper).replace(/"/g, "%22")}")`);
+      } else {
+        desktop.classList.remove("has-wallpaper");
+        desktop.style.removeProperty("--desktop-wallpaper");
+      }
+    }
+
+    function setWallpaper(base64) {
+      if (setLocalValue(STORAGE_KEYS.wallpaper, base64)) {
+        loadWallpaper();
+        showNotice("壁纸已更新");
+      }
+    }
+
+    function clearWallpaper() {
+      localStorage.removeItem(STORAGE_KEYS.wallpaper);
+      loadWallpaper();
+      showNotice("壁纸已清除");
+    }
+
+    function loadUserAvatar() {
+      const avatar = localStorage.getItem(STORAGE_KEYS.userAvatar);
+
+      if (avatar) {
+        userAvatarImage.src = avatar;
+        userAvatarImage.classList.remove("hidden");
+        userAvatarFallback.classList.add("hidden");
+      } else {
+        userAvatarImage.removeAttribute("src");
+        userAvatarImage.classList.add("hidden");
+        userAvatarFallback.classList.remove("hidden");
+      }
+    }
+
+    function setUserAvatar(base64) {
+      if (setLocalValue(STORAGE_KEYS.userAvatar, base64)) {
+        loadUserAvatar();
+        showNotice("头像已更新");
+      }
+    }
+
+    function getStoredAppIcons() {
+      return readJson(STORAGE_KEYS.appIcons, {});
+    }
+
+    function setStoredAppIcon(appId, base64) {
+      const icons = getStoredAppIcons();
+      icons[appId] = base64;
+      writeJson(STORAGE_KEYS.appIcons, icons);
+    }
+
+    function resetStoredAppIcon(appId) {
+      const icons = getStoredAppIcons();
+      delete icons[appId];
+      writeJson(STORAGE_KEYS.appIcons, icons);
+      renderApps();
+      showNotice("图标已恢复");
+    }
+
+    function getStoredAppPages() {
+      const savedPages = readJson(STORAGE_KEYS.appPages, {});
+      const result = {};
+
+      APPS.forEach((app) => {
+        const savedPage = Number(savedPages[app.id]);
+        const defaultPage = Number(app.defaultPage) || 0;
+
+        if (Number.isInteger(savedPage) && savedPage >= 0 && savedPage < DESKTOP_PAGE_COUNT) {
+          result[app.id] = savedPage;
+        } else {
+          result[app.id] = Math.min(Math.max(defaultPage, 0), DESKTOP_PAGE_COUNT - 1);
+        }
+      });
+
+      return result;
+    }
+
+    function getStoredAppPositions() {
+      return readJson(STORAGE_KEYS.appPositions, {});
+    }
+
+    function setStoredAppPosition(appId, x, y) {
+      const positions = getStoredAppPositions();
+      positions[appId] = {
+        x: Math.round(x),
+        y: Math.round(y)
+      };
+      writeJson(STORAGE_KEYS.appPositions, positions);
+    }
+
+    function setAppPage(appId, pageIndex) {
+      const pages = getStoredAppPages();
+      pages[appId] = clamp(pageIndex, 0, DESKTOP_PAGE_COUNT - 1);
+      writeJson(STORAGE_KEYS.appPages, pages);
+      renderApps();
+      setDesktopPage(pages[appId]);
+      showNotice(`已移动到桌面 ${pages[appId] + 1}`);
+    }
+
+    function resetDesktopLayout() {
+      localStorage.removeItem(STORAGE_KEYS.appPages);
+      localStorage.removeItem(STORAGE_KEYS.appPositions);
+      localStorage.removeItem(STORAGE_KEYS.desktopPage);
+      renderApps();
+      setDesktopPage(0);
+      showNotice("桌面布局已恢复");
+    }
+
+    function getAppIcon(app) {
+      const icons = getStoredAppIcons();
+
+      if (icons[app.id]) {
+        return {
+          type: "image",
+          value: icons[app.id]
+        };
+      }
+
+      return {
+        type: "svg",
+        value: app.iconSvg || ""
+      };
+    }
+
+    function defaultAppPosition(pageIndex, orderIndex) {
+      const surface = getSurface(pageIndex);
+      const width = surface.clientWidth || window.innerWidth;
+      const columnCount = 4;
+      const cellWidth = width / columnCount;
+      const column = orderIndex % columnCount;
+      const row = Math.floor(orderIndex / columnCount);
+      const x = Math.round(column * cellWidth + (cellWidth - ICON_SIZE) / 2);
+      const y = 18 + row * 98;
+
+      return {
+        x: clamp(x, 8, Math.max(8, width - ICON_SIZE - 8)),
+        y
+      };
+    }
+
+    function createIconInner(app, shellClass) {
+      const shell = document.createElement("span");
+      const icon = getAppIcon(app);
+
+      shell.className = shellClass;
+
+      if (icon.type === "image") {
+        const img = document.createElement("img");
+        img.src = icon.value;
+        img.alt = app.name;
+        shell.appendChild(img);
+      } else {
+        shell.innerHTML = icon.value;
+      }
+
+      return shell;
+    }
+
+    function createDesktopAppElement(app, pageIndex, orderIndex) {
+      const button = document.createElement("button");
+      const name = document.createElement("span");
+      const positions = getStoredAppPositions();
+      const savedPosition = positions[app.id];
+      const fallbackPosition = defaultAppPosition(pageIndex, orderIndex);
+      const position = savedPosition || fallbackPosition;
+
+      button.type = "button";
+      button.className = "desktop-app";
+      button.dataset.appId = app.id;
+      button.title = app.name;
+      button.style.left = `${position.x}px`;
+      button.style.top = `${position.y}px`;
+
+      name.className = "app-icon-name";
+      name.textContent = app.name;
+
+      button.appendChild(createIconInner(app, "desktop-icon-shell"));
+      button.appendChild(name);
+
+      bindDesktopAppPointer(button, app, pageIndex);
+
+      button.addEventListener("click", () => {
+        if (Date.now() < suppressClickUntil) return;
+        openApp(app.id);
+      });
+
+      button.addEventListener("contextmenu", (event) => {
+        event.preventDefault();
+        showAppContextMenu(event.clientX, event.clientY, app.id);
+      });
+
+      return button;
+    }
+
+    function createDockAppElement(app) {
+      const button = document.createElement("button");
+
+      button.type = "button";
+      button.className = "dock-app";
+      button.dataset.appId = app.id;
+      button.title = app.name;
+
+      button.appendChild(createIconInner(app, "dock-icon-shell"));
+
+      button.addEventListener("click", () => {
+        openApp(app.id);
+      });
+
+      button.addEventListener("contextmenu", (event) => {
+        event.preventDefault();
+        showAppContextMenu(event.clientX, event.clientY, app.id);
+      });
+
+      return button;
+    }
+
+    function bindDesktopAppPointer(button, app, pageIndex) {
+      let startX = 0;
+      let startY = 0;
+      let originX = 0;
+      let originY = 0;
+      let moved = false;
+      let longPressTimer = null;
+      let menuOpened = false;
+
+      function clearLongPressTimer() {
+        if (longPressTimer) {
+          window.clearTimeout(longPressTimer);
+          longPressTimer = null;
+        }
+      }
+
+      button.addEventListener("pointerdown", (event) => {
+        if (event.button !== undefined && event.button !== 0) return;
+
+        closeContextMenu();
+
+        startX = event.clientX;
+        startY = event.clientY;
+        originX = parseFloat(button.style.left) || 0;
+        originY = parseFloat(button.style.top) || 0;
+        moved = false;
+        menuOpened = false;
+
+        button.setPointerCapture(event.pointerId);
+
+        longPressTimer = window.setTimeout(() => {
+          const rect = button.getBoundingClientRect();
+          menuOpened = true;
+          suppressClickUntil = Date.now() + 700;
+          showAppContextMenu(rect.left + rect.width / 2, rect.top + rect.height / 2, app.id);
+        }, 620);
+      });
+
+      button.addEventListener("pointermove", (event) => {
+        if (!button.hasPointerCapture(event.pointerId)) return;
+
+        const diffX = event.clientX - startX;
+        const diffY = event.clientY - startY;
+
+        if (Math.abs(diffX) + Math.abs(diffY) > 7) {
+          moved = true;
+          clearLongPressTimer();
+          closeContextMenu();
+          button.classList.add("dragging");
+        }
+
+        if (!moved || menuOpened) return;
+
+        const surface = getSurface(pageIndex);
+        const maxX = Math.max(8, surface.clientWidth - button.offsetWidth - 8);
+        const maxY = Math.max(8, surface.clientHeight - button.offsetHeight - 8);
+
+        button.style.left = `${clamp(originX + diffX, 8, maxX)}px`;
+        button.style.top = `${clamp(originY + diffY, 8, maxY)}px`;
+      });
+
+      button.addEventListener("pointerup", (event) => {
+        clearLongPressTimer();
+
+        if (button.hasPointerCapture(event.pointerId)) {
+          button.releasePointerCapture(event.pointerId);
+        }
+
+        button.classList.remove("dragging");
+
+        if (menuOpened) {
+          suppressClickUntil = Date.now() + 700;
+          return;
+        }
+
+        if (!moved) return;
+
+        suppressClickUntil = Date.now() + 450;
+
+        let targetPage = pageIndex;
+
+        if (pageIndex === 0 && event.clientX > window.innerWidth - 34) {
+          targetPage = 1;
+        }
+
+        if (pageIndex === 1 && event.clientX < 34) {
+          targetPage = 0;
+        }
+
+        setStoredAppPosition(
+          app.id,
+          parseFloat(button.style.left) || 0,
+          parseFloat(button.style.top) || 0
+        );
+
+        if (targetPage !== pageIndex) {
+          setAppPage(app.id, targetPage);
+        } else {
+          renderApps();
+        }
+      });
+
+      button.addEventListener("pointercancel", () => {
+        clearLongPressTimer();
+        button.classList.remove("dragging");
+      });
+    }
+
+    function renderApps() {
+      const pages = getStoredAppPages();
+      const pageGroups = [[], []];
+
+      appSurface0.innerHTML = "";
+      appSurface1.innerHTML = "";
+      dock.innerHTML = "";
+
+      APPS.forEach((app) => {
+        const pageIndex = pages[app.id] || 0;
+        pageGroups[pageIndex].push(app);
+      });
+
+      pageGroups.forEach((apps, pageIndex) => {
+        const surface = getSurface(pageIndex);
+
+        apps.forEach((app, index) => {
+          surface.appendChild(createDesktopAppElement(app, pageIndex, index));
+        });
+      });
+
+      APPS.forEach((app) => {
+        if (app.dock) {
+          dock.appendChild(createDockAppElement(app));
+        }
+      });
+    }
+
+    function setDesktopPage(pageIndex) {
+      currentDesktopPage = clamp(pageIndex, 0, DESKTOP_PAGE_COUNT - 1);
+      desktopPages.style.transform = `translateX(-${currentDesktopPage * 50}%)`;
+      localStorage.setItem(STORAGE_KEYS.desktopPage, String(currentDesktopPage));
+
+      Array.from(desktopPageIndicator.children).forEach((dot, index) => {
+        dot.classList.toggle("active", index === currentDesktopPage);
+      });
+    }
+
+    function showAppContextMenu(x, y, appId) {
+      closeContextMenu();
+
+      const pages = getStoredAppPages();
+      const currentPage = pages[appId] || 0;
+      const targetPage = currentPage === 0 ? 1 : 0;
+
+      const menu = document.createElement("div");
+      menu.className = "context-menu";
+      menu.id = "desktopContextMenu";
+
+      const changeIconButton = document.createElement("button");
+      changeIconButton.type = "button";
+      changeIconButton.textContent = "更换图标";
+      changeIconButton.addEventListener("click", () => {
+        pendingIconAppId = appId;
+        iconInput.value = "";
+        iconInput.click();
+        closeContextMenu();
+      });
+
+      const resetIconButton = document.createElement("button");
+      resetIconButton.type = "button";
+      resetIconButton.textContent = "恢复默认图标";
+      resetIconButton.addEventListener("click", () => {
+        resetStoredAppIcon(appId);
+        closeContextMenu();
+      });
+
+      const moveButton = document.createElement("button");
+      moveButton.type = "button";
+      moveButton.textContent = `移动到桌面 ${targetPage + 1}`;
+      moveButton.addEventListener("click", () => {
+        setAppPage(appId, targetPage);
+        closeContextMenu();
+      });
+
+      menu.appendChild(changeIconButton);
+      menu.appendChild(resetIconButton);
+      menu.appendChild(createDivider());
+      menu.appendChild(moveButton);
+
+      document.body.appendChild(menu);
+      placeMenu(menu, x, y);
+      bindMenuAutoClose();
+    }
+
+    function showDesktopContextMenu(event) {
+      closeContextMenu();
+
+      const menu = document.createElement("div");
+      menu.className = "context-menu";
+      menu.id = "desktopContextMenu";
+
+      const changeWallpaperButton = document.createElement("button");
+      changeWallpaperButton.type = "button";
+      changeWallpaperButton.textContent = "更换壁纸";
+      changeWallpaperButton.addEventListener("click", () => {
+        wallpaperInput.value = "";
+        wallpaperInput.click();
+        closeContextMenu();
+      });
+
+      const clearWallpaperButton = document.createElement("button");
+      clearWallpaperButton.type = "button";
+      clearWallpaperButton.textContent = "清除壁纸";
+      clearWallpaperButton.addEventListener("click", () => {
+        clearWallpaper();
+        closeContextMenu();
+      });
+
+      const resetLayoutButton = document.createElement("button");
+      resetLayoutButton.type = "button";
+      resetLayoutButton.textContent = "恢复桌面布局";
+      resetLayoutButton.addEventListener("click", () => {
+        resetDesktopLayout();
+        closeContextMenu();
+      });
+
+      menu.appendChild(changeWallpaperButton);
+      menu.appendChild(clearWallpaperButton);
+      menu.appendChild(createDivider());
+      menu.appendChild(resetLayoutButton);
+
+      document.body.appendChild(menu);
+      placeMenu(menu, event.clientX, event.clientY);
+      bindMenuAutoClose();
+    }
+
+    function createDivider() {
+      const divider = document.createElement("div");
+      divider.className = "context-menu-divider";
+      return divider;
+    }
+
+    function placeMenu(menu, x, y) {
+      const menuRect = menu.getBoundingClientRect();
+      const maxLeft = window.innerWidth - menuRect.width - 8;
+      const maxTop = window.innerHeight - menuRect.height - 8;
+
+      menu.style.left = `${Math.max(8, Math.min(x, maxLeft))}px`;
+      menu.style.top = `${Math.max(8, Math.min(y, maxTop))}px`;
+    }
+
+    function bindMenuAutoClose() {
+      window.clearTimeout(contextMenuCloseTimer);
+      contextMenuCloseTimer = window.setTimeout(() => {
+        document.addEventListener("pointerdown", closeContextMenu, { once: true });
+      }, 0);
+    }
+
+    function closeContextMenu() {
+      const oldMenu = document.getElementById("desktopContextMenu");
+
+      if (oldMenu) {
+        oldMenu.remove();
+      }
+    }
+
+    function createAppWindow(app) {
+      closeActiveWindow();
+
+      const windowElement = document.createElement("section");
+      const header = document.createElement("header");
+      const backButton = document.createElement("button");
+      const title = document.createElement("h1");
+      const rightSpace = document.createElement("div");
+      const body = document.createElement("div");
+
+      windowElement.className = "app-window";
+      windowElement.dataset.appId = app.id;
+
+      header.className = "app-header";
+
+      backButton.type = "button";
+      backButton.className = "icon-button";
+      backButton.textContent = "‹";
+      backButton.title = "返回桌面";
+      backButton.addEventListener("click", closeActiveWindow);
+
+      title.className = "app-title";
+      title.textContent = app.name;
+
+      body.className = "app-body";
+      body.id = `appBody-${app.id}`;
+
+      header.appendChild(backButton);
+      header.appendChild(title);
+      header.appendChild(rightSpace);
+
+      windowElement.appendChild(header);
+      windowElement.appendChild(body);
+
+      appRoot.appendChild(windowElement);
+      activeWindow = windowElement;
+
+      return body;
+    }
+
+    function closeActiveWindow() {
+      if (activeWindow) {
+        activeWindow.remove();
+        activeWindow = null;
+      }
+    }
+
+    function renderMissingApp(body, app, error) {
+      body.innerHTML = "";
+
+      const empty = document.createElement("div");
+      const title = document.createElement("div");
+      const desc = document.createElement("p");
+
+      empty.className = "empty-state";
+      title.className = "empty-state-title";
+
+      title.textContent = `${app.name} 暂未完成`;
+      desc.textContent = "对应模块没有正常打开。请检查 apps 文件夹里的文件是否存在。";
+
+      empty.appendChild(title);
+      empty.appendChild(desc);
+      body.appendChild(empty);
+
+      if (error) {
+        console.warn(`${app.name} 加载失败：`, error);
+      }
+    }
+
+    async function openApp(appId) {
+      const app = APPS.find((item) => item.id === appId);
+
+      if (!app) return;
+
+      closeContextMenu();
+
+      const body = createAppWindow(app);
+
+      try {
+        const module = await import(app.module);
+
+        if (typeof module.mountApp === "function") {
+          module.mountApp({
+            root: body,
+            app,
+            close: closeActiveWindow,
+            getTimeContext,
+            openApp
+          });
+          return;
+        }
+
+        if (typeof module.default === "function") {
+          module.default({
+            root: body,
+            app,
+            close: closeActiveWindow,
+            getTimeContext,
+            openApp
+          });
+          return;
+        }
+
+        renderMissingApp(body, app);
+      } catch (error) {
+        renderMissingApp(body, app, error);
+      }
+    }
+
+    function readFileAsDataUrl(file) {
+      return new Promise((resolve, reject) => {
+        if (!file) {
+          reject(new Error("没有选择图片"));
+          return;
+        }
+
+        if (!file.type || !file.type.startsWith("image/")) {
+          reject(new Error("请选择图片文件"));
+          return;
+        }
+
+        const reader = new FileReader();
+
+        reader.onload = () => {
+          resolve(reader.result);
+        };
+
+        reader.onerror = () => {
+          reject(new Error("图片读取失败"));
+        };
+
+        reader.readAsDataURL(file);
+      });
+    }
+
+    async function readImageAsBase64(file) {
+      const original = await readFileAsDataUrl(file);
+
+      if (file.type === "image/svg+xml") {
+        return original;
+      }
+
+      return new Promise((resolve) => {
+        const image = new Image();
+
+        image.onload = () => {
+          try {
+            const maxSide = 1280;
+            let width = image.width;
+            let height = image.height;
+
+            if (width > maxSide || height > maxSide) {
+              const scale = Math.min(maxSide / width, maxSide / height);
+              width = Math.round(width * scale);
+              height = Math.round(height * scale);
+            }
+
+            const canvas = document.createElement("canvas");
+            canvas.width = width;
+            canvas.height = height;
+
+            const ctx = canvas.getContext("2d");
+            ctx.drawImage(image, 0, 0, width, height);
+
+            resolve(canvas.toDataURL("image/jpeg", 0.78));
+          } catch {
+            resolve(original);
+          }
+        };
+
+        image.onerror = () => {
+          resolve(original);
+        };
+
+        image.src = original;
+      });
+    }
+
+    function bindDesktopSwipe() {
+      desktop.addEventListener("touchstart", (event) => {
+        if (activeWindow) return;
+        if (event.target.closest(".desktop-app, .dock-app, .user-widget, .context-menu")) return;
+
+        const touch = event.touches[0];
+        touchStartX = touch.clientX;
+        touchStartY = touch.clientY;
+        touchEndX = touch.clientX;
+        touchEndY = touch.clientY;
+      }, { passive: true });
+
+      desktop.addEventListener("touchmove", (event) => {
+        if (activeWindow) return;
+        if (event.target.closest(".desktop-app, .dock-app, .user-widget, .context-menu")) return;
+
+        const touch = event.touches[0];
+        touchEndX = touch.clientX;
+        touchEndY = touch.clientY;
+      }, { passive: true });
+
+      desktop.addEventListener("touchend", () => {
+        if (activeWindow) return;
+
+        const diffX = touchEndX - touchStartX;
+        const diffY = touchEndY - touchStartY;
+
+        if (Math.abs(diffX) < 56) return;
+        if (Math.abs(diffX) < Math.abs(diffY) * 1.4) return;
+
+        if (diffX < 0) {
+          setDesktopPage(currentDesktopPage + 1);
+        } else {
+          setDesktopPage(currentDesktopPage - 1);
+        }
+      }, { passive: true });
+
+      desktop.addEventListener("wheel", (event) => {
+        if (activeWindow) return;
+        if (Math.abs(event.deltaX) < 20) return;
+
+        if (event.deltaX > 0) {
+          setDesktopPage(currentDesktopPage + 1);
+        } else {
+          setDesktopPage(currentDesktopPage - 1);
+        }
+      }, { passive: true });
+    }
+
+    function bindEvents() {
+      desktop.addEventListener("contextmenu", (event) => {
+        const blocked = event.target.closest(".desktop-app, .dock-app, .user-widget, .context-menu, .app-window");
+
+        if (blocked) return;
+
+        event.preventDefault();
+        showDesktopContextMenu(event);
+      });
+
+      desktopPageIndicator.addEventListener("click", (event) => {
+        const dot = event.target.closest(".desktop-page-dot");
+
+        if (!dot) return;
+
+        setDesktopPage(Number(dot.dataset.page) || 0);
+      });
+
+      userWidget.addEventListener("click", () => {
+        avatarInput.value = "";
+        avatarInput.click();
+      });
+
+      wallpaperInput.addEventListener("change", async () => {
+        try {
+          const file = wallpaperInput.files[0];
+          wallpaperInput.value = "";
+
+          if (!file) return;
+
+          const base64 = await readImageAsBase64(file);
+          setWallpaper(base64);
+        } catch (error) {
+          showAlertSafe(error.message || "壁纸设置失败");
+        }
+      });
+
+      iconInput.addEventListener("change", async () => {
+        try {
+          const file = iconInput.files[0];
+          iconInput.value = "";
+
+          if (!pendingIconAppId || !file) return;
+
+          const base64 = await readImageAsBase64(file);
+
+          setStoredAppIcon(pendingIconAppId, base64);
+          renderApps();
+
+          pendingIconAppId = null;
+          showNotice("图标已更新");
+        } catch (error) {
+          showAlertSafe(error.message || "图标设置失败");
+        }
+      });
+
+      avatarInput.addEventListener("change", async () => {
+        try {
+          const file = avatarInput.files[0];
+          avatarInput.value = "";
+
+          if (!file) return;
+
+          const base64 = await readImageAsBase64(file);
+          setUserAvatar(base64);
+        } catch (error) {
+          showAlertSafe(error.message || "头像设置失败");
+        }
+      });
+
+      window.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") {
+          closeContextMenu();
+
+          if (activeWindow) {
+            closeActiveWindow();
+          }
+        }
+
+        if (!activeWindow && event.key === "ArrowLeft") {
+          setDesktopPage(currentDesktopPage - 1);
+        }
+
+        if (!activeWindow && event.key === "ArrowRight") {
+          setDesktopPage(currentDesktopPage + 1);
+        }
+      });
+
+      window.addEventListener("resize", () => {
+        closeContextMenu();
+        renderApps();
+      });
+
+      bindDesktopSwipe();
+    }
+
+    function exposeGlobalHelpers() {
+      window.AIPhoneTime = {
+        getTimeContext
+      };
+
+      window.AIPhoneDesktop = {
+        openApp,
+        closeActiveWindow,
+        setDesktopPage
+      };
+    }
+
+    function init() {
+      if (typeof Theme.initTheme === "function") {
+        Theme.initTheme();
+      }
+
+      exposeGlobalHelpers();
+
+      updateStatusTime();
+      window.setInterval(updateStatusTime, 1000);
+
+      loadWallpaper();
+      loadUserAvatar();
+      renderApps();
+
+      const savedPage = Number(localStorage.getItem(STORAGE_KEYS.desktopPage));
+      setDesktopPage(Number.isInteger(savedPage) ? savedPage : 0);
+
+      bindEvents();
+    }
+
+    init();
+  </script>
+</body>
+</html>
