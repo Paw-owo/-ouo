@@ -1,0 +1,981 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>AI 手机桌面系统</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+
+<body>
+  <div id="appRoot" class="app-root">
+    <main id="desktop" class="desktop">
+      <header class="status-bar">
+        <div id="statusTime">00:00</div>
+        <div class="status-icons" aria-hidden="true">
+          <span class="signal-icon"></span>
+          <span class="wifi-icon"></span>
+          <span class="battery-icon"></span>
+        </div>
+      </header>
+
+      <section class="desktop-content" id="desktopContent">
+        <article id="desktopWidget" class="desktop-widget" aria-label="桌面小组件">
+          <div id="desktopWidgetBg" class="desktop-widget-bg"></div>
+          <div class="desktop-widget-mask"></div>
+          <div class="desktop-widget-content">
+            <div class="desktop-widget-kicker">PRIVATE AI</div>
+            <h2 id="desktopWidgetTitle">私人 AI 桌面</h2>
+            <p id="desktopWidgetText">把角色、消息和记忆放进一个干净柔软的手机界面里。</p>
+          </div>
+          <button id="editWidgetButton" class="desktop-widget-edit" type="button">编辑</button>
+        </article>
+
+        <div id="desktopPages" class="desktop-pages">
+          <section class="desktop-page" data-page="0">
+            <div id="appGridPage0" class="app-grid"></div>
+          </section>
+
+          <section class="desktop-page" data-page="1">
+            <div id="appGridPage1" class="app-grid"></div>
+          </section>
+        </div>
+      </section>
+
+      <div id="desktopPageIndicator" class="desktop-page-indicator" aria-label="桌面页码">
+        <button class="desktop-page-dot active" type="button" aria-label="第一页"></button>
+        <button class="desktop-page-dot" type="button" aria-label="第二页"></button>
+      </div>
+
+      <button id="userWidget" class="user-widget" type="button" title="更换用户头像">
+        <span class="user-widget-avatar">
+          <img id="userAvatarImage" alt="用户头像" class="hidden">
+          <span id="userAvatarFallback">我</span>
+        </span>
+      </button>
+
+      <nav id="dock" class="dock" aria-label="常用应用"></nav>
+    </main>
+  </div>
+
+  <input id="wallpaperInput" type="file" accept="image/*" class="hidden">
+  <input id="iconInput" type="file" accept="image/*" class="hidden">
+  <input id="avatarInput" type="file" accept="image/*" class="hidden">
+  <input id="widgetBgInput" type="file" accept="image/*" class="hidden">
+
+  <script type="module">
+    import { initTheme } from "./core/theme.js";
+    import { showAlert, showConfirm, showPrompt } from "./core/ui.js";
+
+    const STORAGE_KEYS = {
+      wallpaper: "ai_phone_wallpaper",
+      userAvatar: "ai_phone_user_avatar",
+      appIcons: "ai_phone_app_icons",
+      appPages: "ai_phone_app_pages",
+      widget: "ai_phone_desktop_widget",
+      widgetBg: "ai_phone_desktop_widget_bg",
+      widgetPosition: "ai_phone_desktop_widget_position"
+    };
+
+    const DESKTOP_PAGE_COUNT = 2;
+
+    const ICONS = {
+      chat: `
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M5 6.5C5 4.57 6.57 3 8.5 3h7C17.43 3 19 4.57 19 6.5v5C19 13.43 17.43 15 15.5 15H11l-4.5 4v-4.1A3.5 3.5 0 0 1 5 12V6.5Z"></path>
+          <path d="M8.5 7.5h7"></path>
+          <path d="M8.5 10.5h4.5"></path>
+        </svg>
+      `,
+      moments: `
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="12" cy="12" r="3.4"></circle>
+          <path d="M12 3.5v3"></path>
+          <path d="M12 17.5v3"></path>
+          <path d="M3.5 12h3"></path>
+          <path d="M17.5 12h3"></path>
+          <path d="M5.9 5.9 8 8"></path>
+          <path d="M16 16l2.1 2.1"></path>
+          <path d="M18.1 5.9 16 8"></path>
+          <path d="M8 16l-2.1 2.1"></path>
+        </svg>
+      `,
+      call: `
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M8.2 4.5 10 8.7 8.4 10a11.5 11.5 0 0 0 5.6 5.6l1.3-1.6 4.2 1.8c.5.2.8.8.6 1.3l-.9 2.4c-.2.5-.7.8-1.2.8C10.2 20.3 3.7 13.8 3.7 6c0-.5.3-1 .8-1.2l2.4-.9c.5-.2 1.1.1 1.3.6Z"></path>
+          <path d="M14.5 5.5c1.8.5 3.2 1.9 3.8 3.7"></path>
+          <path d="M14.8 2.7c3.1.7 5.7 3.2 6.5 6.4"></path>
+        </svg>
+      `,
+      characters: `
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="12" cy="8" r="4"></circle>
+          <path d="M5 20c.8-4 3.3-6 7-6s6.2 2 7 6"></path>
+          <path d="M8.8 8.2h.1"></path>
+          <path d="M15.1 8.2h.1"></path>
+          <path d="M10 10.8c1.2.8 2.8.8 4 0"></path>
+        </svg>
+      `,
+      settings: `
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="12" cy="12" r="3"></circle>
+          <path d="M19.4 15a1.8 1.8 0 0 0 .36 1.98l.04.04a2.1 2.1 0 0 1-2.97 2.97l-.04-.04A1.8 1.8 0 0 0 14.8 19.6a1.8 1.8 0 0 0-1.3 1.72V21.4a2.1 2.1 0 0 1-4.2 0v-.08A1.8 1.8 0 0 0 8 19.6a1.8 1.8 0 0 0-1.98.36l-.04.04a2.1 2.1 0 0 1-2.97-2.97l.04-.04A1.8 1.8 0 0 0 3.4 15.2a1.8 1.8 0 0 0-1.72-1.3H1.6a2.1 2.1 0 0 1 0-4.2h.08A1.8 1.8 0 0 0 3.4 8a1.8 1.8 0 0 0-.36-1.98L3 5.98a2.1 2.1 0 0 1 2.97-2.97l.04.04A1.8 1.8 0 0 0 7.8 3.4a1.8 1.8 0 0 0 1.3-1.72V1.6a2.1 2.1 0 0 1 4.2 0v.08a1.8 1.8 0 0 0 1.3 1.72 1.8 1.8 0 0 0 1.98-.36l.04-.04a2.1 2.1 0 0 1 2.97 2.97l-.04.04A1.8 1.8 0 0 0 19.6 8c.25.78.95 1.32 1.72 1.32h.08a2.1 2.1 0 0 1 0 4.2h-.08A1.8 1.8 0 0 0 19.4 15Z"></path>
+        </svg>
+      `
+    };
+
+    const APPS = [
+      {
+        id: "chat",
+        name: "消息",
+        iconSvg: ICONS.chat,
+        module: "./apps/chat.js",
+        dock: true,
+        defaultPage: 0,
+        immersive: true
+      },
+      {
+        id: "moments",
+        name: "朋友圈",
+        iconSvg: ICONS.moments,
+        module: "./apps/moments.js",
+        dock: true,
+        defaultPage: 0
+      },
+      {
+        id: "call",
+        name: "电话",
+        iconSvg: ICONS.call,
+        module: "./apps/call.js",
+        dock: true,
+        defaultPage: 0
+      },
+      {
+        id: "characters",
+        name: "角色管理",
+        iconSvg: ICONS.characters,
+        module: "./apps/characters.js",
+        dock: false,
+        defaultPage: 1
+      },
+      {
+        id: "settings",
+        name: "设置",
+        iconSvg: ICONS.settings,
+        module: "./apps/settings.js",
+        dock: true,
+        defaultPage: 1
+      }
+    ];
+
+    const appRoot = document.getElementById("appRoot");
+    const desktop = document.getElementById("desktop");
+    const desktopContent = document.getElementById("desktopContent");
+    const desktopPages = document.getElementById("desktopPages");
+    const desktopPageIndicator = document.getElementById("desktopPageIndicator");
+    const statusTime = document.getElementById("statusTime");
+    const appGridPage0 = document.getElementById("appGridPage0");
+    const appGridPage1 = document.getElementById("appGridPage1");
+    const dock = document.getElementById("dock");
+
+    const userWidget = document.getElementById("userWidget");
+    const userAvatarImage = document.getElementById("userAvatarImage");
+    const userAvatarFallback = document.getElementById("userAvatarFallback");
+
+    const desktopWidget = document.getElementById("desktopWidget");
+    const desktopWidgetBg = document.getElementById("desktopWidgetBg");
+    const desktopWidgetTitle = document.getElementById("desktopWidgetTitle");
+    const desktopWidgetText = document.getElementById("desktopWidgetText");
+    const editWidgetButton = document.getElementById("editWidgetButton");
+
+    const wallpaperInput = document.getElementById("wallpaperInput");
+    const iconInput = document.getElementById("iconInput");
+    const avatarInput = document.getElementById("avatarInput");
+    const widgetBgInput = document.getElementById("widgetBgInput");
+
+    let pendingIconAppId = null;
+    let activeWindow = null;
+    let longPressTimer = null;
+    let currentDesktopPage = 0;
+    let touchStartX = 0;
+    let touchStartY = 0;
+    let touchEndX = 0;
+    let touchEndY = 0;
+    let widgetDragState = null;
+
+    function readJson(key, fallback) {
+      try {
+        const value = localStorage.getItem(key);
+        if (!value) return fallback;
+        return JSON.parse(value);
+      } catch {
+        return fallback;
+      }
+    }
+
+    function writeJson(key, value) {
+      localStorage.setItem(key, JSON.stringify(value));
+    }
+
+    function clamp(value, min, max) {
+      return Math.max(min, Math.min(max, value));
+    }
+
+    function readFileAsBase64(file) {
+      return new Promise((resolve, reject) => {
+        if (!file) {
+          reject(new Error("没有选择图片"));
+          return;
+        }
+
+        if (!file.type.startsWith("image/")) {
+          reject(new Error("请选择图片文件"));
+          return;
+        }
+
+        const reader = new FileReader();
+
+        reader.onload = () => {
+          resolve(reader.result);
+        };
+
+        reader.onerror = () => {
+          reject(new Error("图片读取失败"));
+        };
+
+        reader.readAsDataURL(file);
+      });
+    }
+
+    function getTimeContext() {
+      const now = new Date();
+      const weekNames = ["星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"];
+
+      return {
+        timestamp: now.toISOString(),
+        localText: `${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日 ${weekNames[now.getDay()]} ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`,
+        year: now.getFullYear(),
+        month: now.getMonth() + 1,
+        day: now.getDate(),
+        hour: now.getHours(),
+        minute: now.getMinutes(),
+        week: weekNames[now.getDay()]
+      };
+    }
+
+    function updateStatusTime() {
+      const now = new Date();
+      statusTime.textContent = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+    }
+
+    function loadWallpaper() {
+      const wallpaper = localStorage.getItem(STORAGE_KEYS.wallpaper);
+
+      if (wallpaper) {
+        desktop.style.backgroundImage = `linear-gradient(rgba(255,255,255,0.08), rgba(255,255,255,0.08)), url("${wallpaper}")`;
+      } else {
+        desktop.style.backgroundImage = "";
+      }
+    }
+
+    function setWallpaper(base64) {
+      localStorage.setItem(STORAGE_KEYS.wallpaper, base64);
+      loadWallpaper();
+    }
+
+    function loadUserAvatar() {
+      const avatar = localStorage.getItem(STORAGE_KEYS.userAvatar);
+
+      if (avatar) {
+        userAvatarImage.src = avatar;
+        userAvatarImage.classList.remove("hidden");
+        userAvatarFallback.classList.add("hidden");
+      } else {
+        userAvatarImage.removeAttribute("src");
+        userAvatarImage.classList.add("hidden");
+        userAvatarFallback.classList.remove("hidden");
+      }
+    }
+
+    function setUserAvatar(base64) {
+      localStorage.setItem(STORAGE_KEYS.userAvatar, base64);
+      loadUserAvatar();
+    }
+
+    function loadWidget() {
+      const widget = readJson(STORAGE_KEYS.widget, {
+        title: "私人 AI 桌面",
+        text: "把角色、消息和记忆放进一个干净柔软的手机界面里。"
+      });
+
+      const position = readJson(STORAGE_KEYS.widgetPosition, {
+        x: 16,
+        y: 12
+      });
+
+      const bg = localStorage.getItem(STORAGE_KEYS.widgetBg);
+
+      desktopWidgetTitle.textContent = widget.title || "私人 AI 桌面";
+      desktopWidgetText.textContent = widget.text || "把角色、消息和记忆放进一个干净柔软的手机界面里。";
+
+      if (bg) {
+        desktopWidget.classList.add("has-image");
+        desktopWidgetBg.style.backgroundImage = `url("${bg}")`;
+      } else {
+        desktopWidget.classList.remove("has-image");
+        desktopWidgetBg.style.backgroundImage = "";
+      }
+
+      desktopWidget.style.left = `${Number(position.x) || 16}px`;
+      desktopWidget.style.top = `${Number(position.y) || 12}px`;
+    }
+
+    function saveWidgetPosition(x, y) {
+      writeJson(STORAGE_KEYS.widgetPosition, { x, y });
+    }
+
+    async function editWidgetText() {
+      const current = readJson(STORAGE_KEYS.widget, {
+        title: desktopWidgetTitle.textContent,
+        text: desktopWidgetText.textContent
+      });
+
+      const title = await showPrompt("小组件标题", current.title || "");
+      if (title === null) return;
+
+      const text = await showPrompt("小组件文字", current.text || "");
+      if (text === null) return;
+
+      writeJson(STORAGE_KEYS.widget, {
+        title: title.trim() || "私人 AI 桌面",
+        text: text.trim() || "把角色、消息和记忆放进一个干净柔软的手机界面里。"
+      });
+
+      loadWidget();
+    }
+
+    function getStoredAppIcons() {
+      return readJson(STORAGE_KEYS.appIcons, {});
+    }
+
+    function setStoredAppIcon(appId, base64) {
+      const icons = getStoredAppIcons();
+      icons[appId] = base64;
+      writeJson(STORAGE_KEYS.appIcons, icons);
+    }
+
+    function clearStoredAppIcon(appId) {
+      const icons = getStoredAppIcons();
+      delete icons[appId];
+      writeJson(STORAGE_KEYS.appIcons, icons);
+      renderApps();
+    }
+
+    function getStoredAppPages() {
+      const savedPages = readJson(STORAGE_KEYS.appPages, {});
+      const result = {};
+
+      APPS.forEach((app) => {
+        const savedPage = Number(savedPages[app.id]);
+        const defaultPage = Number(app.defaultPage) || 0;
+
+        if (Number.isInteger(savedPage) && savedPage >= 0 && savedPage < DESKTOP_PAGE_COUNT) {
+          result[app.id] = savedPage;
+        } else {
+          result[app.id] = Math.min(Math.max(defaultPage, 0), DESKTOP_PAGE_COUNT - 1);
+        }
+      });
+
+      return result;
+    }
+
+    function setAppPage(appId, pageIndex) {
+      const pages = getStoredAppPages();
+      pages[appId] = pageIndex;
+      writeJson(STORAGE_KEYS.appPages, pages);
+      renderApps();
+      setDesktopPage(pageIndex);
+    }
+
+    function getAppIcon(app) {
+      const icons = getStoredAppIcons();
+
+      if (icons[app.id]) {
+        return {
+          type: "image",
+          value: icons[app.id]
+        };
+      }
+
+      return {
+        type: "svg",
+        value: app.iconSvg || ""
+      };
+    }
+
+    function createAppIconElement(app, options = {}) {
+      const button = document.createElement("button");
+      const iconBox = document.createElement("span");
+      const name = document.createElement("span");
+      const icon = getAppIcon(app);
+
+      button.type = "button";
+      button.className = options.dock ? "dock-icon" : "app-icon";
+      button.dataset.appId = app.id;
+      button.title = app.name;
+
+      iconBox.className = "app-icon-image";
+
+      if (icon.type === "image") {
+        const img = document.createElement("img");
+        img.src = icon.value;
+        img.alt = app.name;
+        iconBox.appendChild(img);
+      } else {
+        iconBox.innerHTML = icon.value;
+      }
+
+      name.className = "app-icon-name";
+      name.textContent = app.name;
+
+      button.appendChild(iconBox);
+
+      if (!options.dock) {
+        button.appendChild(name);
+      }
+
+      button.addEventListener("click", () => {
+        openApp(app.id);
+      });
+
+      button.addEventListener("contextmenu", (event) => {
+        event.preventDefault();
+        showAppContextMenu(event.clientX, event.clientY, app.id);
+      });
+
+      button.addEventListener("touchstart", () => {
+        clearLongPressTimer();
+
+        longPressTimer = window.setTimeout(() => {
+          const rect = button.getBoundingClientRect();
+          showAppContextMenu(rect.left + rect.width / 2, rect.top + rect.height / 2, app.id);
+        }, 620);
+      }, { passive: true });
+
+      button.addEventListener("touchend", clearLongPressTimer, { passive: true });
+      button.addEventListener("touchmove", clearLongPressTimer, { passive: true });
+      button.addEventListener("touchcancel", clearLongPressTimer, { passive: true });
+
+      return button;
+    }
+
+    function clearLongPressTimer() {
+      if (longPressTimer) {
+        window.clearTimeout(longPressTimer);
+        longPressTimer = null;
+      }
+    }
+
+    function renderApps() {
+      const pages = getStoredAppPages();
+
+      appGridPage0.innerHTML = "";
+      appGridPage1.innerHTML = "";
+      dock.innerHTML = "";
+
+      APPS.forEach((app) => {
+        const pageIndex = pages[app.id] || 0;
+
+        if (pageIndex === 0) {
+          appGridPage0.appendChild(createAppIconElement(app));
+        } else {
+          appGridPage1.appendChild(createAppIconElement(app));
+        }
+
+        if (app.dock) {
+          dock.appendChild(createAppIconElement(app, { dock: true }));
+        }
+      });
+    }
+
+    function setDesktopPage(pageIndex) {
+      currentDesktopPage = Math.min(Math.max(pageIndex, 0), DESKTOP_PAGE_COUNT - 1);
+      desktopPages.style.transform = `translateX(-${currentDesktopPage * 50}%)`;
+
+      Array.from(desktopPageIndicator.children).forEach((dot, index) => {
+        dot.classList.toggle("active", index === currentDesktopPage);
+      });
+    }
+
+    function createContextButton(text, onClick, className = "") {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = text;
+
+      if (className) {
+        button.className = className;
+      }
+
+      button.addEventListener("click", () => {
+        closeContextMenu();
+
+        if (typeof onClick === "function") {
+          onClick();
+        }
+      });
+
+      return button;
+    }
+
+    function showAppContextMenu(x, y, appId) {
+      closeContextMenu();
+
+      const pages = getStoredAppPages();
+      const currentPage = pages[appId] || 0;
+      const targetPage = currentPage === 0 ? 1 : 0;
+
+      const menu = document.createElement("div");
+      menu.className = "context-menu";
+      menu.id = "desktopContextMenu";
+
+      menu.appendChild(createContextButton("打开应用", () => openApp(appId)));
+      menu.appendChild(createContextButton("更换图标", () => {
+        pendingIconAppId = appId;
+        iconInput.value = "";
+        iconInput.click();
+      }));
+      menu.appendChild(createContextButton("恢复默认图标", () => clearStoredAppIcon(appId)));
+      menu.appendChild(createContextDivider());
+      menu.appendChild(createContextButton(`移动到桌面 ${targetPage + 1}`, () => setAppPage(appId, targetPage)));
+
+      document.body.appendChild(menu);
+      placeFloatingMenu(menu, x, y);
+    }
+
+    function createContextDivider() {
+      const divider = document.createElement("div");
+      divider.className = "context-menu-divider";
+      return divider;
+    }
+
+    function placeFloatingMenu(menu, x, y) {
+      const menuRect = menu.getBoundingClientRect();
+      const maxLeft = window.innerWidth - menuRect.width - 8;
+      const maxTop = window.innerHeight - menuRect.height - 8;
+
+      menu.style.left = `${Math.max(8, Math.min(x, maxLeft))}px`;
+      menu.style.top = `${Math.max(8, Math.min(y, maxTop))}px`;
+
+      window.setTimeout(() => {
+        document.addEventListener("click", closeContextMenu, { once: true });
+      }, 0);
+    }
+
+    function closeContextMenu() {
+      const oldMenu = document.getElementById("desktopContextMenu");
+
+      if (oldMenu) {
+        oldMenu.remove();
+      }
+    }
+
+    function createAppWindow(app) {
+      closeActiveWindow();
+
+      const windowElement = document.createElement("section");
+      const body = document.createElement("div");
+
+      windowElement.className = app.immersive ? "app-window app-window-immersive" : "app-window";
+      windowElement.dataset.appId = app.id;
+
+      body.className = "app-body";
+      body.id = `appBody-${app.id}`;
+
+      if (!app.immersive) {
+        const header = document.createElement("header");
+        const backButton = document.createElement("button");
+        const title = document.createElement("h1");
+        const rightSpace = document.createElement("div");
+
+        header.className = "app-header";
+
+        backButton.type = "button";
+        backButton.className = "back-home-button";
+        backButton.textContent = "桌面";
+        backButton.title = "返回桌面";
+        backButton.addEventListener("click", closeActiveWindow);
+
+        title.className = "app-title";
+        title.textContent = app.name;
+
+        rightSpace.className = "app-header-space";
+
+        header.appendChild(backButton);
+        header.appendChild(title);
+        header.appendChild(rightSpace);
+        windowElement.appendChild(header);
+      }
+
+      windowElement.appendChild(body);
+      appRoot.appendChild(windowElement);
+      activeWindow = windowElement;
+
+      return body;
+    }
+
+    function closeActiveWindow() {
+      if (activeWindow) {
+        activeWindow.remove();
+        activeWindow = null;
+      }
+    }
+
+    function renderMissingApp(body, app, error) {
+      body.innerHTML = "";
+
+      const empty = document.createElement("div");
+      const title = document.createElement("div");
+      const desc = document.createElement("p");
+      const closeButton = document.createElement("button");
+
+      empty.className = "empty-state";
+      title.textContent = `${app.name} 暂未完成`;
+      title.style.fontWeight = "800";
+      desc.textContent = "对应模块暂时没有正确加载。";
+
+      closeButton.type = "button";
+      closeButton.className = "primary-button";
+      closeButton.textContent = "返回桌面";
+      closeButton.addEventListener("click", closeActiveWindow);
+
+      empty.appendChild(title);
+      empty.appendChild(desc);
+      empty.appendChild(closeButton);
+      body.appendChild(empty);
+
+      if (error) {
+        console.warn(`${app.name} 加载失败：`, error);
+      }
+    }
+
+    async function openApp(appId) {
+      const app = APPS.find((item) => item.id === appId);
+
+      if (!app) return;
+
+      const body = createAppWindow(app);
+
+      try {
+        const module = await import(app.module);
+
+        const payload = {
+          root: body,
+          app,
+          close: closeActiveWindow,
+          getTimeContext,
+          openApp
+        };
+
+        if (typeof module.mountApp === "function") {
+          module.mountApp(payload);
+          return;
+        }
+
+        if (typeof module.default === "function") {
+          module.default(payload);
+          return;
+        }
+
+        renderMissingApp(body, app);
+      } catch (error) {
+        renderMissingApp(body, app, error);
+      }
+    }
+
+    function showDesktopContextMenu(event) {
+      closeContextMenu();
+
+      const menu = document.createElement("div");
+      menu.className = "context-menu";
+      menu.id = "desktopContextMenu";
+
+      menu.appendChild(createContextButton("更换壁纸", () => {
+        wallpaperInput.value = "";
+        wallpaperInput.click();
+      }));
+
+      menu.appendChild(createContextButton("清除壁纸", async () => {
+        const confirmed = await showConfirm("确定清除当前桌面壁纸吗？");
+        if (!confirmed) return;
+        localStorage.removeItem(STORAGE_KEYS.wallpaper);
+        loadWallpaper();
+      }));
+
+      menu.appendChild(createContextDivider());
+
+      menu.appendChild(createContextButton("编辑小组件文字", editWidgetText));
+
+      menu.appendChild(createContextButton("更换小组件图片", () => {
+        widgetBgInput.value = "";
+        widgetBgInput.click();
+      }));
+
+      menu.appendChild(createContextButton("清除小组件图片", async () => {
+        const confirmed = await showConfirm("确定清除小组件图片吗？");
+        if (!confirmed) return;
+        localStorage.removeItem(STORAGE_KEYS.widgetBg);
+        loadWidget();
+      }));
+
+      menu.appendChild(createContextDivider());
+
+      menu.appendChild(createContextButton("重置小组件位置", () => {
+        saveWidgetPosition(16, 12);
+        loadWidget();
+      }));
+
+      document.body.appendChild(menu);
+      placeFloatingMenu(menu, event.clientX, event.clientY);
+    }
+
+    function bindWidgetDrag() {
+      desktopWidget.addEventListener("pointerdown", (event) => {
+        if (event.target.closest("button")) return;
+
+        const rect = desktopWidget.getBoundingClientRect();
+        const parentRect = desktopContent.getBoundingClientRect();
+
+        widgetDragState = {
+          pointerId: event.pointerId,
+          startX: event.clientX,
+          startY: event.clientY,
+          originX: rect.left - parentRect.left,
+          originY: rect.top - parentRect.top,
+          moved: false
+        };
+
+        desktopWidget.setPointerCapture(event.pointerId);
+        desktopWidget.classList.add("dragging");
+      });
+
+      desktopWidget.addEventListener("pointermove", (event) => {
+        if (!widgetDragState) return;
+
+        const dx = event.clientX - widgetDragState.startX;
+        const dy = event.clientY - widgetDragState.startY;
+
+        if (Math.abs(dx) + Math.abs(dy) > 4) {
+          widgetDragState.moved = true;
+        }
+
+        const parentRect = desktopContent.getBoundingClientRect();
+        const maxX = parentRect.width - desktopWidget.offsetWidth - 12;
+        const maxY = parentRect.height - desktopWidget.offsetHeight - 110;
+
+        const nextX = clamp(widgetDragState.originX + dx, 12, Math.max(12, maxX));
+        const nextY = clamp(widgetDragState.originY + dy, 8, Math.max(8, maxY));
+
+        desktopWidget.style.left = `${nextX}px`;
+        desktopWidget.style.top = `${nextY}px`;
+      });
+
+      desktopWidget.addEventListener("pointerup", (event) => {
+        if (!widgetDragState) return;
+
+        const x = parseFloat(desktopWidget.style.left) || 16;
+        const y = parseFloat(desktopWidget.style.top) || 12;
+
+        saveWidgetPosition(x, y);
+
+        try {
+          desktopWidget.releasePointerCapture(event.pointerId);
+        } catch {}
+
+        desktopWidget.classList.remove("dragging");
+        widgetDragState = null;
+      });
+
+      desktopWidget.addEventListener("pointercancel", () => {
+        desktopWidget.classList.remove("dragging");
+        widgetDragState = null;
+      });
+    }
+
+    function bindDesktopSwipe() {
+      desktop.addEventListener("touchstart", (event) => {
+        if (activeWindow) return;
+
+        const touch = event.touches[0];
+        touchStartX = touch.clientX;
+        touchStartY = touch.clientY;
+        touchEndX = touch.clientX;
+        touchEndY = touch.clientY;
+      }, { passive: true });
+
+      desktop.addEventListener("touchmove", (event) => {
+        if (activeWindow) return;
+
+        const touch = event.touches[0];
+        touchEndX = touch.clientX;
+        touchEndY = touch.clientY;
+      }, { passive: true });
+
+      desktop.addEventListener("touchend", () => {
+        if (activeWindow) return;
+
+        const diffX = touchEndX - touchStartX;
+        const diffY = touchEndY - touchStartY;
+
+        if (Math.abs(diffX) < 55) return;
+        if (Math.abs(diffX) < Math.abs(diffY) * 1.4) return;
+
+        if (diffX < 0) {
+          setDesktopPage(currentDesktopPage + 1);
+        } else {
+          setDesktopPage(currentDesktopPage - 1);
+        }
+      }, { passive: true });
+
+      desktop.addEventListener("wheel", (event) => {
+        if (activeWindow) return;
+        if (Math.abs(event.deltaX) < 20) return;
+
+        if (event.deltaX > 0) {
+          setDesktopPage(currentDesktopPage + 1);
+        } else {
+          setDesktopPage(currentDesktopPage - 1);
+        }
+      }, { passive: true });
+    }
+
+    function bindEvents() {
+      desktop.addEventListener("contextmenu", (event) => {
+        const clickedApp = event.target.closest(".app-icon, .dock-icon, .user-widget, .desktop-widget");
+
+        if (clickedApp) return;
+
+        event.preventDefault();
+        showDesktopContextMenu(event);
+      });
+
+      desktopPageIndicator.addEventListener("click", (event) => {
+        const dot = event.target.closest(".desktop-page-dot");
+
+        if (!dot) return;
+
+        const index = Array.from(desktopPageIndicator.children).indexOf(dot);
+        setDesktopPage(index);
+      });
+
+      userWidget.addEventListener("click", () => {
+        avatarInput.value = "";
+        avatarInput.click();
+      });
+
+      editWidgetButton.addEventListener("click", editWidgetText);
+
+      desktopWidget.addEventListener("contextmenu", (event) => {
+        event.preventDefault();
+        showDesktopContextMenu(event);
+      });
+
+      wallpaperInput.addEventListener("change", async () => {
+        try {
+          const file = wallpaperInput.files[0];
+          const base64 = await readFileAsBase64(file);
+          setWallpaper(base64);
+        } catch (error) {
+          await showAlert(error.message || "壁纸设置失败");
+        }
+      });
+
+      widgetBgInput.addEventListener("change", async () => {
+        try {
+          const file = widgetBgInput.files[0];
+          const base64 = await readFileAsBase64(file);
+          localStorage.setItem(STORAGE_KEYS.widgetBg, base64);
+          loadWidget();
+        } catch (error) {
+          await showAlert(error.message || "小组件图片设置失败");
+        }
+      });
+
+      iconInput.addEventListener("change", async () => {
+        try {
+          if (!pendingIconAppId) return;
+
+          const file = iconInput.files[0];
+          const base64 = await readFileAsBase64(file);
+
+          setStoredAppIcon(pendingIconAppId, base64);
+          renderApps();
+
+          pendingIconAppId = null;
+        } catch (error) {
+          await showAlert(error.message || "图标设置失败");
+        }
+      });
+
+      avatarInput.addEventListener("change", async () => {
+        try {
+          const file = avatarInput.files[0];
+          const base64 = await readFileAsBase64(file);
+          setUserAvatar(base64);
+        } catch (error) {
+          await showAlert(error.message || "头像设置失败");
+        }
+      });
+
+      window.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") {
+          closeContextMenu();
+
+          if (activeWindow) {
+            closeActiveWindow();
+          }
+        }
+
+        if (!activeWindow && event.key === "ArrowLeft") {
+          setDesktopPage(currentDesktopPage - 1);
+        }
+
+        if (!activeWindow && event.key === "ArrowRight") {
+          setDesktopPage(currentDesktopPage + 1);
+        }
+      });
+
+      bindDesktopSwipe();
+      bindWidgetDrag();
+    }
+
+    function exposeGlobalHelpers() {
+      window.AIPhoneTime = {
+        getTimeContext
+      };
+
+      window.AIPhoneDesktop = {
+        openApp,
+        closeActiveWindow,
+        setDesktopPage
+      };
+    }
+
+    function init() {
+      initTheme();
+      exposeGlobalHelpers();
+
+      updateStatusTime();
+      window.setInterval(updateStatusTime, 1000);
+
+      loadWallpaper();
+      loadUserAvatar();
+      loadWidget();
+      renderApps();
+      setDesktopPage(0);
+      bindEvents();
+    }
+
+    init();
+  </script>
+</body>
+</html>
