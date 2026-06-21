@@ -1,0 +1,1589 @@
+:root {
+  --bg-primary: #fffafd;
+  --bg-secondary: #f8f0f6;
+  --bg-card: rgba(255, 255, 255, 0.76);
+  --bg-solid: #ffffff;
+  --bg-elevated: rgba(255, 255, 255, 0.92);
+
+  --accent: #d99abb;
+  --accent-strong: #c77da6;
+  --accent-soft: rgba(243, 191, 212, 0.28);
+  --accent-light: #f7e4ee;
+
+  --text-primary: #3f3540;
+  --text-secondary: #847684;
+  --text-muted: #aaa0aa;
+
+  --bubble-user-bg: #f1d7e5;
+  --bubble-user-text: #3f3540;
+  --bubble-ai-bg: rgba(255, 255, 255, 0.88);
+  --bubble-ai-text: #3f3540;
+
+  --line: rgba(95, 73, 91, 0.11);
+  --line-strong: rgba(95, 73, 91, 0.18);
+
+  --danger: #d98798;
+  --success: #8bb8a8;
+  --warning: #d7ad64;
+
+  --border-radius-bubble: 24px;
+  --border-radius-card: 26px;
+  --border-radius-soft: 18px;
+
+  --font-main: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
+
+  --shadow: 0 14px 34px rgba(105, 78, 96, 0.1);
+  --shadow-soft: 0 8px 22px rgba(105, 78, 96, 0.07);
+  --shadow-strong: 0 22px 60px rgba(80, 60, 74, 0.16);
+
+  --status-bar-height: 36px;
+  --dock-height: 86px;
+  --transition: 220ms ease;
+
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* 基础锁定：整个系统像一个手机系统，不让网页本身滚动 */
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  min-height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
+  background: var(--bg-primary);
+}
+
+body {
+  position: fixed;
+  inset: 0;
+  font-family: var(--font-main);
+  font-size: 14px;
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: geometricPrecision;
+}
+
+button,
+input,
+textarea,
+select {
+  font-family: inherit;
+}
+
+button {
+  border: none;
+  cursor: pointer;
+  background: transparent;
+}
+
+input,
+textarea,
+select {
+  width: 100%;
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid var(--line);
+  outline: none;
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  border-color: rgba(217, 154, 187, 0.58);
+  box-shadow: 0 0 0 4px rgba(243, 191, 212, 0.22);
+}
+
+textarea {
+  resize: vertical;
+  line-height: 1.58;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+img,
+svg {
+  display: block;
+}
+
+img {
+  max-width: 100%;
+}
+
+.hidden {
+  display: none !important;
+}
+
+/* 系统根容器：无外壳、无边框、无阴影 */
+.app-root {
+  width: 100%;
+  max-width: 480px;
+  height: 100dvh;
+  min-height: 100dvh;
+  margin: 0 auto;
+  position: relative;
+  overflow: hidden;
+  background: var(--bg-primary);
+  border: none !important;
+  box-shadow: none !important;
+}
+
+/* 通用页面 */
+.page {
+  width: 100%;
+  height: 100%;
+  min-height: 100dvh;
+  padding: 16px;
+  overflow: hidden;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.safe-page {
+  padding-top: calc(var(--status-bar-height) + 12px + var(--safe-top));
+  padding-bottom: calc(var(--dock-height) + 16px + var(--safe-bottom));
+}
+
+.card {
+  background: var(--bg-card);
+  border: 1px solid rgba(255, 255, 255, 0.66);
+  border-radius: var(--border-radius-card);
+  box-shadow: var(--shadow-soft);
+  padding: 14px;
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
+}
+
+.soft-card {
+  background: rgba(255, 255, 255, 0.64);
+  border: 1px solid rgba(255, 255, 255, 0.62);
+  border-radius: var(--border-radius-card);
+  box-shadow: var(--shadow-soft);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+}
+
+.primary-button,
+.secondary-button,
+.danger-button,
+.icon-button {
+  min-height: 38px;
+  border-radius: 999px;
+  padding: 0 16px;
+  font-size: 14px;
+  font-weight: 650;
+  transition:
+    transform var(--transition),
+    opacity var(--transition),
+    background var(--transition),
+    color var(--transition),
+    border-color var(--transition);
+}
+
+.primary-button {
+  color: #ffffff;
+  background: linear-gradient(180deg, #efbad2, var(--accent));
+  box-shadow: none;
+}
+
+.secondary-button {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.64);
+  border: 1px solid var(--line);
+}
+
+.danger-button {
+  color: #ffffff;
+  background: var(--danger);
+}
+
+.icon-button {
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.54);
+  border: 1px solid rgba(255, 255, 255, 0.62);
+}
+
+.primary-button:active,
+.secondary-button:active,
+.danger-button:active,
+.icon-button:active,
+.app-icon:active,
+.dock-icon:active,
+.conversation-item:active,
+.kelivo-tool-card:active,
+.kelivo-tool-button:active {
+  transform: scale(0.965);
+}
+
+.primary-button:disabled,
+.secondary-button:disabled,
+.danger-button:disabled,
+.icon-button:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
+}
+
+.form-group {
+  display: grid;
+  gap: 7px;
+  margin-bottom: 14px;
+}
+
+.form-label {
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.text-input,
+.textarea-input,
+.select-input {
+  width: 100%;
+  border-radius: 18px;
+  padding: 11px 13px;
+  font-size: 14px;
+}
+
+.textarea-input {
+  min-height: 110px;
+  line-height: 1.6;
+}
+
+.section-title {
+  margin: 0 0 12px;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.section-subtitle {
+  margin: 0 0 10px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+/* 状态栏 */
+.status-bar {
+  height: var(--status-bar-height);
+  padding: 0 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 700;
+  position: relative;
+  z-index: 30;
+  background: transparent;
+}
+
+.status-icons {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.signal-icon,
+.wifi-icon,
+.battery-icon {
+  display: inline-block;
+  position: relative;
+}
+
+.signal-icon {
+  width: 18px;
+  height: 12px;
+  background:
+    linear-gradient(to top, currentColor 35%, transparent 35%) 0 0 / 4px 100% no-repeat,
+    linear-gradient(to top, currentColor 55%, transparent 55%) 6px 0 / 4px 100% no-repeat,
+    linear-gradient(to top, currentColor 75%, transparent 75%) 12px 0 / 4px 100% no-repeat;
+  opacity: 0.9;
+}
+
+.wifi-icon {
+  width: 16px;
+  height: 12px;
+}
+
+.wifi-icon::before {
+  content: "";
+  position: absolute;
+  inset: 1px 0 auto 0;
+  width: 16px;
+  height: 16px;
+  border: 2px solid currentColor;
+  border-color: currentColor transparent transparent transparent;
+  border-radius: 50%;
+}
+
+.wifi-icon::after {
+  content: "";
+  position: absolute;
+  left: 6px;
+  bottom: 0;
+  width: 4px;
+  height: 4px;
+  background: currentColor;
+  border-radius: 50%;
+}
+
+.battery-icon {
+  width: 22px;
+  height: 11px;
+  border: 1.8px solid currentColor;
+  border-radius: 3px;
+}
+
+.battery-icon::before {
+  content: "";
+  position: absolute;
+  right: -4px;
+  top: 3px;
+  width: 2px;
+  height: 5px;
+  background: currentColor;
+  border-radius: 0 2px 2px 0;
+}
+
+.battery-icon::after {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 2px;
+  width: 14px;
+  height: 5px;
+  background: currentColor;
+  border-radius: 2px;
+}
+
+/* 桌面 */
+.desktop {
+  width: 100%;
+  height: 100dvh;
+  min-height: 100dvh;
+  overflow: hidden;
+  position: relative;
+  border: none;
+  box-shadow: none;
+  background:
+    radial-gradient(circle at 12% 0%, rgba(255, 255, 255, 0.98), transparent 34%),
+    radial-gradient(circle at 88% 16%, rgba(243, 191, 212, 0.26), transparent 36%),
+    linear-gradient(180deg, #fffafd 0%, #f8f0f6 100%);
+  background-size: cover;
+  background-position: center;
+  touch-action: pan-x;
+}
+
+.desktop::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02));
+  pointer-events: none;
+}
+
+.desktop-content {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: calc(100dvh - var(--status-bar-height));
+  overflow: hidden;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.desktop-pages {
+  display: flex;
+  width: 200%;
+  height: 100%;
+  transition: transform 260ms ease;
+  will-change: transform;
+}
+
+.desktop-page {
+  width: 50%;
+  height: 100%;
+  flex: 0 0 50%;
+  padding: 74px 18px calc(var(--dock-height) + 58px + var(--safe-bottom));
+  overflow: hidden;
+}
+
+.app-grid {
+  height: 100%;
+  align-content: start;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 22px 12px;
+  padding-top: 0;
+}
+
+.app-icon {
+  min-width: 0;
+  color: var(--text-primary);
+  background: transparent;
+  text-align: center;
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  gap: 8px;
+  transition:
+    transform 180ms ease,
+    opacity 180ms ease;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+}
+
+.app-icon.dragging-source {
+  opacity: 0.28;
+  transform: scale(0.92);
+}
+
+.drag-ghost {
+  position: fixed;
+  z-index: 300;
+  width: 72px;
+  pointer-events: none;
+  transform: translate(-50%, -50%) scale(1.04);
+  opacity: 0.92;
+  filter: drop-shadow(0 18px 24px rgba(105, 78, 96, 0.16));
+}
+
+.app-icon-image {
+  width: 58px;
+  height: 58px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.62);
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  box-shadow: 0 10px 22px rgba(105, 78, 96, 0.1);
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  color: var(--accent-strong);
+}
+
+.app-icon-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.app-icon-image svg,
+.dock-icon svg,
+.icon-button svg,
+.chat-icon-button svg,
+.kelivo-header-action svg,
+.kelivo-message-action svg,
+.conversation-plus-button svg,
+.kelivo-tool-button svg,
+.kelivo-tool-card svg {
+  width: 24px;
+  height: 24px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2.05;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.app-icon-image svg,
+.dock-icon svg {
+  width: 30px;
+  height: 30px;
+  stroke-width: 1.85;
+}
+
+.app-icon-name {
+  width: 100%;
+  color: rgba(63, 53, 64, 0.94);
+  text-shadow: 0 1px 8px rgba(255, 255, 255, 0.6);
+  font-size: 12px;
+  font-weight: 560;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.desktop-page-indicator {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--dock-height) + 24px + var(--safe-bottom));
+  transform: translateX(-50%);
+  z-index: 21;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 6px 9px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.42);
+  border: 1px solid rgba(255, 255, 255, 0.58);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  box-shadow: none;
+}
+
+.desktop-page-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: rgba(63, 53, 64, 0.18);
+  transition: width 220ms ease, background 220ms ease;
+}
+
+.desktop-page-dot.active {
+  width: 18px;
+  background: rgba(63, 53, 64, 0.72);
+}
+
+.dock {
+  width: calc(100% - 28px);
+  max-width: 452px;
+  height: var(--dock-height);
+  position: fixed;
+  left: 50%;
+  bottom: calc(12px + var(--safe-bottom));
+  transform: translateX(-50%);
+  z-index: 20;
+  padding: 10px 14px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  background: rgba(255, 255, 255, 0.52);
+  border: 1px solid rgba(255, 255, 255, 0.68);
+  border-radius: 30px;
+  box-shadow: 0 18px 40px rgba(105, 78, 96, 0.12);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+}
+
+.dock-icon {
+  display: grid;
+  place-items: center;
+  color: var(--text-primary);
+  background: transparent;
+  transition: transform 180ms ease;
+}
+
+.dock-icon .app-icon-image {
+  width: 52px;
+  height: 52px;
+  border-radius: 19px;
+  box-shadow: none;
+}
+
+.user-widget {
+  position: absolute;
+  right: 16px;
+  top: calc(var(--status-bar-height) + 10px + var(--safe-top));
+  z-index: 15;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px 7px 7px;
+  border-radius: 999px;
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.68);
+  box-shadow: none;
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+}
+
+.user-widget-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--accent-light);
+  display: grid;
+  place-items: center;
+  color: var(--accent-strong);
+  font-weight: 760;
+}
+
+.user-widget-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.user-widget-name {
+  max-width: 88px;
+  font-size: 13px;
+  font-weight: 650;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* 应用窗口：无边框、无外壳 */
+.app-window {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  width: 100%;
+  max-width: 480px;
+  height: 100dvh;
+  margin: 0 auto;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  overflow: hidden;
+  animation: appOpen 220ms ease both;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.app-header {
+  height: 54px;
+  padding: 0 12px;
+  display: grid;
+  grid-template-columns: 42px 1fr 42px;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 250, 253, 0.84);
+  border-bottom: 1px solid rgba(95, 73, 91, 0.08);
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
+}
+
+.app-title {
+  margin: 0;
+  text-align: center;
+  font-size: 17px;
+  font-weight: 780;
+}
+
+.app-body {
+  height: calc(100dvh - 54px);
+  overflow-y: auto;
+  padding: 14px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.app-window[data-app-id="chat"] .app-header {
+  display: none;
+}
+
+.app-window[data-app-id="chat"] .app-body {
+  height: 100dvh;
+  padding: 0;
+  overflow: hidden;
+}
+
+/* 头像 */
+.avatar {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(180deg, var(--accent-light), rgba(255, 255, 255, 0.55));
+  color: var(--accent-strong);
+  font-weight: 760;
+  flex: 0 0 auto;
+}
+
+.avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* 聊天：消息首页 */
+.chat-shell {
+  width: 100%;
+  height: 100dvh;
+  min-height: 0;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  overflow: hidden;
+}
+
+.conversation-page {
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  background:
+    radial-gradient(circle at 12% 0%, rgba(255, 255, 255, 0.96), transparent 34%),
+    radial-gradient(circle at 88% 12%, rgba(243, 191, 212, 0.28), transparent 34%),
+    linear-gradient(180deg, #fffafd 0%, #f8f0f6 100%);
+}
+
+.conversation-header {
+  padding: calc(16px + var(--safe-top)) 18px 12px;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 12px;
+  background: rgba(255, 250, 253, 0.8);
+  border-bottom: 1px solid rgba(95, 73, 91, 0.055);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+}
+
+.conversation-home-button,
+.conversation-plus-button {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 16px;
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.54);
+  border: 1px solid rgba(255, 255, 255, 0.62);
+}
+
+.conversation-title-box {
+  min-width: 0;
+}
+
+.conversation-title {
+  margin: 0;
+  font-size: 28px;
+  line-height: 1.05;
+  font-weight: 840;
+  letter-spacing: -0.04em;
+}
+
+.conversation-subtitle {
+  margin-top: 7px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.conversation-list {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px 10px calc(18px + var(--safe-bottom));
+  -webkit-overflow-scrolling: touch;
+}
+
+.conversation-item {
+  width: 100%;
+  min-height: 78px;
+  display: grid;
+  grid-template-columns: 54px 1fr auto;
+  gap: 12px;
+  align-items: center;
+  padding: 11px 10px;
+  border-radius: 24px;
+  color: var(--text-primary);
+  background: transparent;
+  text-align: left;
+  transition: background var(--transition), transform var(--transition);
+}
+
+.conversation-item:active {
+  background: rgba(255, 255, 255, 0.62);
+}
+
+.conversation-item .avatar {
+  width: 54px;
+  height: 54px;
+  border-radius: 19px;
+}
+
+.conversation-main {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+}
+
+.conversation-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.conversation-name {
+  min-width: 0;
+  font-size: 16px;
+  font-weight: 760;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.conversation-badge {
+  flex: 0 0 auto;
+  padding: 2px 7px;
+  border-radius: 999px;
+  color: var(--accent-strong);
+  background: var(--accent-soft);
+  font-size: 11px;
+  font-weight: 720;
+}
+
+.conversation-preview {
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.35;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.conversation-time {
+  align-self: start;
+  padding-top: 5px;
+  color: var(--text-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+/* 聊天详情 */
+.kelivo-chat {
+  height: 100dvh;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  background:
+    radial-gradient(circle at 14% 0%, rgba(255, 255, 255, 0.96), transparent 34%),
+    linear-gradient(180deg, #fffafd 0%, #f8f0f6 100%);
+  background-size: cover;
+  background-position: center;
+  overflow: hidden;
+  position: relative;
+}
+
+.kelivo-chat::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgba(255, 250, 253, 0.78);
+  pointer-events: none;
+}
+
+.kelivo-header,
+.kelivo-message-list,
+.kelivo-composer {
+  position: relative;
+  z-index: 1;
+}
+
+.kelivo-header {
+  min-height: 84px;
+  padding: calc(14px + var(--safe-top)) 12px 10px;
+  display: grid;
+  grid-template-columns: 38px 38px 44px 1fr auto;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 250, 253, 0.76);
+  border-bottom: 1px solid rgba(95, 73, 91, 0.055);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+}
+
+.kelivo-back-button,
+.kelivo-home-button,
+.kelivo-header-action {
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  color: var(--text-primary);
+  background: transparent;
+  border-radius: 50%;
+}
+
+.kelivo-header .avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 16px;
+}
+
+.kelivo-title-box {
+  min-width: 0;
+}
+
+.kelivo-title {
+  font-size: 18px;
+  line-height: 1.2;
+  font-weight: 840;
+  letter-spacing: -0.02em;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.kelivo-status {
+  margin-top: 3px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.kelivo-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.kelivo-message-list {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.kelivo-message {
+  display: grid;
+  gap: 8px;
+}
+
+.kelivo-message.user {
+  justify-items: end;
+}
+
+.kelivo-message.ai {
+  justify-items: start;
+}
+
+.kelivo-message-meta {
+  max-width: 88%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.kelivo-message.user .kelivo-message-meta {
+  flex-direction: row-reverse;
+}
+
+.kelivo-message-meta .avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 13px;
+}
+
+.kelivo-message-name-time {
+  display: grid;
+  gap: 2px;
+}
+
+.kelivo-message-name {
+  color: var(--text-secondary);
+  font-weight: 740;
+}
+
+.kelivo-message-time {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.message-bubble,
+.kelivo-bubble {
+  max-width: min(82%, 340px);
+  padding: 13px 16px;
+  border-radius: var(--border-radius-bubble);
+  line-height: 1.65;
+  word-break: break-word;
+  box-shadow: none;
+}
+
+.kelivo-message.user .kelivo-bubble {
+  color: var(--bubble-user-text);
+  background: var(--bubble-user-bg);
+  border-bottom-right-radius: 9px;
+}
+
+.kelivo-message.ai .kelivo-bubble {
+  color: var(--bubble-ai-text);
+  background: var(--bubble-ai-bg);
+  border: 1px solid rgba(255, 255, 255, 0.58);
+  border-bottom-left-radius: 9px;
+}
+
+.kelivo-bubble img {
+  max-width: 190px;
+  border-radius: 16px;
+  margin-bottom: 8px;
+}
+
+.thinking-toggle,
+.kelivo-thinking-toggle {
+  width: 100%;
+  min-height: 46px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0 0 10px;
+  padding: 0 14px;
+  border-radius: 18px;
+  color: var(--accent-strong);
+  background: var(--accent-soft);
+  font-size: 13px;
+  font-weight: 720;
+}
+
+.thinking-content,
+.kelivo-thinking-content {
+  margin-bottom: 10px;
+  padding: 12px;
+  border-radius: 18px;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.46);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.kelivo-message-actions {
+  max-width: 82%;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 0 16px;
+  color: rgba(63, 53, 64, 0.78);
+}
+
+.kelivo-message.user .kelivo-message-actions {
+  justify-content: flex-end;
+}
+
+.kelivo-message-action,
+.chat-message-action {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  color: inherit;
+  background: transparent;
+  border-radius: 50%;
+}
+
+.kelivo-composer {
+  padding: 8px 12px calc(10px + var(--safe-bottom));
+  background: linear-gradient(180deg, transparent, rgba(255, 250, 253, 0.96) 28%);
+}
+
+.kelivo-input-card {
+  min-height: 86px;
+  padding: 10px 10px 9px;
+  display: grid;
+  grid-template-columns: 40px 1fr 42px;
+  align-items: end;
+  gap: 8px;
+  border-radius: 28px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(95, 73, 91, 0.1);
+  box-shadow: none;
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+}
+
+.kelivo-input {
+  width: 100%;
+  min-height: 42px;
+  max-height: 104px;
+  padding: 10px 6px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 15px;
+  line-height: 1.55;
+  resize: none;
+}
+
+.kelivo-input:focus {
+  box-shadow: none;
+  border: none;
+}
+
+.kelivo-input::placeholder {
+  color: var(--text-muted);
+  font-weight: 650;
+}
+
+.kelivo-plus-button,
+.kelivo-send-button {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  transition: transform var(--transition), background var(--transition), color var(--transition);
+}
+
+.kelivo-plus-button {
+  color: var(--text-primary);
+  background: transparent;
+}
+
+.kelivo-send-button {
+  color: #ffffff;
+  background: rgba(217, 154, 187, 0.42);
+}
+
+.kelivo-send-button.ready {
+  background: var(--accent);
+}
+
+.kelivo-send-button.stop {
+  color: var(--text-primary);
+  background: var(--accent-soft);
+}
+
+.kelivo-tool-panel {
+  margin-bottom: 10px;
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.62);
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
+}
+
+.kelivo-tool-panel-title {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 720;
+}
+
+.kelivo-tool-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+
+.kelivo-tool-card {
+  min-height: 72px;
+  padding: 9px 6px;
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 7px;
+  border-radius: 18px;
+  color: var(--text-primary);
+  background: rgba(255, 250, 253, 0.72);
+  border: 1px solid rgba(95, 73, 91, 0.06);
+}
+
+.kelivo-tool-card span {
+  max-width: 100%;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 650;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 旧聊天类清空，避免和新版结构打架 */
+.chat-layout,
+.character-sidebar,
+.chat-main,
+.chat-topbar,
+.message-list,
+.chat-input-area,
+.chat-input {
+  all: unset;
+  box-sizing: border-box;
+}
+
+/* 朋友圈 */
+.moment-feed {
+  display: grid;
+  gap: 14px;
+}
+
+.moment-card {
+  display: grid;
+  grid-template-columns: 42px 1fr;
+  gap: 10px;
+  padding: 14px;
+  background: var(--bg-card);
+  border: 1px solid rgba(255, 255, 255, 0.62);
+  border-radius: var(--border-radius-card);
+  box-shadow: var(--shadow-soft);
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
+}
+
+.moment-name {
+  font-weight: 760;
+  margin-bottom: 4px;
+}
+
+.moment-content {
+  line-height: 1.6;
+}
+
+.moment-images {
+  margin-top: 8px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.moment-images img {
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  border-radius: 12px;
+}
+
+.moment-footer {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  flex-wrap: wrap;
+}
+
+/* 角色 */
+.character-card-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.character-card {
+  padding: 14px;
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  text-align: center;
+  background: var(--bg-card);
+  border: 1px solid rgba(255, 255, 255, 0.62);
+  border-radius: var(--border-radius-card);
+  box-shadow: var(--shadow-soft);
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
+}
+
+.character-card .avatar {
+  width: 62px;
+  height: 62px;
+  border-radius: 22px;
+}
+
+.character-name-small {
+  max-width: 72px;
+  font-size: 12px;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 设置 */
+.settings-group {
+  margin-bottom: 16px;
+  padding: 14px;
+  border-radius: var(--border-radius-card);
+  background: var(--bg-card);
+  border: 1px solid rgba(255, 255, 255, 0.62);
+  box-shadow: var(--shadow-soft);
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
+}
+
+.settings-row {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.settings-row:last-child {
+  border-bottom: none;
+}
+
+.settings-row-title {
+  font-weight: 680;
+}
+
+.settings-row-desc {
+  margin-top: 2px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* 主题预览 */
+.theme-preview-list {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+
+.theme-preview {
+  min-height: 74px;
+  padding: 10px;
+  border-radius: 18px;
+  border: 2px solid transparent;
+  background: rgba(255, 255, 255, 0.58);
+  display: grid;
+  gap: 7px;
+}
+
+.theme-preview.active {
+  border-color: var(--accent);
+}
+
+.theme-preview-name {
+  font-weight: 760;
+}
+
+.theme-preview-colors {
+  display: flex;
+  gap: 6px;
+}
+
+.theme-color-dot {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px rgba(95, 73, 91, 0.08);
+}
+
+/* 弹窗 */
+.modal-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: end center;
+  background: rgba(80, 60, 74, 0.24);
+  animation: fadeIn 180ms ease both;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.modal-panel {
+  width: 100%;
+  max-width: 480px;
+  max-height: 86dvh;
+  overflow-y: auto;
+  padding: 16px;
+  border-radius: 28px 28px 0 0;
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  box-shadow: var(--shadow-strong);
+  animation: slideUp 220ms ease both;
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+}
+
+.context-menu {
+  position: fixed;
+  z-index: 120;
+  min-width: 174px;
+  padding: 7px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid rgba(95, 73, 91, 0.08);
+  box-shadow: var(--shadow-strong);
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
+}
+
+.context-menu button {
+  width: 100%;
+  min-height: 38px;
+  padding: 0 12px;
+  border-radius: 12px;
+  text-align: left;
+  color: var(--text-primary);
+  background: transparent;
+}
+
+.context-menu button:active {
+  background: var(--accent-soft);
+}
+
+.context-menu-divider {
+  height: 1px;
+  margin: 5px 4px;
+  background: var(--line);
+}
+
+.empty-state {
+  min-height: 180px;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.loading-dot {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.loading-dot span {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: dotPulse 900ms ease-in-out infinite;
+}
+
+.loading-dot span:nth-child(2) {
+  animation-delay: 120ms;
+}
+
+.loading-dot span:nth-child(3) {
+  animation-delay: 240ms;
+}
+
+/* 电话旧界面先统一审美，后续单独重做结构 */
+#callOverlay {
+  border: none !important;
+  box-shadow: none !important;
+}
+
+#callOverlay .app-header {
+  background: rgba(255, 250, 253, 0.82);
+}
+
+#callOverlay .app-body {
+  background:
+    radial-gradient(circle at 15% 0%, rgba(255, 255, 255, 0.96), transparent 34%),
+    linear-gradient(180deg, #fffafd 0%, #f8f0f6 100%);
+}
+
+/* 动画 */
+@keyframes appOpen {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.992);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(24px);
+  }
+
+  to {
+    transform: translateY(0);
+  }
+}
+
+@keyframes dotPulse {
+  0%,
+  80%,
+  100% {
+    opacity: 0.35;
+    transform: translateY(0);
+  }
+
+  40% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
+}
+
+/* 小屏适配 */
+@media (max-width: 360px) {
+  .app-grid {
+    gap: 18px 8px;
+  }
+
+  .app-icon-image {
+    width: 54px;
+    height: 54px;
+  }
+
+  .character-card-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .kelivo-tool-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .conversation-title {
+    font-size: 25px;
+  }
+
+  .kelivo-header {
+    grid-template-columns: 34px 34px 40px 1fr auto;
+    gap: 6px;
+  }
+
+  .kelivo-back-button,
+  .kelivo-home-button,
+  .kelivo-header-action {
+    width: 34px;
+    height: 34px;
+  }
+
+  .kelivo-header .avatar {
+    width: 40px;
+    height: 40px;
+  }
+
+  .kelivo-input-card {
+    grid-template-columns: 38px 1fr 40px;
+  }
+}
+
+/* 宽屏也不加手机外框 */
+@media (min-width: 481px) {
+  body {
+    background: var(--bg-primary);
+  }
+
+  .app-root,
+  .app-window {
+    box-shadow: none !important;
+    border: none !important;
+  }
+}
