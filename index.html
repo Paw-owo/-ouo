@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>AI手机桌面</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app">
+    <!-- 状态栏 -->
+    <div class="status-bar">
+      <div class="status-time">12:36</div>
+      <div class="status-icons">
+        <span>5G</span>
+        <span id="battery-level">70%</span>
+      </div>
+    </div>
+
+    <!-- 桌面容器 -->
+    <div class="desktop" id="desktop">
+      <!-- 第一个桌面页面 -->
+      <div class="desktop-page active" id="page-1" data-page="1"></div>
+
+      <!-- 第二个桌面页面 -->
+      <div class="desktop-page next" id="page-2" data-page="2"></div>
+    </div>
+
+    <!-- 页面指示器 -->
+    <div class="page-indicator">
+      <div class="page-dot active" data-page="1"></div>
+      <div class="page-dot" data-page="2"></div>
+    </div>
+
+    <!-- Dock栏 -->
+    <div class="dock">
+      <div class="dock-icon" data-app="chat">
+        <svg viewBox="0 0 68 68" xmlns="http://www.w3.org/2000/svg">
+          <rect width="68" height="68" rx="16" fill="#FFE8F0"/>
+          <!-- 小猫脸 -->
+          <circle cx="34" cy="32" r="14" fill="#FFF" stroke="#FFB8C8" stroke-width="1.5"/>
+          <!-- 耳朵 -->
+          <path d="M24 22 L22 16 L28 20" fill="#FFF" stroke="#FFB8C8" stroke-width="1.5"/>
+          <path d="M44 22 L46 16 L40 20" fill="#FFF" stroke="#FFB8C8" stroke-width="1.5"/>
+          <!-- 眼睛 -->
+          <circle cx="29" cy="30" r="1.5" fill="#5A4A42"/>
+          <circle cx="39" cy="30" r="1.5" fill="#5A4A42"/>
+          <!-- 鼻子嘴巴 -->
+          <path d="M34 34 L34 36 M32 36 Q34 38 36 36" stroke="#FFB8C8" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+          <!-- 信封 -->
+          <rect x="26" y="42" width="16" height="12" rx="2" fill="#FFF" stroke="#FFB8C8" stroke-width="1.5"/>
+          <path d="M26 42 L34 48 L42 42" stroke="#FFB8C8" stroke-width="1.5" fill="none"/>
+        </svg>
+      </div>
+      <div class="dock-icon" data-app="moments">
+        <svg viewBox="0 0 68 68" xmlns="http://www.w3.org/2000/svg">
+          <rect width="68" height="68" rx="16" fill="#F0E8FF"/>
+          <!-- 左边小熊 -->
+          <circle cx="24" cy="32" r="10" fill="#FFF" stroke="#C8A8FF" stroke-width="1.5"/>
+          <circle cx="20" cy="28" r="3" fill="#FFF" stroke="#C8A8FF" stroke-width="1.5"/>
+          <circle cx="28" cy="28" r="3" fill="#FFF" stroke="#C8A8FF" stroke-width="1.5"/>
+          <circle cx="22" cy="31" r="1" fill="#5A4A42"/>
+          <circle cx="26" cy="31" r="1" fill="#5A4A42"/>
+          <path d="M24 34 Q24 36 25 36" stroke="#C8A8FF" stroke-width="1" fill="none"/>
+          <!-- 右边兔子 -->
+          <ellipse cx="44" cy="34" rx="9" ry="11" fill="#FFF" stroke="#C8A8FF" stroke-width="1.5"/>
+          <ellipse cx="40" cy="22" rx="2" ry="6" fill="#FFF" stroke="#C8A8FF" stroke-width="1.5"/>
+          <ellipse cx="48" cy="22" rx="2" ry="6" fill="#FFF" stroke="#C8A8FF" stroke-width="1.5"/>
+          <circle cx="42" cy="33" r="1" fill="#5A4A42"/>
+          <circle cx="46" cy="33" r="1" fill="#5A4A42"/>
+          <circle cx="44" cy="36" r="0.8" fill="#FFB8C8"/>
+          <!-- 爱心 -->
+          <path d="M34 26 Q34 24 36 24 Q38 24 38 26 Q38 28 34 30 Q30 28 30 26 Q30 24 32 24 Q34 24 34 26" fill="#FFB8C8"/>
+        </svg>
+      </div>
+      <div class="dock-icon" data-app="characters">
+        <svg viewBox="0 0 68 68" xmlns="http://www.w3.org/2000/svg">
+          <rect width="68" height="68" rx="16" fill="#FFF4E8"/>
+          <!-- 小熊头 -->
+          <circle cx="34" cy="34" r="13" fill="#FFF" stroke="#FFCBA0" stroke-width="1.5"/>
+          <circle cx="24" cy="28" r="4" fill="#FFF" stroke="#FFCBA0" stroke-width="1.5"/>
+          <circle cx="44" cy="28" r="4" fill="#FFF" stroke="#FFCBA0" stroke-width="1.5"/>
+          <!-- 眼镜 -->
+          <circle cx="29" cy="32" r="4" fill="none" stroke="#9B8B83" stroke-width="1.5"/>
+          <circle cx="39" cy="32" r="4" fill="none" stroke="#9B8B83" stroke-width="1.5"/>
+          <line x1="33" y1="32" x2="35" y2="32" stroke="#9B8B83" stroke-width="1.5"/>
+          <!-- 眼睛 -->
+          <circle cx="29" cy="32" r="1.5" fill="#5A4A42"/>
+          <circle cx="39" cy="32" r="1.5" fill="#5A4A42"/>
+          <!-- 鼻子嘴巴 -->
+          <ellipse cx="34" cy="38" rx="2" ry="1.5" fill="#FFCBA0"/>
+          <path d="M32 40 Q34 42 36 40" stroke="#FFCBA0" stroke-width="1.5" fill="none"/>
+        </svg>
+      </div>
+      <div class="dock-icon" data-app="settings">
+        <svg viewBox="0 0 68 68" xmlns="http://www.w3.org/2000/svg">
+          <rect width="68" height="68" rx="16" fill="#E8E8F8"/>
+          <!-- 小动物拿工具 -->
+          <circle cx="34" cy="32" r="11" fill="#FFF" stroke="#D8D8E8" stroke-width="1.5"/>
+          <circle cx="30" cy="30" r="1.5" fill="#5A4A42"/>
+          <circle cx="38" cy="30" r="1.5" fill="#5A4A42"/>
+          <path d="M32 34 Q34 36 36 34" stroke="#D8D8E8" stroke-width="1.5" fill="none"/>
+          <!-- 齿轮 -->
+          <g transform="translate(34, 48)">
+            <circle r="5" fill="none" stroke="#9B8B83" stroke-width="1.5"/>
+            <circle r="2" fill="#9B8B83"/>
+            <line x1="0" y1="-7" x2="0" y2="-5" stroke="#9B8B83" stroke-width="1.5"/>
+            <line x1="0" y1="7" x2="0" y2="5" stroke="#9B8B83" stroke-width="1.5"/>
+            <line x1="-7" y1="0" x2="-5" y2="0" stroke="#9B8B83" stroke-width="1.5"/>
+            <line x1="7" y1="0" x2="5" y2="0" stroke="#9B8B83" stroke-width="1.5"/>
+          </g>
+        </svg>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import storage from './core/storage.js';
+    import themeManager from './core/theme.js';
+    import ui from './core/ui.js';
+
+    // 应用配置
+    const APPS = [
+      { id: 'chat', name: '消息', module: './apps/chat.js', color: '#FFE8F0' },
+      { id: 'moments', name: '朋友圈', module: './apps/moments.js', color: '#F0E8FF' },
+      { id: 'characters', name: '角色管理', module: './apps/characters.js', color: '#FFF4E8' },
+      { id: 'worldbook', name: '世界书', module: './apps/worldbook.js', color: '#E8F4FF' },
+      { id: 'games', name: '小游戏', module: './apps/games.js', color: '#FFF8E8' },
+      { id: 'shop', name: '商店', module: './apps/shop.js', color: '#FFF0E8' },
+      { id: 'wallet', name: '钱包', module: './apps/wallet.js', color: '#FFE8F8' },
+      { id: 'memo', name: '备忘录', module: './apps/memo.js', color: '#E8F8F0' },
+      { id: 'anniversary', name: '纪念日', module: './apps/anniversary.js', color: '#FFE8EC' },
+      { id: 'settings', name: '设置', module: './apps/settings.js', color: '#E8E8F8' }
+    ];
+
+    // SVG图标生成器
+    const createAppIcon = (appId, color) => {
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.setAttribute('viewBox', '0 0 68 68');
+      svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+
+      let content = '';
+
+      switch(appId) {
+        case 'chat':
+          content = `
+            <rect width="68" height="68" rx="16" fill="${color}"/>
+            <circle cx="34" cy="30" r="12" fill="#FFF" stroke="#FFB8C8" stroke-width="1.5"/>
+            <path d="M26 20 L24 15 L28 18" fill="#FFF" stroke="#FFB8C8" stroke-width="1.5"/>
+            <path d="M42 20 L44 15 L40 18" fill="#FFF" stroke="#FFB8C8" stroke-width="1.5"/>
+            <circle cx="30" cy="29" r="1.2" fill="#5A4A42"/>
+            <circle cx="38" cy="29" r="1.2" fill="#5A4A42"/>
+            <path d="M34 32 L34 34 M32 34 Q34 36 36 34" stroke="#FFB8C8" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+            <rect x="28" y="42" width="12" height="10" rx="2" fill="#FFF" stroke="#FFB8C8" stroke-width="1.5"/>
+            <path d="M28 42 L34 47 L40 42" stroke="#FFB8C8" stroke-width="1.5" fill="none"/>
+          `;
+          break;
+        case 'moments':
+          content = `
+            <rect width="68" height="68" rx="16" fill="${color}"/>
+            <circle cx="26" cy="32" r="9" fill="#FFF" stroke="#C8A8FF" stroke-width="1.5"/>
+            <circle cx="23" cy="28" r="2.5" fill="#FFF" stroke="#C8A8FF" stroke-width="1.5"/>
+            <circle cx="29" cy="28" r="2.5" fill="#FFF" stroke="#C8A8FF" stroke-width="1.5"/>
+            <circle cx="24" cy="31" r="0.8" fill="#5A4A42"/>
+            <circle cx="28" cy="31" r="0.8" fill="#5A4A42"/>
+            <ellipse cx="42" cy="33" rx="8" ry="10" fill="#FFF" stroke="#C8A8FF" stroke-width="1.5"/>
+            <ellipse cx="39" cy="22" rx="1.5" ry="5" fill="#FFF" stroke="#C8A8FF" stroke-width="1.5"/>
+            <ellipse cx="45" cy="22" rx="1.5" ry="5" fill="#FFF" stroke="#C8A8FF" stroke-width="1.5"/>
+            <circle cx="40" cy="32" r="0.8" fill="#5A4A42"/>
+            <circle cx="44" cy="32" r="0.8" fill="#5A4A42"/>
+            <path d="M34 24 Q34 22 36 22 Q38 22 38 24 Q38 26 34 28 Q30 26 30 24 Q30 22 32 22 Q34 22 34 24" fill="#FFB8C8"/>
+          `;
+          break;
+        case 'characters':
+          content = `
+            <rect width="68" height="68" rx="16" fill="${color}"/>
+            <circle cx="34" cy="33" r="12" fill="#FFF" stroke="#FFCBA0" stroke-width="1.5"/>
+            <circle cx="25" cy="28" r="3.5" fill="#FFF" stroke="#FFCBA0" stroke-width="1.5"/>
+            <circle cx="43" cy="28" r="3.5" fill="#FFF" stroke="#FFCBA0" stroke-width="1.5"/>
+            <circle cx="30" cy="31" r="3.5" fill="none" stroke="#9B8B83" stroke-width="1.5"/>
+            <circle cx="38" cy="31" r="3.5" fill="none" stroke="#9B8B83" stroke-width="1.5"/>
+            <line x1="33.5" y1="31" x2="34.5" y2="31" stroke="#9B8B83" stroke-width="1.5"/>
+            <circle cx="30" cy="31" r="1.2" fill="#5A4A42"/>
+            <circle cx="38" cy="31" r="1.2" fill="#5A4A42"/>
+            <ellipse cx="34" cy="37" rx="1.8" ry="1.3" fill="#FFCBA0"/>
+            <path d="M32 39 Q34 41 36 39" stroke="#FFCBA0" stroke-width="1.5" fill="none"/>
+          `;
+          break;
+        case 'worldbook':
+          content = `
+            <rect width="68" height="68" rx="16" fill="${color}"/>
+            <rect x="22" y="26" width="24" height="18" rx="2" fill="#FFF" stroke="#A8D8FF" stroke-width="1.5"/>
+            <line x1="34" y1="26" x2="34" y2="44" stroke="#A8D8FF" stroke-width="1.5"/>
+            <line x1="28" y1="32" x2="31" y2="32" stroke="#A8D8FF" stroke-width="1"/>
+            <line x1="28" y1="35" x2="31" y2="35" stroke="#A8D8FF" stroke-width="1"/>
+            <line x1="37" y1="32" x2="40" y2="32" stroke="#A8D8FF" stroke-width="1"/>
+            <line x1="37" y1="35" x2="40" y2="35" stroke="#A8D8FF" stroke-width="1"/>
+            <circle cx="48" cy="40" r="6" fill="#FFF" stroke="#A8D8FF" stroke-width="1.5"/>
+            <circle cx="46" cy="39" r="0.8" fill="#5A4A42"/>
+            <circle cx="50" cy="39" r="0.8" fill="#5A4A42"/>
+            <path d="M47 42 Q48 43 49 42" stroke="#A8D8FF" stroke-width="1" fill="none"/>
+          `;
+          break;
+        case 'games':
+          content = `
+            <rect width="68" height="68" rx="16" fill="${color}"/>
+            <rect x="20" y="28" width="28" height="16" rx="4" fill="#FFF" stroke="#FFD8A8" stroke-width="1.5"/>
+            <circle cx="28" cy="36" r="2" fill="none" stroke="#FFD8A8" stroke-width="1.5"/>
+            <line x1="38" y1="33" x2="38" y2="35" stroke="#FFD8A8" stroke-width="1.5"/>
+            <line x1="37" y1="34" x2="39" y2="34" stroke="#FFD8A8" stroke-width="1.5"/>
+            <circle cx="42" cy="36" r="1.5" fill="#FFD8A8"/>
+            <circle cx="34" cy="18" r="6" fill="#FFF" stroke="#FFD8A8" stroke-width="1.5"/>
+            <circle cx="32" cy="17" r="0.8" fill="#5A4A42"/>
+            <circle cx="36" cy="17" r="0.8" fill="#5A4A42"/>
+            <path d="M32 20 Q34 21 36 20" stroke="#FFD8A8" stroke-width="1" fill="none"/>
+          `;
+          break;
+        case 'shop':
+          content = `
+            <rect width="68" height="68" rx="16" fill="${color}"/>
+            <path d="M24 28 L20 34 L20 46 Q20 48 22 48 L46 48 Q48 48 48 46 L48 34 L44 28 Z" fill="#FFF" stroke="#FFE8B8" stroke-width="1.5"/>
+            <path d="M24 28 L26 32 L30 28 L34 32 L38 28 L42 32 L44 28" fill="none" stroke="#FFE8B8" stroke-width="1.5"/>
+            <circle cx="34" cy="22" r="5" fill="#FFF" stroke="#FFE8B8" stroke-width="1.5"/>
+            <circle cx="32" cy="21" r="0.8" fill="#5A4A42"/>
+            <circle cx="36" cy="21" r="0.8" fill="#5A4A42"/>
+            <path d="M32 24 Q34 25 36 24" stroke="#FFE8B8" stroke-width="1" fill="none"/>
+            <rect x="30" y="38" width="8" height="6" rx="1" fill="#FFE8B8"/>
+          `;
+          break;
+        case 'wallet':
+          content = `
+            <rect width="68" height="68" rx="16" fill="${color}"/>
+            <rect x="22" y="28" width="24" height="18" rx="3" fill="#FFF" stroke="#FFB8D8" stroke-width="1.5"/>
+            <circle cx="38" cy="37" r="2" fill="none" stroke="#FFB8D8" stroke-width="1.5"/>
+            <path d="M28 28 L28 24 Q28 22 30 22 L38 22 Q40 22 40 24 L40 28" fill="none" stroke="#FFB8D8" stroke-width="1.5"/>
+            <circle cx="34" cy="18" r="5" fill="#FFF" stroke="#FFB8D8" stroke-width="1.5"/>
+            <circle cx="32.5" cy="17" r="0.7" fill="#5A4A42"/>
+            <circle cx="35.5" cy="17" r="0.7" fill="#5A4A42"/>
+            <path d="M32 20 Q34 21 36 20" stroke="#FFB8D8" stroke-width="1" fill="none"/>
+          `;
+          break;
+        case 'memo':
+          content = `
+            <rect width="68" height="68" rx="16" fill="${color}"/>
+            <rect x="24" y="22" width="20" height="26" rx="2" fill="#FFF" stroke="#B8E8D8" stroke-width="1.5"/>
+            <line x1="28" y1="28" x2="36" y2="28" stroke="#B8E8D8" stroke-width="1.5" stroke-linecap="round"/>
+            <line x1="28" y1="32" x2="40" y2="32" stroke="#B8E8D8" stroke-width="1.5" stroke-linecap="round"/>
+            <line x1="28" y1="36" x2="38" y2="36" stroke="#B8E8D8" stroke-width="1.5" stroke-linecap="round"/>
+            <line x1="28" y1="40" x2="36" y2="40" stroke="#B8E8D8" stroke-width="1.5" stroke-linecap="round"/>
+            <circle cx="48" cy="40" r="6" fill="#FFF" stroke="#B8E8D8" stroke-width="1.5"/>
+            <path d="M45 38 L47 40 L51 36" stroke="#B8E8D8" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+          `;
+          break;
+        case 'anniversary':
+          content = `
+            <rect width="68" height="68" rx="16" fill="${color}"/>
+            <rect x="24" y="26" width="20" height="20" rx="2" fill="#FFF" stroke="#FFD0D8" stroke-width="1.5"/>
+            <line x1="28" y1="26" x2="28" y2="22" stroke="#FFD0D8" stroke-width="1.5"/>
+            <line x1="40" y1="26" x2="40" y2="22" stroke="#FFD0D8" stroke-width="1.5"/>
+            <text x="34" y="38" text-anchor="middle" font-size="8" fill="#FFD0D8" font-weight="600">14</text>
+            <path d="M34 16 Q34 14 36 14 Q38 14 38 16 Q38 18 34 20 Q30 18 30 16 Q30 14 32 14 Q34 14 34 16" fill="#FFB8C8"/>
+          `;
+          break;
+        case 'settings':
+          content = `
+            <rect width="68" height="68" rx="16" fill="${color}"/>
+            <circle cx="34" cy="30" r="10" fill="#FFF" stroke="#D8D8E8" stroke-width="1.5"/>
+            <circle cx="31" cy="29" r="1.2" fill="#5A4A42"/>
+            <circle cx="37" cy="29" r="1.2" fill="#5A4A42"/>
+            <path d="M32 33 Q34 35 36 33" stroke="#D8D8E8" stroke-width="1.5" fill="none"/>
+            <g transform="translate(34, 48)">
+              <circle r="6" fill="none" stroke="#9B8B83" stroke-width="1.5"/>
+              <circle r="2.5" fill="#9B8B83"/>
+              <line x1="0" y1="-8" x2="0" y2="-6" stroke="#9B8B83" stroke-width="1.5"/>
+              <line x1="0" y1="8" x2="0" y2="6" stroke="#9B8B83" stroke-width="1.5"/>
+              <line x1="-8" y1="0" x2="-6" y2="0" stroke="#9B8B83" stroke-width="1.5"/>
+              <line x1="8" y1="0" x2="6" y2="0" stroke="#9B8B83" stroke-width="1.5"/>
+            </g>
+          `;
+          break;
+      }
+
+      svg.innerHTML = content;
+      return svg;
+    };
+
+    // 桌面管理器
+    class Desktop {
+      constructor() {
+        this.currentPage = 1;
+        this.isEditMode = false;
+        this.isDragging = false;
+        this.dragTarget = null;
+        this.dragStartPos = { x: 0, y: 0 };
+        this.dragOffset = { x: 0, y: 0 };
+        this.longPressTimer = null;
+        this.widgets = [];
+        this.icons = [];
+      }
+
+      async init() {
+        await storage.init();
+        themeManager.init();
+
+        this.loadLayout();
+        this.createDefaultWidgets();
+        this.createAppIcons();
+        this.bindEvents();
+        
+        this.updateStatusBar();
+        setInterval(() => this.updateStatusBar(), 1000);
+        
+        this.updateWidgets();
+        setInterval(() => this.updateWidgets(), 60000);
+      }
+
+      loadLayout() {
+        const layout = storage.getDesktopLayout();
+        this.widgets = layout.widgets || [];
+        this.icons = layout.icons || [];
+      }
+
+      saveLayout() {
+        storage.saveDesktopLayout({
+          widgets: this.widgets,
+          icons: this.icons
+        });
+      }
+
+      createDefaultWidgets() {
+        const settings = storage.getSettings();
+
+        if (this.widgets.length === 0) {
+          if (settings.desktopWidgets.time !== false) {
+            this.widgets.push({
+              id: 'widget-time',
+              type: 'time',
+              size: '2x1',
+              page: 1,
+              x: 20,
+              y: 80
+            });
+          }
+
+          if (settings.desktopWidgets.weather !== false) {
+            this.widgets.push({
+              id: 'widget-weather',
+              type: 'weather',
+              size: '2x1',
+              page: 1,
+              x: 20,
+              y: 260
+            });
+          }
+
+          if (settings.desktopWidgets.anniversary !== false) {
+            this.widgets.push({
+              id: 'widget-anniversary',
+              type: 'anniversary',
+              size: '1x1',
+              page: 1,
+              x: 210,
+              y: 440
+            });
+          }
+        }
+
+        this.widgets.forEach(widget => this.renderWidget(widget));
+      }
+
+      renderWidget(widget) {
+        const page = document.getElementById(`page-${widget.page}`);
+        if (!page) return;
+
+        const
