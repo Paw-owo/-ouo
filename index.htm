@@ -1,0 +1,476 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
+  <meta name="theme-color" content="#fbf7f0" />
+  <title>AI 手机桌面系统</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <div id="root" class="app-root">
+    <div class="status-bar">
+      <div id="statusTime">00:00</div>
+      <div class="status-cluster">
+        <svg class="signal-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M5 17v-3M10 17v-6M15 17V8M20 17V5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path>
+        </svg>
+        <span>5G</span>
+        <svg class="battery-icon" viewBox="0 0 28 16" aria-hidden="true">
+          <path d="M2 4a3 3 0 0 1 3-3h16a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3H5a3 3 0 0 1-3-3V4Z" fill="none" stroke="currentColor" stroke-width="1.8"></path>
+          <path d="M25 6h1.5v4H25" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path>
+          <path d="M5 4h13a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2H5V4Z" fill="currentColor" opacity=".42"></path>
+        </svg>
+      </div>
+    </div>
+
+    <main id="desktop" class="desktop">
+      <div id="desktopPages" class="desktop-pages">
+        <section class="desktop-page" data-page="0">
+          <div class="widget-layer" data-widget-layer="0"></div>
+          <div class="icon-layer" data-icon-layer="0"></div>
+        </section>
+        <section class="desktop-page" data-page="1">
+          <div class="widget-layer" data-widget-layer="1"></div>
+          <div class="icon-layer" data-icon-layer="1"></div>
+        </section>
+      </div>
+      <div id="pageDots" class="page-dots"></div>
+      <nav id="dock" class="dock" aria-label="常用应用"></nav>
+    </main>
+  </div>
+
+  <section id="appWindow" class="app-window" aria-live="polite"></section>
+
+  <script type="module">
+    import {
+      APP_DEFINITIONS,
+      readState,
+      updateState,
+      subscribeStorage,
+      updateDesktopItem,
+      clearUnread,
+    } from "./core/storage.js";
+    import { restoreThemeFromStorage } from "./core/theme.js";
+    import {
+      ICONS,
+      createElement,
+      clear,
+      longPress,
+      makeFreeDraggable,
+      toast,
+    } from "./core/ui.js";
+
+    const root = document.getElementById("root");
+    const desktop = document.getElementById("desktop");
+    const desktopPages = document.getElementById("desktopPages");
+    const pageDots = document.getElementById("pageDots");
+    const dock = document.getElementById("dock");
+    const appWindow = document.getElementById("appWindow");
+    const statusTime = document.getElementById("statusTime");
+
+    const appModules = new Map();
+    let state = readState();
+    let currentPage = state.desktop.currentPage || 0;
+    let editing = false;
+    let editTimer = 0;
+    let weatherCache = null;
+
+    restoreThemeFromStorage();
+    boot();
+
+    function boot() {
+      renderAll();
+      updateClock();
+      fetchWeather();
+      setInterval(updateClock, 1000);
+      setInterval(fetchWeather, 20 * 60 * 1000);
+      bindDesktopSwipe();
+
+      subscribeStorage((nextState) => {
+        state = nextState;
+        renderAll();
+      });
+
+      window.addEventListener("app:close", closeApp);
+      window.addEventListener("app:open", (event) => openApp(event.detail?.appId));
+      window.addEventListener("storage", () => {
+        state = readState();
+        renderAll();
+      });
+    }
+
+    function renderAll() {
+      applyWallpaper();
+      renderDesktop();
+      renderDock();
+      renderDots();
+      goPage(currentPage, false);
+    }
+
+    function applyWallpaper() {
+      root.style.setProperty("--wallpaper", state.desktop.wallpaper ? `url("${state.desktop.wallpaper}")` : "none");
+    }
+
+    function updateClock() {
+      const now = new Date();
+      statusTime.textContent = now.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" });
+      const clockValue = document.querySelector("[data-clock-value]");
+      if (clockValue) {
+        clockValue.textContent = now.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" });
+      }
+      const clockNote = document.querySelector("[data-clock-note]");
+      if (clockNote) {
+        clockNote.textContent = now.toLocaleDateString("zh-CN", { month: "long", day: "numeric", weekday: "long" });
+      }
+    }
+
+    async function fetchWeather() {
+      const city = state.desktop.weatherCity || "温州";
+      try {
+        const geoResponse = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1&language=zh&format=json`);
+        const geoData = await geoResponse.json();
+        const place = geoData?.results?.[0];
+        if (!place) throw new Error("未找到城市");
+
+        const weatherResponse = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${place.latitude}&longitude=${place.longitude}&current=temperature_2m,weather_code&timezone=auto`);
+        const weatherData = await weatherResponse.json();
+
+        weatherCache = {
+          city: place.name || city,
+          temperature: Math.round(weatherData.current?.temperature_2m || 0),
+          text: weatherText(weatherData.current?.weather_code),
+        };
+      } catch {
+        weatherCache = {
+          city,
+          temperature: "--",
+          text: "天气暂不可用",
+        };
+      }
+
+      renderWidgets();
+    }
+
+    function weatherText(code) {
+      const value = Number(code);
+      if ([0].includes(value)) return "晴";
+      if ([1, 2, 3].includes(value)) return "多云";
+      if ([45, 48].includes(value)) return "雾";
+      if ([51, 53, 55, 61, 63, 65, 80, 81, 82].includes(value)) return "雨";
+      if ([71, 73, 75, 77, 85, 86].includes(value)) return "雪";
+      if ([95, 96, 99].includes(value)) return "雷雨";
+      return "天气";
+    }
+
+    function renderDesktop() {
+      renderWidgets();
+      renderIcons();
+    }
+
+    function renderWidgets() {
+      document.querySelectorAll("[data-widget-layer]").forEach(clear);
+
+      Object.values(state.desktop.widgets || {}).forEach((widget) => {
+        if (!widget.enabled) return;
+        const layer = document.querySelector(`[data-widget-layer="${widget.page || 0}"]`);
+        if (!layer) return;
+
+        const node = createWidget(widget);
+        layer.append(node);
+        bindMovable(node, "widget", widget.id);
+      });
+
+      updateClock();
+    }
+
+    function createWidget(widget) {
+      const node = createElement("article", {
+        className: `desktop-widget widget-${widget.type || "small"} ${widget.id === "clock" ? "photo-widget" : ""}`,
+        dataset: { widgetId: widget.id },
+        style: {
+          left: `${widget.x || 0}px`,
+          top: `${widget.y || 0}px`,
+          width: widget.width ? `${widget.width}px` : "",
+          height: widget.height ? `${widget.height}px` : "",
+        },
+      });
+
+      if (widget.id === "clock") {
+        node.append(createElement("div", {
+          className: "widget-content",
+          children: [
+            createElement("div", { className: "widget-title", text: "现在" }),
+            createElement("div", { className: "widget-value", attrs: { "data-clock-value": "" }, text: "00:00" }),
+            createElement("div", { className: "widget-note", attrs: { "data-clock-note": "" }, text: "" }),
+          ],
+        }));
+      }
+
+      if (widget.id === "weather") {
+        node.append(createElement("div", {
+          className: "widget-content",
+          children: [
+            createElement("div", { className: "widget-title", text: weatherCache?.city || state.desktop.weatherCity || "温州" }),
+            createElement("div", { className: "widget-value", text: `${weatherCache?.temperature ?? "--"}°` }),
+            createElement("div", { className: "widget-note", text: weatherCache?.text || "正在更新" }),
+          ],
+        }));
+      }
+
+      if (widget.id === "anniversary") {
+        const next = getNextAnniversary();
+        node.append(createElement("div", {
+          className: "widget-content",
+          children: [
+            createElement("div", { className: "widget-title", text: "纪念日" }),
+            createElement("div", { className: "widget-value", text: next ? `${next.days}天` : "--" }),
+            createElement("div", { className: "widget-note", text: next ? next.title : "还没有纪念日" }),
+          ],
+        }));
+      }
+
+      return node;
+    }
+
+    function getNextAnniversary() {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      return (state.anniversaries || [])
+        .map((item) => {
+          const date = new Date(item.date);
+          date.setHours(0, 0, 0, 0);
+          return {
+            ...item,
+            days: Math.ceil((date - today) / 86400000),
+          };
+        })
+        .filter((item) => item.days >= 0)
+        .sort((a, b) => a.days - b.days)[0];
+    }
+
+    function renderIcons() {
+      document.querySelectorAll("[data-icon-layer]").forEach(clear);
+      const dockIds = new Set(state.desktop.dock || []);
+
+      APP_DEFINITIONS.forEach((app) => {
+        if (dockIds.has(app.id)) return;
+        const position = state.desktop.apps[app.id] || { page: 0, x: 24, y: 80 };
+        const layer = document.querySelector(`[data-icon-layer="${position.page || 0}"]`);
+        if (!layer) return;
+
+        const node = createAppIcon(app, position, false);
+        layer.append(node);
+        bindAppIcon(node, app.id);
+        bindMovable(node, "app", app.id);
+      });
+    }
+
+    function renderDock() {
+      clear(dock);
+      (state.desktop.dock || []).forEach((appId) => {
+        const app = APP_DEFINITIONS.find((item) => item.id === appId);
+        if (!app) return;
+
+        const node = createAppIcon(app, { x: 0, y: 0 }, true);
+        dock.append(node);
+        bindAppIcon(node, app.id);
+      });
+    }
+
+    function createAppIcon(app, position, inDock) {
+      const custom = state.desktop.customApps?.[app.id] || {};
+      const unread = state.unreadBadges?.[app.id] || 0;
+      const name = custom.name || app.name;
+      const image = custom.icon || "";
+      const node = createElement("button", {
+        className: "app-icon",
+        dataset: { appId: app.id },
+        style: inDock ? {} : { left: `${position.x || 0}px`, top: `${position.y || 0}px` },
+        children: [
+          createElement("span", {
+            className: "app-icon-art",
+            children: [
+              image
+                ? createElement("img", { className: "app-icon-image", attrs: { src: image, alt: name } })
+                : createElement("span", { html: ICONS[app.id] || ICONS.settings }),
+            ],
+          }),
+          createElement("span", { className: "app-icon-name", text: name }),
+          unread > 0 ? createElement("span", { className: "badge", text: unread > 99 ? "99" : String(unread) }) : null,
+        ].filter(Boolean),
+      });
+
+      return node;
+    }
+
+    function bindAppIcon(node, appId) {
+      node.addEventListener("click", () => {
+        if (editing) return;
+        openApp(appId);
+      });
+
+      longPress(node, () => enterEditing());
+    }
+
+    function bindMovable(node, type, id) {
+      longPress(node, () => enterEditing());
+
+      makeFreeDraggable(node, {
+        container: node.closest(type === "widget" ? ".widget-layer" : ".icon-layer"),
+        onStart: () => {
+          if (!editing) enterEditing();
+        },
+        onMove: ({ event }) => {
+          const pointX = event.clientX || event.touches?.[0]?.clientX || 0;
+          if (pointX > window.innerWidth - 34 && currentPage < 1) goPage(1);
+          if (pointX < 34 && currentPage > 0) goPage(0);
+        },
+        onEnd: ({ x, y }) => {
+          const patch = { page: currentPage, x: Math.round(x), y: Math.round(y) };
+          updateDesktopItem(type, id, patch);
+          scheduleExitEditing();
+        },
+      });
+    }
+
+    function enterEditing() {
+      editing = true;
+      desktop.classList.add("editing");
+      clearTimeout(editTimer);
+      toast("拖动后会自动保存", 1000);
+    }
+
+    function scheduleExitEditing() {
+      clearTimeout(editTimer);
+      editTimer = setTimeout(() => {
+        editing = false;
+        desktop.classList.remove("editing");
+      }, 1600);
+    }
+
+    function renderDots() {
+      clear(pageDots);
+      [0, 1].forEach((page) => {
+        pageDots.append(createElement("span", {
+          className: `page-dot ${page === currentPage ? "active" : ""}`,
+        }));
+      });
+    }
+
+    function goPage(page, persist = true) {
+      currentPage = Math.max(0, Math.min(1, page));
+      desktopPages.style.transform = `translateX(${-currentPage * 100}vw)`;
+      renderDots();
+
+      if (persist) {
+        updateState((draft) => {
+          draft.desktop.currentPage = currentPage;
+          return draft;
+        });
+      }
+    }
+
+    function bindDesktopSwipe() {
+      let startX = 0;
+      let startY = 0;
+
+      desktopPages.addEventListener("touchstart", (event) => {
+        startX = event.touches[0].clientX;
+        startY = event.touches[0].clientY;
+      }, { passive: true });
+
+      desktopPages.addEventListener("touchend", (event) => {
+        const endX = event.changedTouches[0].clientX;
+        const endY = event.changedTouches[0].clientY;
+        const diffX = endX - startX;
+        const diffY = endY - startY;
+
+        if (Math.abs(diffX) > 56 && Math.abs(diffX) > Math.abs(diffY) * 1.2) {
+          goPage(diffX < 0 ? currentPage + 1 : currentPage - 1);
+        }
+      }, { passive: true });
+    }
+
+    async function openApp(appId) {
+      const app = APP_DEFINITIONS.find((item) => item.id === appId);
+      if (!app) return;
+
+      clear(appWindow);
+      appWindow.classList.add("open");
+      clearUnread(appId);
+
+      try {
+        const module = await loadAppModule(app);
+        const context = {
+          app,
+          state: readState(),
+          close: closeApp,
+          openApp,
+          refresh: () => {
+            state = readState();
+            renderAll();
+          },
+        };
+
+        if (typeof module.mountApp === "function") {
+          module.mountApp(appWindow, context);
+        } else if (typeof module.renderApp === "function") {
+          appWindow.append(module.renderApp(context));
+        } else {
+          appWindow.append(createFallbackApp(app));
+        }
+      } catch (error) {
+        appWindow.append(createFallbackApp(app, error));
+      }
+    }
+
+    async function loadAppModule(app) {
+      if (!appModules.has(app.id)) {
+        appModules.set(app.id, await import(app.module));
+      }
+      return appModules.get(app.id);
+    }
+
+    function closeApp() {
+      appWindow.classList.remove("open");
+      setTimeout(() => clear(appWindow), 260);
+      state = readState();
+      renderAll();
+    }
+
+    function createFallbackApp(app, error) {
+      return createElement("div", {
+        className: "app-shell",
+        children: [
+          createElement("header", {
+            className: "app-nav",
+            children: [
+              createElement("button", {
+                className: "icon-button",
+                html: ICONS.back,
+                on: { click: closeApp },
+              }),
+              createElement("div", { className: "app-nav-title", text: app.name }),
+              createElement("div"),
+            ],
+          }),
+          createElement("main", {
+            className: "app-content",
+            children: [
+              createElement("section", {
+                className: "card card-padding stack",
+                children: [
+                  createElement("h2", { className: "section-title", text: "应用等待接入" }),
+                  createElement("p", { className: "muted", text: error ? error.message : "这个应用文件会在后续步骤写入。" }),
+                ],
+              }),
+            ],
+          }),
+        ],
+      });
+    }
+  </script>
+</body>
+</html>
