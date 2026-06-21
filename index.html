@@ -1,0 +1,1628 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
+  <title>AI 手机桌面系统</title>
+  <link rel="stylesheet" href="./style.css" />
+  <style>
+    html,
+    body {
+      width: 100vw;
+      height: 100vh;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      position: fixed;
+      overscroll-behavior: none;
+      touch-action: none;
+      background: var(--bg-primary);
+      font-family: var(--font-main);
+      color: var(--text-primary);
+    }
+
+    button,
+    input,
+    textarea,
+    select {
+      font-family: inherit;
+      border: none;
+      outline: none;
+      color: inherit;
+      background: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    button {
+      cursor: pointer;
+      transition: all 200ms ease;
+    }
+
+    button:active {
+      transform: scale(0.96);
+    }
+
+    .phone-desktop {
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      position: relative;
+      background: var(--bg-primary);
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+      isolation: isolate;
+    }
+
+    .phone-desktop::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: rgba(250, 250, 250, 0.58);
+      backdrop-filter: blur(18px);
+      z-index: -1;
+      pointer-events: none;
+    }
+
+    .status-bar {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 0;
+      height: 44px;
+      padding: 0 22px;
+      box-sizing: border-box;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      z-index: 40;
+      color: var(--text-primary);
+      font-size: 14px;
+      font-weight: 560;
+      letter-spacing: 0.01em;
+      user-select: none;
+    }
+
+    .status-icons {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--text-primary);
+      opacity: 0.82;
+    }
+
+    .status-icons svg {
+      width: 22px;
+      height: 22px;
+      stroke: currentColor;
+      stroke-width: 1.5;
+      fill: none;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .desktop-workspace {
+      position: absolute;
+      inset: 44px 0 88px;
+      overflow: hidden;
+      touch-action: none;
+    }
+
+    .desktop-pages {
+      width: 200vw;
+      height: 100%;
+      display: flex;
+      transition: transform 260ms ease;
+      will-change: transform;
+    }
+
+    .desktop-page {
+      width: 100vw;
+      height: 100%;
+      flex: 0 0 100vw;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .widget-area {
+      position: absolute;
+      top: 12px;
+      left: 20px;
+      right: 20px;
+      display: grid;
+      grid-template-columns: 1.25fr 1fr;
+      gap: 12px;
+      z-index: 4;
+      pointer-events: auto;
+    }
+
+    .widget-card {
+      min-height: 86px;
+      padding: 18px;
+      box-sizing: border-box;
+      border-radius: 24px;
+      background: rgba(255, 255, 255, 0.58);
+      box-shadow: var(--shadow-sm);
+      backdrop-filter: blur(24px);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      overflow: hidden;
+      color: var(--text-primary);
+    }
+
+    .widget-card.widget-wide {
+      grid-row: span 2;
+      min-height: 184px;
+      justify-content: flex-end;
+    }
+
+    .big-clock {
+      font-size: 46px;
+      line-height: 1;
+      letter-spacing: -0.05em;
+      font-weight: 520;
+      margin-bottom: 10px;
+    }
+
+    .big-date {
+      font-size: 14px;
+      line-height: 1.6;
+      color: var(--text-secondary);
+    }
+
+    .widget-title {
+      font-size: 13px;
+      line-height: 1.4;
+      color: var(--text-secondary);
+      margin-bottom: 8px;
+    }
+
+    .widget-main {
+      font-size: 19px;
+      line-height: 1.35;
+      font-weight: 560;
+      letter-spacing: -0.02em;
+      color: var(--text-primary);
+    }
+
+    .widget-sub {
+      margin-top: 7px;
+      font-size: 13px;
+      line-height: 1.55;
+      color: var(--text-secondary);
+    }
+
+    .widget-action {
+      margin-top: 10px;
+      width: fit-content;
+      padding: 7px 12px;
+      border-radius: 999px;
+      background: rgba(26, 26, 26, 0.06);
+      color: var(--text-primary);
+      font-size: 12px;
+      line-height: 1;
+    }
+
+    .app-layer {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 226px;
+      bottom: 14px;
+      pointer-events: none;
+      z-index: 8;
+    }
+
+    .desktop-icon {
+      position: absolute;
+      width: 74px;
+      min-height: 94px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      transform: translate3d(0, 0, 0);
+      transition: transform 200ms ease, opacity 200ms ease;
+      pointer-events: auto;
+      user-select: none;
+      touch-action: none;
+      z-index: 10;
+      color: var(--text-primary);
+    }
+
+    .desktop-icon.dragging {
+      z-index: 80;
+      transition: none;
+      opacity: 0.92;
+      transform: translate3d(0, 0, 0) scale(1.06);
+    }
+
+    .edit-mode .desktop-icon:not(.dragging) {
+      animation: icon-breathe 760ms ease-in-out infinite alternate;
+    }
+
+    @keyframes icon-breathe {
+      from {
+        transform: translate3d(var(--icon-x, 0px), var(--icon-y, 0px), 0) rotate(-0.8deg);
+      }
+      to {
+        transform: translate3d(var(--icon-x, 0px), var(--icon-y, 0px), 0) rotate(0.8deg);
+      }
+    }
+
+    .icon-visual {
+      width: 58px;
+      height: 58px;
+      border-radius: 18px;
+      display: grid;
+      place-items: center;
+      color: var(--text-primary);
+      background: rgba(255, 255, 255, 0.18);
+      backdrop-filter: blur(12px);
+      box-shadow: none;
+      overflow: hidden;
+    }
+
+    .icon-visual img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      border-radius: inherit;
+    }
+
+    .icon-visual svg {
+      width: 34px;
+      height: 34px;
+      stroke: currentColor;
+      stroke-width: 1.5;
+      fill: none;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      opacity: 0.92;
+    }
+
+    .icon-label {
+      max-width: 82px;
+      min-height: 17px;
+      padding: 0 4px;
+      box-sizing: border-box;
+      font-size: 12px;
+      line-height: 1.35;
+      font-weight: 500;
+      text-align: center;
+      color: var(--text-primary);
+      text-shadow: 0 1px 8px rgba(255, 255, 255, 0.7);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .badge {
+      position: absolute;
+      top: -3px;
+      right: 7px;
+      min-width: 18px;
+      height: 18px;
+      padding: 0 5px;
+      box-sizing: border-box;
+      border-radius: 999px;
+      background: #E85D75;
+      color: #fff;
+      font-size: 11px;
+      line-height: 18px;
+      text-align: center;
+      font-weight: 600;
+      box-shadow: 0 2px 8px rgba(232, 93, 117, 0.22);
+      display: none;
+    }
+
+    .badge.show {
+      display: block;
+    }
+
+    .dock {
+      position: absolute;
+      left: 18px;
+      right: 18px;
+      bottom: 12px;
+      height: 72px;
+      z-index: 45;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      align-items: center;
+      justify-items: center;
+      border-radius: 28px;
+      background: rgba(255, 255, 255, 0.44);
+      box-shadow: var(--shadow-md);
+      backdrop-filter: blur(28px);
+    }
+
+    .dock .desktop-icon {
+      position: relative;
+      width: 70px;
+      min-height: 68px;
+      gap: 3px;
+      transform: none;
+    }
+
+    .dock .icon-visual {
+      width: 44px;
+      height: 44px;
+      border-radius: 15px;
+      background: transparent;
+    }
+
+    .dock .icon-visual svg {
+      width: 29px;
+      height: 29px;
+    }
+
+    .dock .icon-label {
+      font-size: 11px;
+      display: none;
+    }
+
+    .page-dots {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 92px;
+      height: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      z-index: 44;
+      pointer-events: none;
+    }
+
+    .page-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 999px;
+      background: rgba(26, 26, 26, 0.2);
+      transition: all 200ms ease;
+    }
+
+    .page-dot.active {
+      width: 17px;
+      background: rgba(26, 26, 26, 0.5);
+    }
+
+    .edit-toolbar {
+      position: absolute;
+      left: 20px;
+      right: 20px;
+      top: 54px;
+      z-index: 90;
+      min-height: 54px;
+      padding: 10px 12px 10px 18px;
+      box-sizing: border-box;
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      border-radius: 22px;
+      background: rgba(255, 255, 255, 0.72);
+      box-shadow: var(--shadow-sm);
+      backdrop-filter: blur(24px);
+    }
+
+    .edit-mode .edit-toolbar {
+      display: flex;
+    }
+
+    .edit-text {
+      font-size: 13px;
+      line-height: 1.5;
+      color: var(--text-secondary);
+    }
+
+    .edit-done {
+      flex: none;
+      height: 36px;
+      padding: 0 16px;
+      border-radius: 999px;
+      background: var(--accent);
+      color: #fff;
+      font-size: 14px;
+      font-weight: 560;
+    }
+
+    .app-shell {
+      position: fixed;
+      inset: 0;
+      z-index: 200;
+      background: var(--bg-primary);
+      transform: translateY(100%);
+      opacity: 0;
+      pointer-events: none;
+      transition: all 260ms ease;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .app-shell.open {
+      transform: translateY(0);
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .app-shell-header {
+      flex: none;
+      height: 56px;
+      padding: 0 16px;
+      box-sizing: border-box;
+      display: grid;
+      grid-template-columns: 48px 1fr 48px;
+      align-items: center;
+      background: rgba(250, 250, 250, 0.82);
+      backdrop-filter: blur(24px);
+      z-index: 2;
+    }
+
+    .app-back,
+    .app-home-action {
+      width: 40px;
+      height: 40px;
+      border-radius: 16px;
+      display: grid;
+      place-items: center;
+      color: var(--text-primary);
+      background: rgba(26, 26, 26, 0.04);
+    }
+
+    .app-back svg,
+    .app-home-action svg {
+      width: 21px;
+      height: 21px;
+      stroke: currentColor;
+      stroke-width: 1.5;
+      fill: none;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .app-title {
+      text-align: center;
+      font-size: 17px;
+      font-weight: 560;
+      line-height: 1.4;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .app-content {
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
+      position: relative;
+      background: var(--bg-primary);
+    }
+
+    .sheet-mask {
+      position: fixed;
+      inset: 0;
+      z-index: 260;
+      display: none;
+      align-items: flex-end;
+      background: var(--bg-overlay);
+      opacity: 0;
+      transition: all 200ms ease;
+    }
+
+    .sheet-mask.show {
+      display: flex;
+      opacity: 1;
+    }
+
+    .bottom-sheet {
+      width: 100%;
+      max-height: 70vh;
+      padding: 12px 20px 24px;
+      box-sizing: border-box;
+      border-radius: 28px 28px 0 0;
+      background: var(--bg-card);
+      box-shadow: var(--shadow-lg);
+      transform: translateY(18px);
+      transition: all 200ms ease;
+      overflow: auto;
+    }
+
+    .sheet-mask.show .bottom-sheet {
+      transform: translateY(0);
+    }
+
+    .sheet-handle {
+      width: 42px;
+      height: 4px;
+      border-radius: 999px;
+      margin: 0 auto 18px;
+      background: rgba(26, 26, 26, 0.14);
+    }
+
+    .sheet-title {
+      font-size: 17px;
+      font-weight: 560;
+      line-height: 1.5;
+      margin-bottom: 14px;
+    }
+
+    .form-row {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+
+    .form-label {
+      font-size: 13px;
+      color: var(--text-secondary);
+      line-height: 1.4;
+    }
+
+    .text-input {
+      width: 100%;
+      height: 46px;
+      padding: 0 14px;
+      box-sizing: border-box;
+      border-radius: 16px;
+      background: var(--bg-secondary);
+      font-size: 15px;
+      line-height: 1.6;
+    }
+
+    .sheet-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 6px;
+    }
+
+    .sheet-button {
+      flex: 1;
+      height: 46px;
+      border-radius: 16px;
+      font-size: 15px;
+      font-weight: 560;
+      background: var(--bg-secondary);
+      color: var(--text-primary);
+    }
+
+    .sheet-button.primary {
+      background: var(--accent);
+      color: #fff;
+    }
+
+    .desktop-toast {
+      position: fixed;
+      left: 50%;
+      bottom: 112px;
+      z-index: 320;
+      transform: translateX(-50%) translateY(12px);
+      opacity: 0;
+      pointer-events: none;
+      max-width: calc(100vw - 44px);
+      padding: 10px 14px;
+      border-radius: 999px;
+      background: rgba(26, 26, 26, 0.72);
+      color: #fff;
+      font-size: 13px;
+      line-height: 1.45;
+      box-shadow: var(--shadow-md);
+      transition: all 200ms ease;
+      white-space: nowrap;
+    }
+
+    .desktop-toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    @media (max-height: 720px) {
+      .widget-area {
+        top: 8px;
+      }
+
+      .widget-card.widget-wide {
+        min-height: 146px;
+      }
+
+      .widget-card {
+        min-height: 68px;
+        padding: 14px;
+      }
+
+      .big-clock {
+        font-size: 38px;
+      }
+
+      .app-layer {
+        top: 182px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main id="phoneDesktop" class="phone-desktop">
+    <section class="status-bar" aria-label="状态栏">
+      <div id="statusTime">09:41</div>
+      <div class="status-icons">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M4 17h1.6" />
+          <path d="M8.6 17h1.6v-4" />
+          <path d="M13.2 17h1.6V9" />
+          <path d="M17.8 17h1.6V5" />
+        </svg>
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M4.8 9.8a10.5 10.5 0 0 1 14.4 0" />
+          <path d="M7.6 12.8a6.5 6.5 0 0 1 8.8 0" />
+          <path d="M10.5 15.7a2.4 2.4 0 0 1 3 0" />
+        </svg>
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <rect x="3.5" y="8" width="16" height="8" rx="3" />
+          <path d="M21 11v2" />
+          <path d="M6.2 10.8h8.8v2.4H6.2z" />
+        </svg>
+      </div>
+    </section>
+
+    <div id="editToolbar" class="edit-toolbar">
+      <div class="edit-text">长按后可自由拖动图标，靠近屏幕边缘可移动到另一页</div>
+      <button id="editDone" class="edit-done" type="button">完成</button>
+    </div>
+
+    <section id="desktopWorkspace" class="desktop-workspace">
+      <div id="desktopPages" class="desktop-pages">
+        <div class="desktop-page" data-page="0">
+          <section id="widgetArea" class="widget-area">
+            <article id="clockWidget" class="widget-card widget-wide">
+              <div id="bigClock" class="big-clock">09:41</div>
+              <div id="bigDate" class="big-date">今天</div>
+            </article>
+            <article id="weatherWidget" class="widget-card">
+              <div class="widget-title">天气</div>
+              <div id="weatherMain" class="widget-main">温州</div>
+              <div id="weatherSub" class="widget-sub">正在更新</div>
+              <button id="weatherEdit" class="widget-action" type="button">更改地区</button>
+            </article>
+            <article id="anniversaryWidget" class="widget-card">
+              <div class="widget-title">纪念日</div>
+              <div id="anniversaryMain" class="widget-main">暂无记录</div>
+              <div id="anniversarySub" class="widget-sub">可在纪念日应用中添加</div>
+            </article>
+          </section>
+          <div class="app-layer" data-layer="0"></div>
+        </div>
+        <div class="desktop-page" data-page="1">
+          <div class="app-layer" data-layer="1"></div>
+        </div>
+      </div>
+    </section>
+
+    <div class="page-dots" aria-hidden="true">
+      <div id="dot0" class="page-dot active"></div>
+      <div id="dot1" class="page-dot"></div>
+    </div>
+
+    <nav id="dock" class="dock" aria-label="常用应用"></nav>
+  </main>
+
+  <section id="appShell" class="app-shell" aria-hidden="true">
+    <header class="app-shell-header">
+      <button id="appBack" class="app-back" type="button" aria-label="返回桌面">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M15 5l-7 7 7 7" />
+        </svg>
+      </button>
+      <div id="appTitle" class="app-title">应用</div>
+      <button id="appHomeAction" class="app-home-action" type="button" aria-label="桌面">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M5 11.5 12 5l7 6.5" />
+          <path d="M7.5 10.5V19h9v-8.5" />
+        </svg>
+      </button>
+    </header>
+    <div id="appContent" class="app-content"></div>
+  </section>
+
+  <section id="weatherSheet" class="sheet-mask" aria-hidden="true">
+    <div class="bottom-sheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-title">天气地区</div>
+      <label class="form-row">
+        <span class="form-label">城市或地区</span>
+        <input id="weatherCityInput" class="text-input" type="text" autocomplete="off" placeholder="例如：温州" />
+      </label>
+      <div class="sheet-actions">
+        <button id="weatherCancel" class="sheet-button" type="button">取消</button>
+        <button id="weatherSave" class="sheet-button primary" type="button">保存</button>
+      </div>
+    </div>
+  </section>
+
+  <div id="desktopToast" class="desktop-toast"></div>
+
+  <script type="module">
+    import { initTheme } from "./core/theme.js";
+
+    const APPS = [
+      { id: "chat", name: "消息", module: "./apps/chat.js" },
+      { id: "moments", name: "朋友圈", module: "./apps/moments.js" },
+      { id: "characters", name: "角色管理", module: "./apps/characters.js" },
+      { id: "worldbook", name: "世界书", module: "./apps/worldbook.js" },
+      { id: "games", name: "小游戏", module: "./apps/games.js" },
+      { id: "shop", name: "商店", module: "./apps/shop.js" },
+      { id: "wallet", name: "钱包", module: "./apps/wallet.js" },
+      { id: "memo", name: "备忘录", module: "./apps/memo.js" },
+      { id: "anniversary", name: "纪念日", module: "./apps/anniversary.js" },
+      { id: "settings", name: "设置", module: "./apps/settings.js" }
+    ];
+
+    const ICONS = {
+      chat: `<svg viewBox="0 0 24 24"><path d="M5.5 6.5h13a2.5 2.5 0 0 1 2.5 2.5v5.5a2.5 2.5 0 0 1-2.5 2.5h-7L7 20v-3H5.5A2.5 2.5 0 0 1 3 14.5V9a2.5 2.5 0 0 1 2.5-2.5Z"/><path d="M7.5 10.5h9"/><path d="M7.5 13.5h5.8"/></svg>`,
+      moments: `<svg viewBox="0 0 24 24"><path d="M12 4.5c2.2 2.5 4.3 3.8 7.3 4.2-.4 5-2.6 8.7-7.3 10.8-4.7-2.1-6.9-5.8-7.3-10.8 3-.4 5.1-1.7 7.3-4.2Z"/><path d="M9 12.2h6"/><path d="M12 9.2v6"/></svg>`,
+      characters: `<svg viewBox="0 0 24 24"><path d="M8.5 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"/><path d="M15.8 10.5a3 3 0 1 0 0-6"/><path d="M3.8 19.5c.6-3.2 2.4-5.2 4.7-5.2s4.1 2 4.7 5.2"/><path d="M14.2 14.6c2.7.3 4.7 2.1 5.2 4.9"/></svg>`,
+      worldbook: `<svg viewBox="0 0 24 24"><path d="M5.5 4.8h9.2A3.8 3.8 0 0 1 18.5 8.6v10.6H8a2.5 2.5 0 0 1-2.5-2.5V4.8Z"/><path d="M8 16.2h10.5"/><path d="M8 8.2h6.5"/><path d="M8 11.2h5"/></svg>`,
+      games: `<svg viewBox="0 0 24 24"><path d="M7.2 9.5h9.6a4 4 0 0 1 3.8 3l.6 2.4a3.1 3.1 0 0 1-5.4 2.7l-1.2-1.4H9.4l-1.2 1.4a3.1 3.1 0 0 1-5.4-2.7l.6-2.4a4 4 0 0 1 3.8-3Z"/><path d="M8 12.2v3"/><path d="M6.5 13.7h3"/><path d="M15.8 13h.1"/><path d="M18 15h.1"/></svg>`,
+      shop: `<svg viewBox="0 0 24 24"><path d="M6.2 9.2h11.6l-.9 10.3H7.1L6.2 9.2Z"/><path d="M9 9.2V7.5a3 3 0 0 1 6 0v1.7"/><path d="M5.2 9.2h13.6"/></svg>`,
+      wallet: `<svg viewBox="0 0 24 24"><path d="M4.5 7.2h13.8a2.2 2.2 0 0 1 2.2 2.2v8.1a2.2 2.2 0 0 1-2.2 2.2H5.7a2.2 2.2 0 0 1-2.2-2.2V6.8a2.2 2.2 0 0 1 2.2-2.2h10.6"/><path d="M16.2 12h4.3v3.2h-4.3a1.6 1.6 0 0 1 0-3.2Z"/></svg>`,
+      memo: `<svg viewBox="0 0 24 24"><path d="M6.5 4.5h9.2L19 7.8v11.7H6.5v-15Z"/><path d="M15.5 4.8v3.3h3.2"/><path d="M8.8 11.2h6.4"/><path d="M8.8 14.2h6.4"/><path d="M8.8 17.2h3.8"/></svg>`,
+      anniversary: `<svg viewBox="0 0 24 24"><path d="M6 5.5h12a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-11a2 2 0 0 1 2-2Z"/><path d="M8 3.8v3.4"/><path d="M16 3.8v3.4"/><path d="M4.5 9.5h15"/><path d="M9 13.5h.1"/><path d="M12 13.5h.1"/><path d="M15 13.5h.1"/><path d="M9 16.5h.1"/><path d="M12 16.5h.1"/></svg>`,
+      settings: `<svg viewBox="0 0 24 24"><path d="M12 8.6a3.4 3.4 0 1 1 0 6.8 3.4 3.4 0 0 1 0-6.8Z"/><path d="M18.5 13.6c.1-.5.1-1.1 0-1.6l1.8-1.4-1.8-3.1-2.2.9c-.4-.3-.9-.6-1.4-.8L14.6 5h-5.2l-.3 2.6c-.5.2-1 .5-1.4.8l-2.2-.9-1.8 3.1L5.5 12c-.1.5-.1 1.1 0 1.6l-1.8 1.4 1.8 3.1 2.2-.9c.4.3.9.6 1.4.8l.3 2.6h5.2l.3-2.6c.5-.2 1-.5 1.4-.8l2.2.9 1.8-3.1-1.8-1.4Z"/></svg>`
+    };
+
+    const DESKTOP_KEY = "ai_phone_desktop_config";
+    const APP_THEMES_KEY = "ai_phone_app_themes";
+    const UNREAD_KEY = "ai_phone_unread_counts";
+    const DOCK_IDS = ["chat", "moments", "wallet", "settings"];
+    const PAGE_COUNT = 2;
+    const LONG_PRESS_MS = 460;
+
+    const state = {
+      config: null,
+      appThemes: {},
+      currentPage: 0,
+      editMode: false,
+      drag: null,
+      modules: new Map(),
+      weatherLoading: false
+    };
+
+    const els = {
+      desktop: document.getElementById("phoneDesktop"),
+      workspace: document.getElementById("desktopWorkspace"),
+      pages: document.getElementById("desktopPages"),
+      pageEls: Array.from(document.querySelectorAll(".desktop-page")),
+      layers: Array.from(document.querySelectorAll(".app-layer")),
+      dock: document.getElementById("dock"),
+      dot0: document.getElementById("dot0"),
+      dot1: document.getElementById("dot1"),
+      statusTime: document.getElementById("statusTime"),
+      bigClock: document.getElementById("bigClock"),
+      bigDate: document.getElementById("bigDate"),
+      clockWidget: document.getElementById("clockWidget"),
+      weatherWidget: document.getElementById("weatherWidget"),
+      weatherMain: document.getElementById("weatherMain"),
+      weatherSub: document.getElementById("weatherSub"),
+      weatherEdit: document.getElementById("weatherEdit"),
+      anniversaryWidget: document.getElementById("anniversaryWidget"),
+      anniversaryMain: document.getElementById("anniversaryMain"),
+      anniversarySub: document.getElementById("anniversarySub"),
+      editDone: document.getElementById("editDone"),
+      appShell: document.getElementById("appShell"),
+      appContent: document.getElementById("appContent"),
+      appTitle: document.getElementById("appTitle"),
+      appBack: document.getElementById("appBack"),
+      appHomeAction: document.getElementById("appHomeAction"),
+      weatherSheet: document.getElementById("weatherSheet"),
+      weatherCityInput: document.getElementById("weatherCityInput"),
+      weatherCancel: document.getElementById("weatherCancel"),
+      weatherSave: document.getElementById("weatherSave"),
+      toast: document.getElementById("desktopToast")
+    };
+
+    function safeParse(value, fallback) {
+      try {
+        return value ? JSON.parse(value) : fallback;
+      } catch {
+        return fallback;
+      }
+    }
+
+    function readLocal(key, fallback) {
+      return safeParse(localStorage.getItem(key), fallback);
+    }
+
+    function writeLocal(key, value) {
+      localStorage.setItem(key, JSON.stringify(value));
+    }
+
+    function uid() {
+      return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+    }
+
+    function getDefaultConfig() {
+      return {
+        version: "2.0",
+        wallpaper: "",
+        weatherCity: "温州",
+        currentPage: 0,
+        widgets: {
+          clock: true,
+          weather: true,
+          anniversary: true
+        },
+        dock: [...DOCK_IDS],
+        icons: {}
+      };
+    }
+
+    function loadConfig() {
+      const base = getDefaultConfig();
+      const saved = readLocal(DESKTOP_KEY, {});
+      const config = {
+        ...base,
+        ...saved,
+        widgets: { ...base.widgets, ...(saved.widgets || {}) },
+        dock: Array.isArray(saved.dock) && saved.dock.length ? saved.dock : base.dock,
+        icons: saved.icons || {}
+      };
+
+      const desktopApps = APPS.filter((app) => !config.dock.includes(app.id));
+      const geometry = getIconGeometry();
+
+      desktopApps.forEach((app, index) => {
+        if (!config.icons[app.id]) {
+          const page = index < 12 ? 0 : 1;
+          const localIndex = page === 0 ? index : index - 12;
+          const col = localIndex % 4;
+          const row = Math.floor(localIndex / 4);
+          config.icons[app.id] = {
+            id: app.id,
+            page,
+            x: geometry.paddingX + col * geometry.cellX,
+            y: geometry.paddingY + row * geometry.cellY,
+            name: app.name,
+            image: "",
+            hidden: false
+          };
+        } else {
+          config.icons[app.id] = {
+            id: app.id,
+            page: Number(config.icons[app.id].page || 0),
+            x: Number(config.icons[app.id].x || 0),
+            y: Number(config.icons[app.id].y || 0),
+            name: config.icons[app.id].name || app.name,
+            image: config.icons[app.id].image || "",
+            hidden: Boolean(config.icons[app.id].hidden)
+          };
+        }
+      });
+
+      config.currentPage = Math.min(PAGE_COUNT - 1, Math.max(0, Number(config.currentPage || 0)));
+      state.config = config;
+      state.currentPage = config.currentPage;
+      state.appThemes = readLocal(APP_THEMES_KEY, {});
+      saveConfig();
+    }
+
+    function saveConfig() {
+      state.config.currentPage = state.currentPage;
+      writeLocal(DESKTOP_KEY, state.config);
+      window.dispatchEvent(new CustomEvent("desktop-config-change", { detail: state.config }));
+    }
+
+    function getIconGeometry() {
+      const width = window.innerWidth;
+      return {
+        iconW: 74,
+        iconH: 94,
+        paddingX: Math.max(18, Math.round((width - 4 * 74) / 8)),
+        paddingY: 8,
+        cellX: Math.max(78, Math.round((width - 40) / 4)),
+        cellY: 106
+      };
+    }
+
+    function clamp(value, min, max) {
+      return Math.min(max, Math.max(min, value));
+    }
+
+    function clampIconPosition(iconState, pageIndex) {
+      const layer = els.layers[pageIndex] || els.layers[0];
+      const rect = layer.getBoundingClientRect();
+      const maxX = Math.max(0, rect.width - 74);
+      const maxY = Math.max(0, rect.height - 94);
+      iconState.x = clamp(Number(iconState.x || 0), 8, Math.max(8, maxX - 8));
+      iconState.y = clamp(Number(iconState.y || 0), 0, Math.max(0, maxY - 4));
+    }
+
+    function getApp(id) {
+      return APPS.find((app) => app.id === id);
+    }
+
+    function getAppTheme(id) {
+      return state.appThemes[id] || {};
+    }
+
+    function getDisplayName(app) {
+      const icon = state.config.icons[app.id] || {};
+      const theme = getAppTheme(app.id);
+      return icon.name || theme.name || theme.displayName || app.name;
+    }
+
+    function getDisplayImage(app) {
+      const icon = state.config.icons[app.id] || {};
+      const theme = getAppTheme(app.id);
+      return icon.image || theme.icon || theme.iconImage || "";
+    }
+
+    function createIcon(app, options = {}) {
+      const item = document.createElement("button");
+      item.className = "desktop-icon";
+      item.type = "button";
+      item.dataset.appId = app.id;
+      item.setAttribute("aria-label", getDisplayName(app));
+
+      const visual = document.createElement("div");
+      visual.className = "icon-visual";
+
+      const image = getDisplayImage(app);
+      if (image) {
+        const img = document.createElement("img");
+        img.alt = "";
+        img.src = image;
+        visual.appendChild(img);
+      } else {
+        visual.innerHTML = ICONS[app.id] || ICONS.memo;
+      }
+
+      const label = document.createElement("div");
+      label.className = "icon-label";
+      label.textContent = getDisplayName(app);
+
+      const badge = document.createElement("div");
+      badge.className = "badge";
+      badge.dataset.badgeFor = app.id;
+
+      item.appendChild(visual);
+      item.appendChild(label);
+      item.appendChild(badge);
+
+      if (options.dock) {
+        item.dataset.dock = "true";
+        item.addEventListener("click", () => openApp(app.id));
+      } else {
+        bindIconPointer(item);
+      }
+
+      return item;
+    }
+
+    function renderIcons() {
+      els.layers.forEach((layer) => {
+        layer.innerHTML = "";
+      });
+
+      const desktopApps = APPS.filter((app) => !state.config.dock.includes(app.id));
+      desktopApps.forEach((app) => {
+        const iconState = state.config.icons[app.id];
+        if (!iconState || iconState.hidden) return;
+        iconState.page = clamp(Number(iconState.page || 0), 0, PAGE_COUNT - 1);
+        clampIconPosition(iconState, iconState.page);
+
+        const node = createIcon(app);
+        placeIconNode(node, iconState.x, iconState.y);
+        els.layers[iconState.page].appendChild(node);
+      });
+
+      els.dock.innerHTML = "";
+      state.config.dock.slice(0, 4).forEach((appId) => {
+        const app = getApp(appId);
+        if (!app) return;
+        els.dock.appendChild(createIcon(app, { dock: true }));
+      });
+
+      refreshBadges();
+    }
+
+    function placeIconNode(node, x, y) {
+      node.style.left = "0px";
+      node.style.top = "0px";
+      node.style.setProperty("--icon-x", `${x}px`);
+      node.style.setProperty("--icon-y", `${y}px`);
+      node.style.transform = `translate3d(${x}px, ${y}px, 0)`;
+    }
+
+    function refreshBadges() {
+      const unread = readLocal(UNREAD_KEY, {});
+      document.querySelectorAll("[data-badge-for]").forEach((badge) => {
+        const id = badge.dataset.badgeFor;
+        const count = Number(unread[id] || 0);
+        if (count > 0) {
+          badge.textContent = count > 99 ? "99" : String(count);
+          badge.classList.add("show");
+        } else {
+          badge.textContent = "";
+          badge.classList.remove("show");
+        }
+      });
+    }
+
+    function setPage(page, save = true) {
+      state.currentPage = clamp(page, 0, PAGE_COUNT - 1);
+      els.pages.style.transform = `translate3d(${-state.currentPage * 100}vw, 0, 0)`;
+      els.dot0.classList.toggle("active", state.currentPage === 0);
+      els.dot1.classList.toggle("active", state.currentPage === 1);
+      if (save) saveConfig();
+    }
+
+    function enterEditMode() {
+      if (state.editMode) return;
+      state.editMode = true;
+      els.desktop.classList.add("edit-mode");
+      showToast("已进入编辑模式");
+    }
+
+    function exitEditMode() {
+      if (!state.editMode) return;
+      state.editMode = false;
+      els.desktop.classList.remove("edit-mode");
+      saveConfig();
+      showToast("布局已保存");
+    }
+
+    function bindIconPointer(node) {
+      let pressTimer = null;
+      let startX = 0;
+      let startY = 0;
+      let moved = false;
+      let pointerId = null;
+
+      node.addEventListener("pointerdown", (event) => {
+        if (event.button !== undefined && event.button !== 0) return;
+        event.preventDefault();
+
+        pointerId = event.pointerId;
+        startX = event.clientX;
+        startY = event.clientY;
+        moved = false;
+
+        try {
+          node.setPointerCapture(pointerId);
+        } catch {}
+
+        if (state.editMode) {
+          startIconDrag(node, event);
+          return;
+        }
+
+        pressTimer = window.setTimeout(() => {
+          pressTimer = null;
+          enterEditMode();
+          startIconDrag(node, event);
+        }, LONG_PRESS_MS);
+      });
+
+      node.addEventListener("pointermove", (event) => {
+        if (pointerId !== event.pointerId) return;
+        const dx = event.clientX - startX;
+        const dy = event.clientY - startY;
+
+        if (Math.abs(dx) > 8 || Math.abs(dy) > 8) {
+          moved = true;
+        }
+
+        if (pressTimer && moved) {
+          clearTimeout(pressTimer);
+          pressTimer = null;
+        }
+
+        if (state.drag && state.drag.node === node) {
+          moveIconDrag(event);
+        }
+      });
+
+      node.addEventListener("pointerup", (event) => {
+        if (pointerId !== event.pointerId) return;
+        if (pressTimer) {
+          clearTimeout(pressTimer);
+          pressTimer = null;
+        }
+
+        if (state.drag && state.drag.node === node) {
+          finishIconDrag(event);
+          pointerId = null;
+          return;
+        }
+
+        if (!moved && !state.editMode) {
+          openApp(node.dataset.appId);
+        }
+
+        pointerId = null;
+      });
+
+      node.addEventListener("pointercancel", () => {
+        if (pressTimer) {
+          clearTimeout(pressTimer);
+          pressTimer = null;
+        }
+        if (state.drag && state.drag.node === node) {
+          cancelIconDrag();
+        }
+        pointerId = null;
+      });
+    }
+
+    function startIconDrag(node, event) {
+      const appId = node.dataset.appId;
+      const iconState = state.config.icons[appId];
+      if (!iconState) return;
+
+      const currentLayer = els.layers[iconState.page] || els.layers[0];
+      if (node.parentElement !== currentLayer) currentLayer.appendChild(node);
+
+      node.classList.add("dragging");
+
+      const rect = node.getBoundingClientRect();
+      state.drag = {
+        node,
+        appId,
+        pointerId: event.pointerId,
+        offsetX: event.clientX - rect.left,
+        offsetY: event.clientY - rect.top,
+        lastEdgeSwitch: 0,
+        startedAt: Date.now()
+      };
+
+      moveIconDrag(event);
+    }
+
+    function moveIconDrag(event) {
+      const drag = state.drag;
+      if (!drag) return;
+
+      const iconState = state.config.icons[drag.appId];
+      if (!iconState) return;
+
+      const now = Date.now();
+      if (event.clientX > window.innerWidth - 34 && state.currentPage < PAGE_COUNT - 1 && now - drag.lastEdgeSwitch > 520) {
+        drag.lastEdgeSwitch = now;
+        iconState.page = state.currentPage + 1;
+        setPage(iconState.page);
+        els.layers[iconState.page].appendChild(drag.node);
+      } else if (event.clientX < 34 && state.currentPage > 0 && now - drag.lastEdgeSwitch > 520) {
+        drag.lastEdgeSwitch = now;
+        iconState.page = state.currentPage - 1;
+        setPage(iconState.page);
+        els.layers[iconState.page].appendChild(drag.node);
+      } else {
+        iconState.page = state.currentPage;
+      }
+
+      const layer = els.layers[iconState.page];
+      const rect = layer.getBoundingClientRect();
+      const x = clamp(event.clientX - rect.left - drag.offsetX, 8, Math.max(8, rect.width - 82));
+      const y = clamp(event.clientY - rect.top - drag.offsetY, 0, Math.max(0, rect.height - 98));
+
+      iconState.x = x;
+      iconState.y = y;
+      placeIconNode(drag.node, x, y);
+    }
+
+    function finishIconDrag(event) {
+      if (state.drag) {
+        moveIconDrag(event);
+        state.drag.node.classList.remove("dragging");
+        state.drag = null;
+        saveConfig();
+      }
+    }
+
+    function cancelIconDrag() {
+      if (!state.drag) return;
+      state.drag.node.classList.remove("dragging");
+      state.drag = null;
+      renderIcons();
+    }
+
+    function bindWorkspaceSwipe() {
+      let startX = 0;
+      let startY = 0;
+      let tracking = false;
+      let startedOnIcon = false;
+
+      els.workspace.addEventListener("pointerdown", (event) => {
+        startedOnIcon = Boolean(event.target.closest(".desktop-icon") || event.target.closest(".widget-card"));
+        if (startedOnIcon || state.editMode || state.drag) return;
+        tracking = true;
+        startX = event.clientX;
+        startY = event.clientY;
+      });
+
+      els.workspace.addEventListener("pointerup", (event) => {
+        if (!tracking) return;
+        tracking = false;
+        const dx = event.clientX - startX;
+        const dy = event.clientY - startY;
+        if (Math.abs(dx) > 58 && Math.abs(dx) > Math.abs(dy) * 1.3) {
+          setPage(state.currentPage + (dx < 0 ? 1 : -1));
+        }
+      });
+
+      els.workspace.addEventListener("pointercancel", () => {
+        tracking = false;
+      });
+    }
+
+    function updateTime() {
+      const now = new Date();
+      const time = now.toLocaleTimeString("zh-CN", {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false
+      });
+
+      const date = now.toLocaleDateString("zh-CN", {
+        month: "long",
+        day: "numeric",
+        weekday: "long"
+      });
+
+      els.statusTime.textContent = time;
+      els.bigClock.textContent = time;
+      els.bigDate.textContent = date;
+    }
+
+    async function updateWeather(force = false) {
+      if (state.weatherLoading) return;
+      const city = state.config.weatherCity || "温州";
+      const cacheKey = `ai_phone_weather_cache_${city}`;
+      const cache = readLocal(cacheKey, null);
+
+      if (!force && cache && Date.now() - Number(cache.time || 0) < 30 * 60 * 1000) {
+        renderWeather(cache);
+        return;
+      }
+
+      state.weatherLoading = true;
+      els.weatherMain.textContent = city;
+      els.weatherSub.textContent = "正在更新";
+
+      try {
+        const url = `https://wttr.in/${encodeURIComponent(city)}?format=j1&lang=zh`;
+        const response = await fetch(url, { cache: "no-store" });
+        if (!response.ok) throw new Error("weather request failed");
+        const data = await response.json();
+        const current = data.current_condition?.[0] || {};
+        const area = data.nearest_area?.[0]?.areaName?.[0]?.value || city;
+        const desc = current.lang_zh?.[0]?.value || current.weatherDesc?.[0]?.value || "天气";
+        const temp = current.temp_C !== undefined ? `${current.temp_C}℃` : "";
+        const payload = {
+          time: Date.now(),
+          city: area,
+          temp,
+          desc
+        };
+        writeLocal(cacheKey, payload);
+        renderWeather(payload);
+      } catch {
+        renderWeather({
+          time: Date.now(),
+          city,
+          temp: "",
+          desc: "暂时无法获取，可稍后重试"
+        });
+      } finally {
+        state.weatherLoading = false;
+      }
+    }
+
+    function renderWeather(payload) {
+      els.weatherMain.textContent = payload.temp ? `${payload.city} ${payload.temp}` : payload.city;
+      els.weatherSub.textContent = payload.desc || "天气";
+    }
+
+    function updateAnniversaryWidget() {
+      const lists = [
+        readLocal("ai_phone_anniversaries", []),
+        readLocal("anniversaries", []),
+        readLocal("aiPhone.anniversaries", []),
+        readLocal("ai_phone_data", {})?.anniversaries || []
+      ];
+
+      const items = lists.flat().filter(Boolean).map((item) => ({
+        id: item.id || uid(),
+        title: item.title || item.name || item.label || "纪念日",
+        date: item.date || item.day || item.targetDate || "",
+        remind: item.remind !== false
+      })).filter((item) => item.date);
+
+      if (!items.length) {
+        els.anniversaryMain.textContent = "暂无记录";
+        els.anniversarySub.textContent = "可在纪念日应用中添加";
+        return;
+      }
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const candidates = items.map((item) => {
+        const date = new Date(item.date);
+        if (Number.isNaN(date.getTime())) return null;
+        date.setHours(0, 0, 0, 0);
+        let target = new Date(date);
+        if (target < today) {
+          target.setFullYear(today.getFullYear());
+          if (target < today) target.setFullYear(today.getFullYear() + 1);
+        }
+        const diff = Math.round((target - today) / 86400000);
+        return { ...item, target, diff };
+      }).filter(Boolean).sort((a, b) => a.diff - b.diff);
+
+      const nearest = candidates[0];
+      if (!nearest) {
+        els.anniversaryMain.textContent = "暂无记录";
+        els.anniversarySub.textContent = "可在纪念日应用中添加";
+        return;
+      }
+
+      els.anniversaryMain.textContent = nearest.title;
+      els.anniversarySub.textContent = nearest.diff === 0 ? "就是今天" : `还有 ${nearest.diff} 天`;
+    }
+
+    function applyDesktopConfig() {
+      const wallpaper = state.config.wallpaper || "";
+      els.desktop.style.backgroundImage = wallpaper ? `url("${wallpaper}")` : "";
+      els.clockWidget.style.display = state.config.widgets.clock ? "" : "none";
+      els.weatherWidget.style.display = state.config.widgets.weather ? "" : "none";
+      els.anniversaryWidget.style.display = state.config.widgets.anniversary ? "" : "none";
+      setPage(state.currentPage, false);
+      renderIcons();
+      updateWeather();
+      updateAnniversaryWidget();
+    }
+
+    function openWeatherSheet() {
+      els.weatherCityInput.value = state.config.weatherCity || "温州";
+      els.weatherSheet.classList.add("show");
+      els.weatherSheet.setAttribute("aria-hidden", "false");
+      setTimeout(() => els.weatherCityInput.focus(), 80);
+    }
+
+    function closeWeatherSheet() {
+      els.weatherSheet.classList.remove("show");
+      els.weatherSheet.setAttribute("aria-hidden", "true");
+    }
+
+    async function saveWeatherCity() {
+      const city = els.weatherCityInput.value.trim() || "温州";
+      state.config.weatherCity = city;
+      saveConfig();
+      closeWeatherSheet();
+      await updateWeather(true);
+    }
+
+    function showToast(text) {
+      els.toast.textContent = text;
+      els.toast.classList.add("show");
+      clearTimeout(showToast.timer);
+      showToast.timer = setTimeout(() => {
+        els.toast.classList.remove("show");
+      }, 1800);
+    }
+
+    async function openApp(appId) {
+      const app = getApp(appId);
+      if (!app) return;
+
+      exitEditMode();
+
+      els.appTitle.textContent = getDisplayName(app);
+      els.appContent.innerHTML = "";
+      els.appShell.classList.add("open");
+      els.appShell.setAttribute("aria-hidden", "false");
+
+      applyAppTheme(appId);
+
+      const loader = document.createElement("div");
+      loader.style.cssText = "height:100%;display:grid;place-items:center;color:var(--text-secondary);font-size:15px;line-height:1.6;";
+      loader.textContent = "正在打开";
+      els.appContent.appendChild(loader);
+
+      try {
+        let mod = state.modules.get(appId);
+        if (!mod) {
+          mod = await import(`${app.module}?t=${Date.now()}`);
+          state.modules.set(appId, mod);
+        }
+
+        els.appContent.innerHTML = "";
+
+        const api = {
+          appId,
+          app,
+          apps: APPS,
+          root: els.appContent,
+          container: els.appContent,
+          openApp,
+          closeApp,
+          navigateHome: closeApp,
+          refreshDesktop,
+          showToast,
+          getDesktopConfig: () => state.config,
+          setDesktopConfig: (next) => {
+            state.config = {
+              ...state.config,
+              ...(next || {}),
+              widgets: { ...state.config.widgets, ...((next || {}).widgets || {}) },
+              icons: { ...state.config.icons, ...((next || {}).icons || {}) }
+            };
+            saveConfig();
+            applyDesktopConfig();
+          }
+        };
+
+        if (typeof mod.mount === "function") {
+          await mod.mount(els.appContent, api);
+        } else if (typeof mod.render === "function") {
+          const result = await mod.render(api);
+          if (typeof result === "string") els.appContent.innerHTML = result;
+          else if (result instanceof Node) els.appContent.appendChild(result);
+        } else if (typeof mod.init === "function") {
+          await mod.init(els.appContent, api);
+        } else if (typeof mod.default === "function") {
+          const result = await mod.default(els.appContent, api);
+          if (typeof result === "string") els.appContent.innerHTML = result;
+          else if (result instanceof Node) els.appContent.appendChild(result);
+        } else {
+          renderFallbackApp(app);
+        }
+      } catch (error) {
+        els.appContent.innerHTML = "";
+        renderErrorApp(app, error);
+      }
+    }
+
+    function applyAppTheme(appId) {
+      const theme = getAppTheme(appId);
+      els.appContent.style.backgroundImage = theme.backgroundImage ? `url("${theme.backgroundImage}")` : "";
+      els.appContent.style.backgroundSize = "cover";
+      els.appContent.style.backgroundPosition = "center";
+      els.appContent.style.setProperty("--app-accent", theme.accent || "var(--accent)");
+      els.appContent.style.setProperty("--app-radius", theme.radius ? `${theme.radius}px` : "var(--radius-md)");
+      els.appContent.style.setProperty("--app-font-size", theme.fontSize ? `${theme.fontSize}px` : "var(--font-size-base)");
+    }
+
+    function renderFallbackApp(app) {
+      const wrap = document.createElement("div");
+      wrap.style.cssText = "height:100%;box-sizing:border-box;padding:28px 22px;overflow:auto;";
+      wrap.innerHTML = `
+        <section style="padding:22px;border-radius:24px;background:var(--bg-card);box-shadow:var(--shadow-sm);">
+          <div style="font-size:17px;font-weight:560;line-height:1.5;margin-bottom:8px;">${app.name}</div>
+          <div style="font-size:15px;line-height:1.6;color:var(--text-secondary);">这个应用文件已打开，但还没有可执行的渲染入口。</div>
+        </section>
+      `;
+      els.appContent.appendChild(wrap);
+    }
+
+    function renderErrorApp(app, error) {
+      const wrap = document.createElement("div");
+      wrap.style.cssText = "height:100%;box-sizing:border-box;padding:28px 22px;overflow:auto;";
+      const card = document.createElement("section");
+      card.style.cssText = "padding:22px;border-radius:24px;background:var(--bg-card);box-shadow:var(--shadow-sm);";
+      const title = document.createElement("div");
+      title.style.cssText = "font-size:17px;font-weight:560;line-height:1.5;margin-bottom:8px;";
+      title.textContent = `${app.name} 打开失败`;
+      const detail = document.createElement("div");
+      detail.style.cssText = "font-size:15px;line-height:1.6;color:var(--text-secondary);white-space:pre-wrap;";
+      detail.textContent = error?.message || "未知错误";
+      card.append(title, detail);
+      wrap.appendChild(card);
+      els.appContent.appendChild(wrap);
+    }
+
+    function closeApp() {
+      els.appShell.classList.remove("open");
+      els.appShell.setAttribute("aria-hidden", "true");
+      els.appContent.innerHTML = "";
+      els.appContent.removeAttribute("style");
+      refreshDesktop();
+    }
+
+    function refreshDesktop() {
+      state.appThemes = readLocal(APP_THEMES_KEY, {});
+      loadConfig();
+      applyDesktopConfig();
+    }
+
+    function bindEvents() {
+      els.editDone.addEventListener("click", exitEditMode);
+      els.appBack.addEventListener("click", closeApp);
+      els.appHomeAction.addEventListener("click", closeApp);
+      els.weatherEdit.addEventListener("click", openWeatherSheet);
+      els.weatherWidget.addEventListener("dblclick", openWeatherSheet);
+      els.weatherCancel.addEventListener("click", closeWeatherSheet);
+      els.weatherSave.addEventListener("click", saveWeatherCity);
+      els.weatherSheet.addEventListener("click", (event) => {
+        if (event.target === els.weatherSheet) closeWeatherSheet();
+      });
+
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") {
+          if (els.weatherSheet.classList.contains("show")) closeWeatherSheet();
+          else if (state.editMode) exitEditMode();
+          else if (els.appShell.classList.contains("open")) closeApp();
+        }
+      });
+
+      els.workspace.addEventListener("click", (event) => {
+        if (state.editMode && !event.target.closest(".desktop-icon") && !event.target.closest(".widget-card")) {
+          exitEditMode();
+        }
+      });
+
+      window.addEventListener("resize", () => {
+        Object.values(state.config.icons).forEach((icon) => clampIconPosition(icon, icon.page || 0));
+        saveConfig();
+        renderIcons();
+      });
+
+      window.addEventListener("storage", (event) => {
+        if ([DESKTOP_KEY, APP_THEMES_KEY, UNREAD_KEY, "ai_phone_anniversaries", "anniversaries", "aiPhone.anniversaries"].includes(event.key)) {
+          refreshDesktop();
+        }
+      });
+
+      window.addEventListener("desktop-refresh", refreshDesktop);
+      window.addEventListener("app-unread-change", refreshBadges);
+    }
+
+    function startClock() {
+      updateTime();
+      setInterval(updateTime, 1000);
+    }
+
+    function init() {
+      try {
+        initTheme?.();
+      } catch {}
+
+      loadConfig();
+      bindEvents();
+      bindWorkspaceSwipe();
+      applyDesktopConfig();
+      startClock();
+      setInterval(() => updateWeather(), 30 * 60 * 1000);
+      setInterval(updateAnniversaryWidget, 60 * 1000);
+    }
+
+    init();
+
+    window.PhoneDesktop = {
+      openApp,
+      closeApp,
+      refreshDesktop,
+      enterEditMode,
+      exitEditMode,
+      getConfig: () => state.config,
+      setConfig: (next) => {
+        state.config = {
+          ...state.config,
+          ...(next || {}),
+          widgets: { ...state.config.widgets, ...((next || {}).widgets || {}) },
+          icons: { ...state.config.icons, ...((next || {}).icons || {}) }
+        };
+        saveConfig();
+        applyDesktopConfig();
+      }
+    };
+  </script>
+</body>
+</html>
+<!-- 问题：如果 core/theme.js 没有导出 initTheme，会被 try 捕获但主题初始化需由该文件自身兼容。 -->
