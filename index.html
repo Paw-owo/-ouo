@@ -1,0 +1,1750 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="format-detection" content="telephone=no">
+  <meta name="theme-color" content="#FAFAFA">
+  <title>AI手机桌面</title>
+  <link rel="stylesheet" href="./style.css">
+  <style>
+    html,
+    body {
+      overflow: hidden;
+      height: 100vh;
+      width: 100vw;
+      position: fixed;
+      margin: 0;
+      padding: 0;
+      overscroll-behavior: none;
+      touch-action: none;
+      background: var(--bg-primary);
+    }
+
+    button {
+      -webkit-appearance: none;
+      appearance: none;
+      background: transparent;
+      color: inherit;
+      font: inherit;
+      padding: 0;
+      margin: 0;
+      outline: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .app-root {
+      position: fixed;
+      inset: 0;
+      overflow: hidden;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      font-family: var(--font-main);
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    .wallpaper-layer {
+      position: absolute;
+      inset: 0;
+      background-color: var(--bg-primary);
+      background-size: cover;
+      background-position: center;
+      transform: scale(1.02);
+      transition: all 200ms ease;
+    }
+
+    .wallpaper-softener {
+      position: absolute;
+      inset: 0;
+      background: rgba(250, 250, 250, 0.22);
+      backdrop-filter: blur(18px) saturate(1.08);
+      -webkit-backdrop-filter: blur(18px) saturate(1.08);
+      pointer-events: none;
+    }
+
+    .status-bar {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 44px;
+      padding: env(safe-area-inset-top) 22px 0;
+      box-sizing: border-box;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      z-index: 20;
+      color: var(--text-primary);
+      font-size: 13px;
+      line-height: 1;
+      font-weight: 600;
+    }
+
+    .status-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .signal-bars {
+      width: 22px;
+      height: 14px;
+      display: flex;
+      align-items: flex-end;
+      gap: 2px;
+    }
+
+    .signal-bars span {
+      width: 3px;
+      border-radius: 6px;
+      background: currentColor;
+      opacity: 0.9;
+    }
+
+    .signal-bars span:nth-child(1) {
+      height: 5px;
+    }
+
+    .signal-bars span:nth-child(2) {
+      height: 8px;
+    }
+
+    .signal-bars span:nth-child(3) {
+      height: 11px;
+    }
+
+    .signal-bars span:nth-child(4) {
+      height: 14px;
+    }
+
+    .battery-mark {
+      width: 25px;
+      height: 12px;
+      position: relative;
+      border-radius: 5px;
+      background: rgba(26, 26, 26, 0.16);
+      padding: 2px;
+      box-sizing: border-box;
+    }
+
+    .battery-mark::after {
+      content: "";
+      position: absolute;
+      right: -3px;
+      top: 4px;
+      width: 2px;
+      height: 4px;
+      border-radius: 4px;
+      background: currentColor;
+      opacity: 0.7;
+    }
+
+    .battery-fill {
+      width: 72%;
+      height: 100%;
+      border-radius: 4px;
+      background: currentColor;
+      opacity: 0.86;
+    }
+
+    .desktop {
+      position: absolute;
+      top: 44px;
+      left: 0;
+      right: 0;
+      bottom: 94px;
+      overflow: hidden;
+      z-index: 5;
+    }
+
+    .desktop-main {
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+    }
+
+    .desktop-pages {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      width: 200vw;
+      height: 100%;
+      transition: all 200ms ease;
+      will-change: transform;
+    }
+
+    .desktop-page {
+      width: 100vw;
+      height: 100%;
+      flex: 0 0 100vw;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .free-layer {
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+    }
+
+    .app-icon {
+      position: absolute;
+      width: 78px;
+      height: 96px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 7px;
+      background: transparent;
+      box-shadow: none;
+      z-index: 4;
+      transform: translate3d(0, 0, 0);
+      transition: transform 200ms ease, opacity 200ms ease, filter 200ms ease;
+      touch-action: none;
+    }
+
+    .app-icon:active {
+      transform: scale(0.96);
+    }
+
+    .app-icon.moving {
+      z-index: 30;
+      opacity: 0.92;
+      transform: scale(1.06);
+      transition: none;
+      filter: drop-shadow(0 12px 22px rgba(0, 0, 0, 0.12));
+    }
+
+    .desktop-editing .app-icon:not(.moving),
+    .desktop-editing .free-widget:not(.moving) {
+      animation: soft-float 1400ms ease-in-out infinite;
+    }
+
+    @keyframes soft-float {
+      0%,
+      100% {
+        transform: translateY(0) rotate(-0.25deg);
+      }
+
+      50% {
+        transform: translateY(-1px) rotate(0.25deg);
+      }
+    }
+
+    .app-icon-art {
+      width: 62px;
+      height: 62px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      background: transparent;
+      box-shadow: none;
+      padding: 0;
+      color: var(--text-primary);
+      pointer-events: none;
+    }
+
+    .app-icon-art img {
+      width: 100%;
+      height: 100%;
+      display: block;
+      object-fit: cover;
+      border-radius: 18px;
+    }
+
+    .app-icon-art svg {
+      width: 48px;
+      height: 48px;
+      stroke-width: 1.5;
+    }
+
+    .app-icon-name {
+      width: 82px;
+      min-height: 20px;
+      text-align: center;
+      font-size: 12px;
+      line-height: 1.25;
+      color: var(--text-primary);
+      text-shadow: 0 1px 12px rgba(255, 255, 255, 0.72);
+      white-space: normal;
+      word-break: keep-all;
+      overflow: hidden;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      pointer-events: none;
+    }
+
+    .app-badge {
+      position: absolute;
+      top: 0;
+      right: 7px;
+      min-width: 18px;
+      height: 18px;
+      padding: 0 5px;
+      border-radius: 999px;
+      box-sizing: border-box;
+      background: #D95C5C;
+      color: #FFFFFF;
+      font-size: 11px;
+      line-height: 18px;
+      text-align: center;
+      box-shadow: 0 4px 12px rgba(217, 92, 92, 0.26);
+      pointer-events: none;
+    }
+
+    .free-widget {
+      position: absolute;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      justify-content: space-between;
+      padding: 18px;
+      box-sizing: border-box;
+      border-radius: 26px;
+      background: rgba(255, 255, 255, 0.52);
+      backdrop-filter: blur(26px) saturate(1.14);
+      -webkit-backdrop-filter: blur(26px) saturate(1.14);
+      box-shadow: 0 10px 32px rgba(0, 0, 0, 0.06);
+      color: var(--text-primary);
+      overflow: hidden;
+      z-index: 3;
+      transition: all 200ms ease;
+      touch-action: none;
+      text-align: left;
+    }
+
+    .free-widget:active {
+      transform: scale(0.98);
+    }
+
+    .free-widget.moving {
+      z-index: 29;
+      transform: scale(1.04);
+      transition: none;
+      box-shadow: 0 18px 42px rgba(0, 0, 0, 0.1);
+    }
+
+    .widget-rect {
+      width: 176px;
+      height: 124px;
+    }
+
+    .widget-square {
+      width: 132px;
+      height: 132px;
+    }
+
+    .widget-wide-square {
+      width: 154px;
+      height: 132px;
+    }
+
+    .widget-label {
+      font-size: 13px;
+      line-height: 1.4;
+      color: var(--text-secondary);
+      font-weight: 500;
+    }
+
+    .widget-value {
+      margin-top: 8px;
+      font-size: 31px;
+      line-height: 1.08;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      color: var(--text-primary);
+    }
+
+    .widget-sub {
+      margin-top: auto;
+      font-size: 13px;
+      line-height: 1.45;
+      color: var(--text-secondary);
+      max-width: 100%;
+      overflow: hidden;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+    }
+
+    .weather-widget .widget-value {
+      font-size: 34px;
+    }
+
+    .desktop-indicators {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 5px;
+      height: 22px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      z-index: 12;
+      pointer-events: auto;
+    }
+
+    .page-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 999px;
+      background: rgba(26, 26, 26, 0.22);
+      transition: all 200ms ease;
+    }
+
+    .page-dot.active {
+      width: 18px;
+      background: rgba(26, 26, 26, 0.58);
+    }
+
+    .dock {
+      position: absolute;
+      left: 18px;
+      right: 18px;
+      bottom: calc(10px + env(safe-area-inset-bottom));
+      height: 78px;
+      z-index: 18;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      align-items: center;
+      justify-items: center;
+      border-radius: 30px;
+      background: rgba(255, 255, 255, 0.48);
+      backdrop-filter: blur(28px) saturate(1.16);
+      -webkit-backdrop-filter: blur(28px) saturate(1.16);
+      box-shadow: 0 14px 38px rgba(0, 0, 0, 0.08);
+    }
+
+    .dock .app-icon {
+      position: relative;
+      left: auto;
+      top: auto;
+      width: 74px;
+      height: 72px;
+      justify-content: center;
+      gap: 4px;
+    }
+
+    .dock .app-icon-art {
+      width: 50px;
+      height: 50px;
+    }
+
+    .dock .app-icon-art svg {
+      width: 40px;
+      height: 40px;
+    }
+
+    .dock .app-icon-name {
+      font-size: 11px;
+      line-height: 1.1;
+      width: 72px;
+      -webkit-line-clamp: 1;
+    }
+
+    .edit-mode-card {
+      position: absolute;
+      left: 20px;
+      right: 20px;
+      top: calc(52px + env(safe-area-inset-top));
+      min-height: 54px;
+      padding: 10px 12px 10px 18px;
+      box-sizing: border-box;
+      z-index: 40;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      border-radius: 22px;
+      background: rgba(255, 255, 255, 0.62);
+      backdrop-filter: blur(28px) saturate(1.12);
+      -webkit-backdrop-filter: blur(28px) saturate(1.12);
+      box-shadow: 0 12px 34px rgba(0, 0, 0, 0.08);
+    }
+
+    .edit-mode-title {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 0;
+    }
+
+    .edit-mode-title strong {
+      font-size: 15px;
+      line-height: 1.25;
+      font-weight: 600;
+    }
+
+    .edit-mode-title span {
+      font-size: 12px;
+      line-height: 1.4;
+      color: var(--text-secondary);
+    }
+
+    .edit-done-button {
+      flex: 0 0 auto;
+      min-width: 62px;
+      height: 36px;
+      padding: 0 16px;
+      border-radius: 16px;
+      background: var(--accent);
+      color: #FFFFFF;
+      font-size: 14px;
+      font-weight: 500;
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.06);
+    }
+
+    .edit-done-button:active {
+      transform: scale(0.96);
+    }
+
+    .app-view {
+      position: fixed;
+      inset: 0;
+      z-index: 80;
+      background-color: var(--bg-primary);
+      background-size: cover;
+      background-position: center;
+      transform: translateY(22px);
+      opacity: 0;
+      transition: all 220ms ease;
+      overflow: hidden;
+      font-size: var(--font-size-base);
+      line-height: 1.6;
+    }
+
+    .app-view.active {
+      transform: translateY(0);
+      opacity: 1;
+    }
+
+    .app-view.closing {
+      transform: translateY(20px);
+      opacity: 0;
+    }
+
+    .app-fallback {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      padding: 20px;
+      box-sizing: border-box;
+      background: var(--bg-primary);
+    }
+
+    .fallback-close {
+      align-self: flex-end;
+      min-width: 64px;
+      height: 38px;
+      padding: 0 16px;
+      border-radius: 16px;
+      background: var(--accent);
+      color: #FFFFFF;
+      font-size: 14px;
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.06);
+    }
+
+    @media (max-width: 360px) {
+      .widget-rect {
+        width: 160px;
+      }
+
+      .widget-square {
+        width: 122px;
+        height: 122px;
+      }
+
+      .widget-wide-square {
+        width: 142px;
+        height: 122px;
+      }
+
+      .free-widget {
+        padding: 16px;
+      }
+
+      .widget-value {
+        font-size: 28px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="app" class="app-root"></div>
+
+  <script type="module">
+    import './core/theme.js';
+
+    import {
+      getData,
+      getApps,
+      updateData,
+      onStorageChange,
+      setLastOpenedApp
+    } from './core/storage.js';
+
+    import {
+      h,
+      qs,
+      icon,
+      createEmptyState,
+      createSwipe,
+      formatTime,
+      nearestAnniversary,
+      mountApp,
+      toast
+    } from './core/ui.js';
+
+    const APPS = [
+      { id: 'chat', name: '消息', module: '/apps/chat.js' },
+      { id: 'moments', name: '朋友圈', module: '/apps/moments.js' },
+      { id: 'characters', name: '角色管理', module: '/apps/characters.js' },
+      { id: 'worldbook', name: '世界书', module: '/apps/worldbook.js' },
+      { id: 'games', name: '小游戏', module: '/apps/games.js' },
+      { id: 'shop', name: '商店', module: '/apps/shop.js' },
+      { id: 'wallet', name: '钱包', module: '/apps/wallet.js' },
+      { id: 'memo', name: '备忘录', module: '/apps/memo.js' },
+      { id: 'anniversary', name: '纪念日', module: '/apps/anniversary.js' },
+      { id: 'settings', name: '设置', module: '/apps/settings.js' }
+    ];
+
+    const WIDGETS = [
+      { id: 'time', type: 'rect', page: 0, x: 20, y: 18 },
+      { id: 'weather', type: 'square', page: 0, x: 20, y: 156 },
+      { id: 'anniversary', type: 'wideSquare', page: 0, x: 164, y: 156 }
+    ];
+
+    const WEATHER_CODES = {
+      0: '晴朗',
+      1: '大致晴朗',
+      2: '少云',
+      3: '多云',
+      45: '有雾',
+      48: '雾凇',
+      51: '小毛毛雨',
+      53: '毛毛雨',
+      55: '较强毛毛雨',
+      56: '冻毛毛雨',
+      57: '较强冻毛毛雨',
+      61: '小雨',
+      63: '中雨',
+      65: '大雨',
+      66: '冻雨',
+      67: '较强冻雨',
+      71: '小雪',
+      73: '中雪',
+      75: '大雪',
+      77: '雪粒',
+      80: '阵雨',
+      81: '较强阵雨',
+      82: '强阵雨',
+      85: '阵雪',
+      86: '强阵雪',
+      95: '雷雨',
+      96: '雷雨伴冰雹',
+      99: '强雷雨伴冰雹'
+    };
+
+    const WENZHOU_WEATHER = {
+      city: '温州',
+      latitude: 27.9949,
+      longitude: 120.6994
+    };
+
+    const LONG_PRESS_DELAY = 520;
+    const EDGE_SWITCH_SIZE = 46;
+
+    const state = {
+      currentPage: 0,
+      appView: null,
+      appCleanup: null,
+      timeTimer: null,
+      weatherTimer: null,
+      weather: {
+        city: '温州',
+        temperature: '',
+        text: '天气加载中'
+      },
+      editMode: false,
+      longPressTimer: null,
+      suppressClick: false,
+      drag: null
+    };
+
+    const root = document.getElementById('app');
+
+    function init() {
+      renderShell();
+      bindGlobalEvents();
+      updateClock();
+      loadWeather();
+      state.timeTimer = window.setInterval(updateClock, 1000);
+      state.weatherTimer = window.setInterval(loadWeather, 1000 * 60 * 30);
+    }
+
+    function renderShell() {
+      const data = getData();
+      const wallpaper = getWallpaper(data);
+
+      root.replaceChildren(
+        h('div', {
+          className: 'wallpaper-layer',
+          style: {
+            backgroundImage: wallpaper ? `url("${wallpaper}")` : ''
+          }
+        }),
+        h('div', { className: 'wallpaper-softener' }),
+        createStatusBar(),
+        createDesktop(data),
+        createDock(data)
+      );
+
+      root.classList.toggle('desktop-editing', state.editMode);
+      syncEditOverlay();
+      updatePagePosition();
+      updateClockText();
+      updateWidgetOnly();
+    }
+
+    function getWallpaper(data) {
+      return data?.settings?.personalization?.wallpaper || data?.settings?.wallpaper || '';
+    }
+
+    function createStatusBar() {
+      return h('div', { className: 'status-bar' }, [
+        h('div', { id: 'statusTime', className: 'status-time', text: '--:--' }),
+        h('div', { className: 'status-right' }, [
+          h('div', { className: 'signal-bars' }, [
+            h('span'),
+            h('span'),
+            h('span'),
+            h('span')
+          ]),
+          h('div', { className: 'battery-mark' }, h('div', { className: 'battery-fill' }))
+        ])
+      ]);
+    }
+
+    function createDesktop(data) {
+      const desktop = h('main', { className: 'desktop' });
+      const main = h('div', { className: 'desktop-main' });
+      const pages = h('div', { className: 'desktop-pages', id: 'desktopPages' });
+
+      for (let pageIndex = 0; pageIndex < 2; pageIndex += 1) {
+        pages.appendChild(createDesktopPage(pageIndex, data));
+      }
+
+      main.append(
+        pages,
+        createPageIndicators()
+      );
+
+      desktop.appendChild(main);
+
+      createSwipe(desktop, {
+        onLeft: () => {
+          if (!state.drag) {
+            setDesktopPage(1);
+          }
+        },
+        onRight: () => {
+          if (!state.drag) {
+            setDesktopPage(0);
+          }
+        }
+      });
+
+      return desktop;
+    }
+
+    function createDesktopPage(pageIndex, data) {
+      const page = h('section', {
+        className: 'desktop-page',
+        dataset: { page: pageIndex }
+      });
+
+      const layer = h('div', {
+        className: 'free-layer',
+        dataset: { layer: pageIndex }
+      });
+
+      getVisibleWidgets(data, pageIndex).forEach((widget) => {
+        layer.appendChild(createWidget(widget, data));
+      });
+
+      getDesktopApps(data)
+        .filter((app) => app.desktopPosition.page === pageIndex)
+        .forEach((app) => {
+          layer.appendChild(createAppIcon(app));
+        });
+
+      page.appendChild(layer);
+      return page;
+    }
+
+    function getVisibleWidgets(data, pageIndex) {
+      const personalization = data?.settings?.personalization || {};
+      const switches = personalization.widgets || {};
+      const positions = personalization.widgetPositions || {};
+
+      return WIDGETS
+        .filter((widget) => switches[widget.id] !== false)
+        .map((widget) => {
+          const saved = positions[widget.id] || {};
+          const savedPage = Number.isFinite(Number(saved.page)) ? Number(saved.page) : widget.page;
+          const position = {
+            page: clampPage(savedPage),
+            x: Number.isFinite(Number(saved.x)) ? Number(saved.x) : widget.x,
+            y: Number.isFinite(Number(saved.y)) ? Number(saved.y) : widget.y
+          };
+
+          return {
+            ...widget,
+            position: clampPosition(position, getWidgetSize(widget.type))
+          };
+        })
+        .filter((widget) => widget.position.page === pageIndex);
+    }
+
+    function getWidgetSize(type) {
+      if (type === 'rect') {
+        return { width: 176, height: 124 };
+      }
+
+      if (type === 'wideSquare') {
+        return { width: 154, height: 132 };
+      }
+
+      return { width: 132, height: 132 };
+    }
+
+    function createWidget(widget, data) {
+      const classMap = {
+        rect: 'widget-rect',
+        square: 'widget-square',
+        wideSquare: 'widget-wide-square'
+      };
+
+      const button = h('button', {
+        type: 'button',
+        className: `free-widget ${classMap[widget.type] || 'widget-square'} ${widget.id}-widget`,
+        dataset: {
+          movableKind: 'widget',
+          widgetId: widget.id
+        },
+        style: {
+          left: `${widget.position.x}px`,
+          top: `${widget.position.y}px`
+        },
+        onPointerDown: (event) => handleMovablePointerDown(event, 'widget', widget.id),
+        onClick: (event) => handleWidgetClick(event, widget.id)
+      });
+
+      if (widget.id === 'time') {
+        button.append(
+          h('div', { className: 'widget-label', text: '现在' }),
+          h('div', { id: 'desktopBigTime', className: 'widget-value', text: '--:--' }),
+          h('div', { id: 'desktopDateText', className: 'widget-sub', text: '' })
+        );
+      }
+
+      if (widget.id === 'weather') {
+        button.append(
+          h('div', { className: 'widget-label', text: '天气' }),
+          h('div', { id: 'weatherTemp', className: 'widget-value', text: state.weather.temperature || '--' }),
+          h('div', { id: 'weatherText', className: 'widget-sub', text: `${state.weather.city} · ${state.weather.text}` })
+        );
+      }
+
+      if (widget.id === 'anniversary') {
+        const item = nearestAnniversary(data.anniversaries || []);
+
+        if (item) {
+          button.append(
+            h('div', { className: 'widget-label', text: item.title }),
+            h('div', { className: 'widget-value', text: item.days === 0 ? '今天' : `${item.days}天` }),
+            h('div', { className: 'widget-sub', text: item.days === 0 ? '就是今天' : '距离最近一次' })
+          );
+        } else {
+          button.append(
+            h('div', { className: 'widget-label', text: '纪念日' }),
+            h('div', { className: 'widget-value', text: '--' }),
+            h('div', { className: 'widget-sub', text: '还没有添加纪念日' })
+          );
+        }
+      }
+
+      return button;
+    }
+
+    function createAppIcon(app, inDock = false) {
+      const name = app.customName || app.name || '应用';
+      const badge = getAppBadge(app.id, getData());
+      const appButton = h('button', {
+        type: 'button',
+        className: inDock ? 'app-icon dock-app-icon' : 'app-icon',
+        dataset: {
+          appId: app.id,
+          module: app.module || '',
+          movableKind: inDock ? '' : 'app'
+        },
+        style: inDock ? {} : {
+          left: `${app.desktopPosition.x}px`,
+          top: `${app.desktopPosition.y}px`
+        },
+        onPointerDown: inDock ? undefined : (event) => handleMovablePointerDown(event, 'app', app.id),
+        onClick: (event) => {
+          if (!inDock && (state.editMode || state.suppressClick)) {
+            event.preventDefault();
+            state.suppressClick = false;
+            return;
+          }
+
+          openApp(app.id);
+        }
+      });
+
+      const art = h('div', { className: 'app-icon-art' });
+
+      if (app.icon) {
+        art.appendChild(h('img', {
+          src: app.icon,
+          alt: name,
+          draggable: false
+        }));
+      } else {
+        art.appendChild(icon(app.id));
+      }
+
+      appButton.append(
+        art,
+        h('div', { className: 'app-icon-name', text: name })
+      );
+
+      if (badge > 0) {
+        appButton.appendChild(h('div', {
+          className: 'app-badge',
+          text: badge > 99 ? '99+' : String(badge)
+        }));
+      }
+
+      return appButton;
+    }
+
+    function getDesktopApps(data) {
+      const storedApps = getApps();
+      const baseApps = storedApps && storedApps.length ? storedApps : APPS;
+      const pageCounters = [0, 0];
+
+      return baseApps.map((rawApp, index) => {
+        const app = {
+          ...APPS.find((item) => item.id === rawApp.id),
+          ...rawApp
+        };
+
+        const saved = app.desktopPosition || {};
+        const hasSavedPosition = Number.isFinite(Number(saved.x)) && Number.isFinite(Number(saved.y));
+        const rawPage = Number.isFinite(Number(saved.page))
+          ? Number(saved.page)
+          : Number.isFinite(Number(app.page))
+            ? Number(app.page)
+            : index < 8
+              ? 0
+              : 1;
+        const page = clampPage(rawPage);
+        const order = Number.isFinite(Number(app.order)) ? Number(app.order) : pageCounters[page];
+        const fallback = defaultAppPosition(page, pageCounters[page], data);
+
+        pageCounters[page] += 1;
+
+        return {
+          ...app,
+          desktopPosition: clampPosition({
+            page,
+            x: hasSavedPosition ? Number(saved.x) : fallback.x,
+            y: hasSavedPosition ? Number(saved.y) : fallback.y
+          }, { width: 78, height: 96 }),
+          order
+        };
+      });
+    }
+
+    function defaultAppPosition(page, index, data) {
+      const width = Math.max(window.innerWidth, 320);
+      const slot = width / 4;
+      const col = index % 4;
+      const row = Math.floor(index / 4);
+      const widgetVisible = page === 0 && hasAnyWidget(data);
+      const yBase = widgetVisible ? 306 : 28;
+
+      return {
+        x: Math.round(col * slot + (slot - 78) / 2),
+        y: yBase + row * 104
+      };
+    }
+
+    function hasAnyWidget(data) {
+      const switches = data?.settings?.personalization?.widgets || {};
+      return WIDGETS.some((widget) => switches[widget.id] !== false);
+    }
+
+    function createPageIndicators() {
+      return h('div', { className: 'desktop-indicators' }, [
+        h('button', {
+          type: 'button',
+          className: 'page-dot active',
+          dataset: { dot: 0 },
+          ariaLabel: '第一页',
+          onClick: () => setDesktopPage(0)
+        }),
+        h('button', {
+          type: 'button',
+          className: 'page-dot',
+          dataset: { dot: 1 },
+          ariaLabel: '第二页',
+          onClick: () => setDesktopPage(1)
+        })
+      ]);
+    }
+
+    function createDock(data) {
+      const apps = getDesktopApps(data);
+      const dockApps = apps
+        .filter((app) => app.dock)
+        .slice(0, 4);
+
+      while (dockApps.length < 4) {
+        const candidate = apps.find((app) => !dockApps.some((item) => item.id === app.id));
+
+        if (!candidate) {
+          break;
+        }
+
+        dockApps.push(candidate);
+      }
+
+      return h('nav', { className: 'dock' }, dockApps.map((app) => createAppIcon(app, true)));
+    }
+
+    function handleMovablePointerDown(event, kind, id) {
+      if (event.pointerType === 'mouse' && event.button !== 0) {
+        return;
+      }
+
+      const element = event.currentTarget;
+      const startX = event.clientX;
+      const startY = event.clientY;
+      clearLongPressTimer();
+
+      if (state.editMode) {
+        event.preventDefault();
+        startFreeDrag(kind, id, element, event);
+        return;
+      }
+
+      const cancelIfMoved = (moveEvent) => {
+        if (Math.abs(moveEvent.clientX - startX) > 8 || Math.abs(moveEvent.clientY - startY) > 8) {
+          clearLongPressTimer();
+          window.removeEventListener('pointermove', cancelIfMoved);
+        }
+      };
+
+      const cancelPress = () => {
+        clearLongPressTimer();
+        window.removeEventListener('pointermove', cancelIfMoved);
+        window.removeEventListener('pointerup', cancelPress);
+        window.removeEventListener('pointercancel', cancelPress);
+      };
+
+      window.addEventListener('pointermove', cancelIfMoved, { passive: true });
+      window.addEventListener('pointerup', cancelPress, { once: true });
+      window.addEventListener('pointercancel', cancelPress, { once: true });
+
+      state.longPressTimer = window.setTimeout(() => {
+        window.removeEventListener('pointermove', cancelIfMoved);
+        window.removeEventListener('pointerup', cancelPress);
+        window.removeEventListener('pointercancel', cancelPress);
+        enterEditMode();
+        startFreeDrag(kind, id, element, event);
+      }, LONG_PRESS_DELAY);
+    }
+
+    function startFreeDrag(kind, id, element, event) {
+      clearLongPressTimer();
+
+      const rect = element.getBoundingClientRect();
+      const page = findElementPage(element);
+      state.suppressClick = true;
+      state.drag = {
+        kind,
+        id,
+        element,
+        page,
+        offsetX: event.clientX - rect.left,
+        offsetY: event.clientY - rect.top,
+        lastClientX: event.clientX,
+        lastClientY: event.clientY
+      };
+
+      element.classList.add('moving');
+      setDesktopPage(page);
+      updateDragByPointer(event);
+    }
+
+    function updateDragByPointer(event) {
+      if (!state.drag) {
+        return;
+      }
+
+      event.preventDefault();
+
+      state.drag.lastClientX = event.clientX;
+      state.drag.lastClientY = event.clientY;
+
+      if (event.clientX > window.innerWidth - EDGE_SWITCH_SIZE && state.currentPage < 1) {
+        moveDraggingItemToPage(1);
+      }
+
+      if (event.clientX < EDGE_SWITCH_SIZE && state.currentPage > 0) {
+        moveDraggingItemToPage(0);
+      }
+
+      const layer = getFreeLayer(state.currentPage);
+      if (!layer) {
+        return;
+      }
+
+      const rect = layer.getBoundingClientRect();
+      const size = {
+        width: state.drag.element.offsetWidth || 78,
+        height: state.drag.element.offsetHeight || 96
+      };
+
+      const next = clampPosition({
+        page: state.currentPage,
+        x: event.clientX - rect.left - state.drag.offsetX,
+        y: event.clientY - rect.top - state.drag.offsetY
+      }, size, rect);
+
+      state.drag.page = next.page;
+      state.drag.element.style.left = `${next.x}px`;
+      state.drag.element.style.top = `${next.y}px`;
+    }
+
+    function endFreeDrag() {
+      if (!state.drag) {
+        return;
+      }
+
+      const drag = state.drag;
+      const left = parseFloat(drag.element.style.left || '0');
+      const top = parseFloat(drag.element.style.top || '0');
+      const size = {
+        width: drag.element.offsetWidth || 78,
+        height: drag.element.offsetHeight || 96
+      };
+      const savedPosition = clampPosition({
+        page: state.currentPage,
+        x: left,
+        y: top
+      }, size);
+
+      drag.element.classList.remove('moving');
+      state.drag = null;
+
+      if (drag.kind === 'app') {
+        persistAppPosition(drag.id, savedPosition);
+      }
+
+      if (drag.kind === 'widget') {
+        persistWidgetPosition(drag.id, savedPosition);
+      }
+
+      window.setTimeout(() => {
+        state.suppressClick = false;
+      }, 160);
+    }
+
+    function moveDraggingItemToPage(pageIndex) {
+      if (!state.drag) {
+        return;
+      }
+
+      const nextPage = clampPage(pageIndex);
+
+      if (state.drag.page === nextPage) {
+        return;
+      }
+
+      const layer = getFreeLayer(nextPage);
+
+      if (!layer) {
+        return;
+      }
+
+      state.drag.page = nextPage;
+      setDesktopPage(nextPage);
+      layer.appendChild(state.drag.element);
+    }
+
+    function persistAppPosition(appId, position) {
+      updateData((data) => {
+        const apps = Array.isArray(data.apps) ? data.apps : [];
+
+        data.apps = apps.map((app) => {
+          if (app.id !== appId) {
+            return app;
+          }
+
+          return {
+            ...app,
+            page: position.page,
+            desktopPosition: {
+              page: position.page,
+              x: Math.round(position.x),
+              y: Math.round(position.y)
+            }
+          };
+        });
+
+        return data;
+      });
+    }
+
+    function persistWidgetPosition(widgetId, position) {
+      updateData((data) => {
+        if (!data.settings) {
+          data.settings = {};
+        }
+
+        if (!data.settings.personalization) {
+          data.settings.personalization = {};
+        }
+
+        if (!data.settings.personalization.widgetPositions) {
+          data.settings.personalization.widgetPositions = {};
+        }
+
+        data.settings.personalization.widgetPositions[widgetId] = {
+          page: position.page,
+          x: Math.round(position.x),
+          y: Math.round(position.y)
+        };
+
+        return data;
+      });
+    }
+
+    function findElementPage(element) {
+      const page = element.closest('.desktop-page');
+      return clampPage(Number(page?.dataset?.page || state.currentPage || 0));
+    }
+
+    function getFreeLayer(pageIndex) {
+      return document.querySelector(`.free-layer[data-layer="${clampPage(pageIndex)}"]`);
+    }
+
+    function clampPage(pageIndex) {
+      return Math.max(0, Math.min(1, Number(pageIndex) || 0));
+    }
+
+    function clampPosition(position, size = { width: 78, height: 96 }, rect = null) {
+      const width = rect?.width || window.innerWidth;
+      const height = rect?.height || Math.max(window.innerHeight - 138, 360);
+      const maxX = Math.max(12, width - size.width - 12);
+      const maxY = Math.max(12, height - size.height - 12);
+
+      return {
+        page: clampPage(position.page),
+        x: Math.max(12, Math.min(maxX, Number(position.x) || 12)),
+        y: Math.max(12, Math.min(maxY, Number(position.y) || 12))
+      };
+    }
+
+    function clearLongPressTimer() {
+      if (state.longPressTimer) {
+        window.clearTimeout(state.longPressTimer);
+        state.longPressTimer = null;
+      }
+    }
+
+    function enterEditMode() {
+      if (state.editMode) {
+        return;
+      }
+
+      state.editMode = true;
+      root.classList.add('desktop-editing');
+      syncEditOverlay();
+      toast('可以自由移动图标和小组件');
+    }
+
+    function exitEditMode() {
+      state.editMode = false;
+      root.classList.remove('desktop-editing');
+      syncEditOverlay();
+    }
+
+    function syncEditOverlay() {
+      const existing = qs('#editModeCard');
+
+      if (state.editMode && !existing) {
+        root.appendChild(createEditOverlay());
+      }
+
+      if (!state.editMode && existing) {
+        existing.remove();
+      }
+    }
+
+    function createEditOverlay() {
+      return h('div', { id: 'editModeCard', className: 'edit-mode-card' }, [
+        h('div', { className: 'edit-mode-title' }, [
+          h('strong', { text: '桌面编辑' }),
+          h('span', { text: '拖到任意位置，靠近左右边缘可换页' })
+        ]),
+        h('button', {
+          type: 'button',
+          className: 'edit-done-button',
+          text: '完成',
+          onClick: exitEditMode
+        })
+      ]);
+    }
+
+    function setDesktopPage(pageIndex) {
+      state.currentPage = clampPage(pageIndex);
+      updatePagePosition();
+    }
+
+    function updatePagePosition() {
+      const pages = qs('#desktopPages');
+
+      if (pages) {
+        pages.style.transform = `translateX(${-state.currentPage * 100}vw)`;
+      }
+
+      document.querySelectorAll('.page-dot').forEach((dot) => {
+        dot.classList.toggle('active', Number(dot.dataset.dot) === state.currentPage);
+      });
+    }
+
+    async function handleWidgetClick(event, widgetId) {
+      if (state.editMode || state.suppressClick) {
+        event.preventDefault();
+        state.suppressClick = false;
+        return;
+      }
+
+      if (widgetId === 'weather') {
+        await changeWeatherCity();
+        return;
+      }
+
+      if (widgetId === 'anniversary') {
+        openApp('anniversary');
+        return;
+      }
+
+      if (widgetId === 'time') {
+        openApp('settings');
+      }
+    }
+
+    async function changeWeatherCity() {
+      const data = getData();
+      const current = data?.settings?.personalization?.weather?.city || state.weather.city || '温州';
+      const city = window.prompt('输入天气地区', current);
+
+      if (!city || !city.trim()) {
+        return;
+      }
+
+      updateData((nextData) => {
+        if (!nextData.settings) {
+          nextData.settings = {};
+        }
+
+        if (!nextData.settings.personalization) {
+          nextData.settings.personalization = {};
+        }
+
+        nextData.settings.personalization.weather = {
+          ...(nextData.settings.personalization.weather || {}),
+          city: city.trim(),
+          latitude: '',
+          longitude: ''
+        };
+
+        return nextData;
+      });
+
+      await loadWeather(true);
+      toast('天气地区已更新');
+    }
+
+    async function openApp(appId) {
+      const data = getData();
+      const app = (data.apps || []).find((item) => item.id === appId) || APPS.find((item) => item.id === appId);
+
+      if (!app) {
+        toast('找不到应用');
+        return;
+      }
+
+      clearAppBadge(appId);
+      await closeOpenedApp(false);
+
+      const view = h('section', {
+        className: 'app-view',
+        dataset: { currentApp: appId }
+      });
+
+      applyAppCustomization(view, appId);
+
+      root.appendChild(view);
+      state.appView = view;
+      setLastOpenedApp(appId);
+
+      requestAnimationFrame(() => {
+        view.classList.add('active');
+      });
+
+      try {
+        const module = await import(resolveModulePath(app.module));
+        const cleanup = mountApp(module, view, {
+          app,
+          data: getData(),
+          close: () => closeOpenedApp(true),
+          refreshDesktop: renderShell,
+          openApp,
+          enterDesktopEditMode: enterEditMode,
+          setDesktopPage,
+          applyAppCustomization
+        });
+
+        state.appCleanup = typeof cleanup === 'function' ? cleanup : null;
+      } catch (error) {
+        view.replaceChildren(
+          h('div', { className: 'app-fallback' }, [
+            h('button', {
+              type: 'button',
+              className: 'fallback-close',
+              text: '关闭',
+              onClick: () => closeOpenedApp(true)
+            }),
+            createEmptyState({
+              iconName: app.id,
+              title: `${app.customName || app.name}暂不可用`,
+              description: '这个应用文件还没有准备好'
+            })
+          ])
+        );
+      }
+    }
+
+    function applyAppCustomization(view, appId) {
+      const data = getData();
+      const personalization = data?.settings?.personalization || {};
+      const appThemes = personalization.appThemes || personalization.appCustomizations || data.appThemes || data.appCustomizations || {};
+      const theme = appThemes[appId] || {};
+
+      if (theme.backgroundImage || theme.background) {
+        view.style.backgroundImage = `url("${theme.backgroundImage || theme.background}")`;
+      }
+
+      if (theme.themeColor || theme.accent) {
+        view.style.setProperty('--accent', theme.themeColor || theme.accent);
+      }
+
+      if (theme.radius || theme.cardRadius || theme.bubbleRadius) {
+        const radius = `${parseInt(theme.radius || theme.cardRadius || theme.bubbleRadius, 10) || 18}px`;
+        view.style.setProperty('--radius-md', radius);
+        view.style.setProperty('--bubble-radius', radius);
+      }
+
+      if (theme.fontSize) {
+        const fontSize = `${parseInt(theme.fontSize, 10) || 15}px`;
+        view.style.setProperty('--font-size-base', fontSize);
+      }
+    }
+
+    function resolveModulePath(modulePath = '') {
+      if (!modulePath) {
+        return '';
+      }
+
+      if (modulePath.startsWith('/')) {
+        return `.${modulePath}`;
+      }
+
+      return modulePath;
+    }
+
+    async function closeOpenedApp(animated = true) {
+      if (!state.appView) {
+        return;
+      }
+
+      if (typeof state.appCleanup === 'function') {
+        try {
+          state.appCleanup();
+        } catch {}
+      }
+
+      const closingView = state.appView;
+
+      state.appView = null;
+      state.appCleanup = null;
+
+      if (!animated) {
+        closingView.remove();
+        return;
+      }
+
+      closingView.classList.add('closing');
+      closingView.classList.remove('active');
+
+      window.setTimeout(() => {
+        closingView.remove();
+      }, 240);
+    }
+
+    function getAppBadge(appId, data) {
+      const direct = Number(data?.badges?.[appId] || data?.notifications?.[appId] || 0);
+
+      if (direct > 0) {
+        return direct;
+      }
+
+      if (appId === 'moments') {
+        return Number(data?.notifications?.momentsUnread || data?.momentsUnread || 0);
+      }
+
+      if (appId === 'chat') {
+        const characters = Array.isArray(data?.characters) ? data.characters : [];
+        const chatUnread = Number(data?.notifications?.chatUnread || data?.chatUnread || 0);
+        const characterUnread = characters.reduce((sum, character) => sum + Number(character.unread || 0), 0);
+        return chatUnread + characterUnread;
+      }
+
+      return 0;
+    }
+
+    function clearAppBadge(appId) {
+      if (appId !== 'moments' && appId !== 'chat') {
+        return;
+      }
+
+      updateData((data) => {
+        if (!data.notifications) {
+          data.notifications = {};
+        }
+
+        if (data.notifications[appId]) {
+          data.notifications[appId] = 0;
+        }
+
+        if (appId === 'moments') {
+          data.notifications.momentsUnread = 0;
+          data.momentsUnread = 0;
+        }
+
+        if (appId === 'chat') {
+          data.notifications.chatUnread = 0;
+          data.chatUnread = 0;
+
+          if (Array.isArray(data.characters)) {
+            data.characters = data.characters.map((character) => ({
+              ...character,
+              unread: 0
+            }));
+          }
+        }
+
+        return data;
+      });
+    }
+
+    function bindGlobalEvents() {
+      window.addEventListener('pointermove', (event) => {
+        if (state.drag) {
+          updateDragByPointer(event);
+        }
+      }, { passive: false });
+
+      window.addEventListener('pointerup', endFreeDrag);
+      window.addEventListener('pointercancel', endFreeDrag);
+
+      window.addEventListener('ai-phone-close-app', () => closeOpenedApp(true));
+
+      window.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
+          if (state.editMode) {
+            exitEditMode();
+            return;
+          }
+
+          closeOpenedApp(true);
+        }
+      });
+
+      onStorageChange(() => {
+        if (!state.appView) {
+          renderShell();
+        } else {
+          updateWidgetOnly();
+          applyAppCustomization(state.appView, state.appView.dataset.currentApp);
+        }
+      });
+
+      document.addEventListener('contextmenu', (event) => {
+        event.preventDefault();
+      });
+
+      window.addEventListener('resize', () => {
+        if (!state.appView) {
+          renderShell();
+        }
+      });
+    }
+
+    function updateClock() {
+      updateClockText();
+    }
+
+    function updateClockText() {
+      const now = new Date();
+      const timeText = formatTime(now);
+      const dateText = now.toLocaleDateString('zh-CN', {
+        month: 'long',
+        day: 'numeric',
+        weekday: 'long'
+      });
+
+      const statusTime = qs('#statusTime');
+      const desktopBigTime = qs('#desktopBigTime');
+      const desktopDateText = qs('#desktopDateText');
+
+      if (statusTime) {
+        statusTime.textContent = timeText;
+      }
+
+      if (desktopBigTime) {
+        desktopBigTime.textContent = timeText;
+      }
+
+      if (desktopDateText) {
+        desktopDateText.textContent = dateText;
+      }
+    }
+
+    function updateWidgetOnly() {
+      updateClockText();
+
+      const weatherTemp = qs('#weatherTemp');
+      const weatherText = qs('#weatherText');
+
+      if (weatherTemp) {
+        weatherTemp.textContent = state.weather.temperature || '--';
+      }
+
+      if (weatherText) {
+        weatherText.textContent = `${state.weather.city} · ${state.weather.text}`;
+      }
+    }
+
+    async function loadWeather(saveGeo = false) {
+      const settings = getData().settings || {};
+      const personalization = settings.personalization || {};
+      const weatherSettings = personalization.weather || {};
+      let city = weatherSettings.city || WENZHOU_WEATHER.city;
+      let latitude = Number(weatherSettings.latitude || 0);
+      let longitude = Number(weatherSettings.longitude || 0);
+
+      if (!latitude || !longitude) {
+        latitude = city === WENZHOU_WEATHER.city ? WENZHOU_WEATHER.latitude : 0;
+        longitude = city === WENZHOU_WEATHER.city ? WENZHOU_WEATHER.longitude : 0;
+      }
+
+      try {
+        if (!latitude || !longitude) {
+          const geoUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1&language=zh&format=json`;
+          const geoResponse = await fetch(geoUrl);
+          const geoData = await geoResponse.json();
+          const first = geoData.results?.[0];
+
+          if (first) {
+            city = first.name || city;
+            latitude = Number(first.latitude);
+            longitude = Number(first.longitude);
+
+            if (saveGeo) {
+              updateData((data) => {
+                if (!data.settings) {
+                  data.settings = {};
+                }
+
+                if (!data.settings.personalization) {
+                  data.settings.personalization = {};
+                }
+
+                data.settings.personalization.weather = {
+                  ...(data.settings.personalization.weather || {}),
+                  city,
+                  latitude,
+                  longitude
+                };
+
+                return data;
+              });
+            }
+          }
+        }
+
+        const url = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,weather_code&timezone=auto`;
+        const response = await fetch(url);
+        const data = await response.json();
+        const current = data.current || {};
+        const temperature = Number.isFinite(Number(current.temperature_2m)) ? `${Math.round(Number(current.temperature_2m))}°` : '--';
+        const text = WEATHER_CODES[current.weather_code] || '天气更新中';
+
+        state.weather = {
+          city,
+          temperature,
+          text
+        };
+
+        updateWidgetOnly();
+      } catch {
+        state.weather = {
+          city,
+          temperature: '--',
+          text: '天气暂不可用'
+        };
+
+        updateWidgetOnly();
+      }
+    }
+
+    window.AIPhoneDesktop = {
+      APPS,
+      openApp,
+      closeApp: () => closeOpenedApp(true),
+      refresh: renderShell,
+      setDesktopPage,
+      enterEditMode,
+      exitEditMode,
+      loadWeather
+    };
+
+    init();
+  </script>
+</body>
+</html>
