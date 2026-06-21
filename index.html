@@ -1,0 +1,673 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
+  <meta name="theme-color" content="#fbf7f0" />
+  <title>AI 手机桌面系统</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <div id="root" class="app-root">
+    <div class="status-bar">
+      <div id="statusTime">00:00</div>
+      <div class="status-cluster">
+        <svg class="signal-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M5 17v-3M10 17v-6M15 17V8M20 17V5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path>
+        </svg>
+        <span>5G</span>
+        <svg class="battery-icon" viewBox="0 0 28 16" aria-hidden="true">
+          <path d="M2 4a3 3 0 0 1 3-3h16a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3H5a3 3 0 0 1-3-3V4Z" fill="none" stroke="currentColor" stroke-width="1.8"></path>
+          <path d="M25 6h1.5v4H25" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path>
+          <path d="M5 4h13a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2H5V4Z" fill="currentColor" opacity=".42"></path>
+        </svg>
+      </div>
+    </div>
+
+    <main id="desktop" class="desktop">
+      <div id="desktopPages" class="desktop-pages">
+        <section class="desktop-page" data-page="0">
+          <div class="widget-layer" data-widget-layer="0"></div>
+          <div class="icon-layer" data-icon-layer="0"></div>
+        </section>
+        <section class="desktop-page" data-page="1">
+          <div class="widget-layer" data-widget-layer="1"></div>
+          <div class="icon-layer" data-icon-layer="1"></div>
+        </section>
+      </div>
+      <div id="pageDots" class="page-dots"></div>
+      <nav id="dock" class="dock" aria-label="常用应用"></nav>
+    </main>
+  </div>
+
+  <section id="appWindow" class="app-window" aria-live="polite"></section>
+
+  <script type="module">
+    import {
+      APP_DEFINITIONS,
+      readState,
+      updateState,
+      clearUnread,
+    } from "./core/storage.js";
+    import { restoreThemeFromStorage } from "./core/theme.js";
+    import {
+      ICONS,
+      createElement,
+      clear,
+      toast,
+    } from "./core/ui.js";
+
+    const root = document.getElementById("root");
+    const desktop = document.getElementById("desktop");
+    const desktopPages = document.getElementById("desktopPages");
+    const pageDots = document.getElementById("pageDots");
+    const dock = document.getElementById("dock");
+    const appWindow = document.getElementById("appWindow");
+    const statusTime = document.getElementById("statusTime");
+
+    const appModules = new Map();
+
+    let state = readState();
+    let currentPage = Number(state.desktop.currentPage || 0);
+    let editing = false;
+    let suppressClickUntil = 0;
+    let weatherCache = null;
+    let activeDrag = null;
+    let swipeStart = null;
+
+    restoreThemeFromStorage();
+    boot();
+
+    function boot() {
+      normalizeDesktopState();
+      renderAll();
+      updateClock();
+      fetchWeather();
+
+      setInterval(updateClock, 1000);
+      setInterval(fetchWeather, 20 * 60 * 1000);
+
+      desktopPages.addEventListener("touchstart", startSwipe, { passive: true });
+      desktopPages.addEventListener("touchend", endSwipe, { passive: true });
+
+      window.addEventListener("app:close", closeApp);
+      window.addEventListener("app:open", (event) => openApp(event.detail?.appId));
+      window.addEventListener("storage", () => {
+        state = readState();
+        normalizeDesktopState();
+        renderAll();
+      });
+
+      document.addEventListener("pointermove", moveDrag, { passive: false });
+      document.addEventListener("pointerup", endDrag);
+      document.addEventListener("pointercancel", endDrag);
+    }
+
+    function normalizeDesktopState() {
+      let changed = false;
+
+      if (!state.desktop.customApps) {
+        state.desktop.customApps = {};
+        changed = true;
+      }
+
+      Object.values(state.desktop.widgets || {}).forEach((widget) => {
+        if (!("image" in widget)) {
+          widget.image = "";
+          changed = true;
+        }
+      });
+
+      APP_DEFINITIONS.forEach((app, index) => {
+        if (!state.desktop.apps[app.id]) {
+          state.desktop.apps[app.id] = {
+            page: index < 5 ? 0 : 1,
+            x: 28 + (index % 4) * 86,
+            y: 360 + Math.floor((index % 8) / 4) * 116,
+          };
+          changed = true;
+        }
+      });
+
+      if (changed) {
+        updateState((draft) => {
+          draft.desktop = state.desktop;
+          return draft;
+        });
+      }
+    }
+
+    function renderAll() {
+      state = readState();
+      normalizeDesktopState();
+      applyWallpaper();
+      renderWidgets();
+      renderIcons();
+      renderDock();
+      renderDots();
+      goPage(currentPage, false);
+    }
+
+    function applyWallpaper() {
+      root.style.setProperty("--wallpaper", state.desktop.wallpaper ? `url("${state.desktop.wallpaper}")` : "none");
+    }
+
+    function updateClock() {
+      const now = new Date();
+      const time = now.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" });
+      statusTime.textContent = time;
+
+      document.querySelectorAll("[data-clock-value]").forEach((node) => {
+        node.textContent = time;
+      });
+
+      document.querySelectorAll("[data-clock-note]").forEach((node) => {
+        node.textContent = now.toLocaleDateString("zh-CN", { month: "long", day: "numeric", weekday: "long" });
+      });
+    }
+
+    async function fetchWeather() {
+      const city = state.desktop.weatherCity || "温州";
+
+      try {
+        const geoResponse = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1&language=zh&format=json`);
+        const geoData = await geoResponse.json();
+        const place = geoData?.results?.[0];
+
+        if (!place) throw new Error("城市不可用");
+
+        const weatherResponse = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${place.latitude}&longitude=${place.longitude}&current=temperature_2m,weather_code&timezone=auto`);
+        const weatherData = await weatherResponse.json();
+
+        weatherCache = {
+          city: place.name || city,
+          temperature: Math.round(weatherData.current?.temperature_2m || 0),
+          text: weatherText(weatherData.current?.weather_code),
+        };
+      } catch {
+        weatherCache = {
+          city,
+          temperature: "--",
+          text: "天气暂不可用",
+        };
+      }
+
+      renderWidgets();
+    }
+
+    function weatherText(code) {
+      const value = Number(code);
+      if (value === 0) return "晴";
+      if ([1, 2, 3].includes(value)) return "多云";
+      if ([45, 48].includes(value)) return "雾";
+      if ([51, 53, 55, 61, 63, 65, 80, 81, 82].includes(value)) return "雨";
+      if ([71, 73, 75, 77, 85, 86].includes(value)) return "雪";
+      if ([95, 96, 99].includes(value)) return "雷雨";
+      return "天气";
+    }
+
+    function renderWidgets() {
+      document.querySelectorAll("[data-widget-layer]").forEach(clear);
+
+      Object.values(state.desktop.widgets || {}).forEach((widget) => {
+        if (!widget.enabled) return;
+
+        const layer = getLayer("widget", widget.page || 0);
+        if (!layer) return;
+
+        const node = createWidget(widget);
+        layer.append(node);
+        bindDesktopItem(node, "widget", widget.id);
+      });
+
+      updateClock();
+    }
+
+    function createWidget(widget) {
+      const node = createElement("article", {
+        className: `desktop-widget widget-${widget.type || "small"} ${widget.id === "clock" ? "photo-widget" : ""}`,
+        dataset: {
+          itemType: "widget",
+          itemId: widget.id,
+        },
+        style: {
+          left: `${Number(widget.x) || 0}px`,
+          top: `${Number(widget.y) || 0}px`,
+          width: widget.width ? `${widget.width}px` : "",
+          height: widget.height ? `${widget.height}px` : "",
+        },
+      });
+
+      if (widget.image || (widget.id === "clock" && state.desktop.wallpaper)) {
+        node.style.backgroundImage = `url("${widget.image || state.desktop.wallpaper}")`;
+        node.style.backgroundSize = "cover";
+        node.style.backgroundPosition = "center";
+      }
+
+      if (widget.id === "clock") {
+        node.append(createElement("div", {
+          className: "widget-content",
+          children: [
+            createElement("div", { className: "widget-title", text: widget.name || "现在" }),
+            createElement("div", { className: "widget-value", attrs: { "data-clock-value": "" }, text: "00:00" }),
+            createElement("div", { className: "widget-note", attrs: { "data-clock-note": "" }, text: "" }),
+          ],
+        }));
+      }
+
+      if (widget.id === "weather") {
+        node.append(createElement("div", {
+          className: "widget-content",
+          children: [
+            createElement("div", { className: "widget-title", text: weatherCache?.city || state.desktop.weatherCity || "温州" }),
+            createElement("div", { className: "widget-value", text: `${weatherCache?.temperature ?? "--"}°` }),
+            createElement("div", { className: "widget-note", text: weatherCache?.text || "正在更新" }),
+          ],
+        }));
+      }
+
+      if (widget.id === "anniversary") {
+        const next = getNextAnniversary();
+        node.append(createElement("div", {
+          className: "widget-content",
+          children: [
+            createElement("div", { className: "widget-title", text: widget.name || "纪念日" }),
+            createElement("div", { className: "widget-value", text: next ? `${next.days}天` : "--" }),
+            createElement("div", { className: "widget-note", text: next ? next.title : "还没有纪念日" }),
+          ],
+        }));
+      }
+
+      return node;
+    }
+
+    function getNextAnniversary() {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      return (state.anniversaries || [])
+        .map((item) => {
+          const date = new Date(item.date);
+          date.setHours(0, 0, 0, 0);
+          return { ...item, days: Math.ceil((date - today) / 86400000) };
+        })
+        .filter((item) => item.days >= 0)
+        .sort((a, b) => a.days - b.days)[0];
+    }
+
+    function renderIcons() {
+      document.querySelectorAll("[data-icon-layer]").forEach(clear);
+
+      const dockIds = new Set(state.desktop.dock || []);
+
+      APP_DEFINITIONS.forEach((app) => {
+        if (dockIds.has(app.id)) return;
+
+        const position = state.desktop.apps[app.id] || { page: 0, x: 24, y: 80 };
+        const layer = getLayer("app", position.page || 0);
+        if (!layer) return;
+
+        const node = createAppIcon(app, position, false);
+        layer.append(node);
+        bindDesktopItem(node, "app", app.id);
+      });
+    }
+
+    function renderDock() {
+      clear(dock);
+
+      (state.desktop.dock || []).forEach((appId) => {
+        const app = APP_DEFINITIONS.find((item) => item.id === appId);
+        if (!app) return;
+
+        const node = createAppIcon(app, { x: 0, y: 0 }, true);
+        dock.append(node);
+
+        node.addEventListener("click", () => {
+          if (Date.now() < suppressClickUntil) return;
+          openApp(app.id);
+        });
+      });
+    }
+
+    function createAppIcon(app, position, inDock) {
+      const custom = state.desktop.customApps?.[app.id] || {};
+      const unread = Number(state.unreadBadges?.[app.id] || 0);
+      const name = custom.name || app.name;
+      const image = custom.icon || "";
+
+      return createElement("button", {
+        className: "app-icon",
+        dataset: {
+          itemType: "app",
+          itemId: app.id,
+          appId: app.id,
+        },
+        style: inDock ? {} : {
+          left: `${Number(position.x) || 0}px`,
+          top: `${Number(position.y) || 0}px`,
+        },
+        children: [
+          createElement("span", {
+            className: "app-icon-art",
+            children: [
+              image
+                ? createElement("img", { className: "app-icon-image", attrs: { src: image, alt: name } })
+                : createElement("span", { html: ICONS[app.id] || ICONS.settings }),
+            ],
+          }),
+          createElement("span", { className: "app-icon-name", text: name }),
+          unread > 0 ? createElement("span", { className: "badge", text: unread > 99 ? "99" : String(unread) }) : null,
+        ].filter(Boolean),
+      });
+    }
+
+    function bindDesktopItem(node, type, id) {
+      let holdTimer = 0;
+      let startX = 0;
+      let startY = 0;
+      let pointerId = null;
+      let longPressed = false;
+
+      node.addEventListener("pointerdown", (event) => {
+        if (event.button !== undefined && event.button !== 0) return;
+
+        pointerId = event.pointerId;
+        startX = event.clientX;
+        startY = event.clientY;
+        longPressed = false;
+
+        node.setPointerCapture?.(pointerId);
+
+        holdTimer = window.setTimeout(() => {
+          longPressed = true;
+          beginDrag(node, type, id, event);
+        }, 420);
+      });
+
+      node.addEventListener("pointermove", (event) => {
+        if (!holdTimer || activeDrag) return;
+
+        const distance = Math.hypot(event.clientX - startX, event.clientY - startY);
+        if (distance > 9) {
+          clearTimeout(holdTimer);
+          holdTimer = 0;
+        }
+      });
+
+      node.addEventListener("pointerup", () => {
+        clearTimeout(holdTimer);
+        holdTimer = 0;
+
+        if (longPressed) {
+          suppressClickUntil = Date.now() + 420;
+        }
+      });
+
+      node.addEventListener("click", (event) => {
+        if (type !== "app") return;
+
+        if (editing || Date.now() < suppressClickUntil) {
+          event.preventDefault();
+          return;
+        }
+
+        openApp(id);
+      });
+    }
+
+    function beginDrag(node, type, id, event) {
+      const layer = node.parentElement;
+      const layerRect = layer.getBoundingClientRect();
+      const nodeRect = node.getBoundingClientRect();
+      const offsetX = event.clientX - nodeRect.left;
+      const offsetY = event.clientY - nodeRect.top;
+
+      editing = true;
+      desktop.classList.add("editing");
+      node.classList.add("dragging");
+
+      activeDrag = {
+        node,
+        type,
+        id,
+        pointerId: event.pointerId,
+        offsetX,
+        offsetY,
+        page: Number(layer.dataset.widgetLayer ?? layer.dataset.iconLayer ?? currentPage),
+      };
+
+      positionDraggedNode(event.clientX, event.clientY);
+      toast("正在编辑桌面", 900);
+    }
+
+    function moveDrag(event) {
+      if (!activeDrag) return;
+
+      event.preventDefault();
+      positionDraggedNode(event.clientX, event.clientY);
+
+      if (event.clientX > window.innerWidth - 42 && activeDrag.page < 1) {
+        moveDraggingToPage(1, event.clientX, event.clientY);
+      }
+
+      if (event.clientX < 42 && activeDrag.page > 0) {
+        moveDraggingToPage(0, event.clientX, event.clientY);
+      }
+    }
+
+    function endDrag() {
+      if (!activeDrag) return;
+
+      const { node, type, id, page } = activeDrag;
+      node.classList.remove("dragging");
+
+      const x = Math.round(parseFloat(node.style.left) || 0);
+      const y = Math.round(parseFloat(node.style.top) || 0);
+
+      updateState((draft) => {
+        if (type === "widget") {
+          draft.desktop.widgets[id] = {
+            ...draft.desktop.widgets[id],
+            page,
+            x,
+            y,
+          };
+        } else {
+          draft.desktop.apps[id] = {
+            ...draft.desktop.apps[id],
+            page,
+            x,
+            y,
+          };
+        }
+        draft.desktop.currentPage = page;
+        return draft;
+      });
+
+      currentPage = page;
+      activeDrag = null;
+      suppressClickUntil = Date.now() + 500;
+
+      window.setTimeout(() => {
+        editing = false;
+        desktop.classList.remove("editing");
+        renderAll();
+      }, 220);
+    }
+
+    function positionDraggedNode(clientX, clientY) {
+      if (!activeDrag) return;
+
+      const layer = getLayer(activeDrag.type, activeDrag.page);
+      const layerRect = layer.getBoundingClientRect();
+      const maxX = Math.max(0, layerRect.width - activeDrag.node.offsetWidth);
+      const maxY = Math.max(0, layerRect.height - activeDrag.node.offsetHeight);
+      const x = clamp(clientX - layerRect.left - activeDrag.offsetX, 0, maxX);
+      const y = clamp(clientY - layerRect.top - activeDrag.offsetY, 0, maxY);
+
+      activeDrag.node.style.left = `${x}px`;
+      activeDrag.node.style.top = `${y}px`;
+    }
+
+    function moveDraggingToPage(page, clientX, clientY) {
+      if (!activeDrag) return;
+
+      activeDrag.page = page;
+      const layer = getLayer(activeDrag.type, page);
+      if (!layer.contains(activeDrag.node)) layer.append(activeDrag.node);
+
+      goPage(page, false);
+      requestAnimationFrame(() => positionDraggedNode(clientX, clientY));
+    }
+
+    function getLayer(type, page) {
+      return type === "widget"
+        ? document.querySelector(`[data-widget-layer="${page}"]`)
+        : document.querySelector(`[data-icon-layer="${page}"]`);
+    }
+
+    function renderDots() {
+      clear(pageDots);
+
+      [0, 1].forEach((page) => {
+        pageDots.append(createElement("span", {
+          className: `page-dot ${page === currentPage ? "active" : ""}`,
+        }));
+      });
+    }
+
+    function goPage(page, persist = true) {
+      currentPage = clamp(Number(page) || 0, 0, 1);
+      desktopPages.style.transform = `translateX(${-currentPage * 100}vw)`;
+      renderDots();
+
+      if (persist) {
+        updateState((draft) => {
+          draft.desktop.currentPage = currentPage;
+          return draft;
+        });
+      }
+    }
+
+    function startSwipe(event) {
+      if (editing || activeDrag) return;
+
+      swipeStart = {
+        x: event.touches[0].clientX,
+        y: event.touches[0].clientY,
+      };
+    }
+
+    function endSwipe(event) {
+      if (!swipeStart || editing || activeDrag) return;
+
+      const endX = event.changedTouches[0].clientX;
+      const endY = event.changedTouches[0].clientY;
+      const diffX = endX - swipeStart.x;
+      const diffY = endY - swipeStart.y;
+
+      swipeStart = null;
+
+      if (Math.abs(diffX) > 56 && Math.abs(diffX) > Math.abs(diffY) * 1.25) {
+        goPage(diffX < 0 ? currentPage + 1 : currentPage - 1);
+      }
+    }
+
+    async function openApp(appId) {
+      const app = APP_DEFINITIONS.find((item) => item.id === appId);
+      if (!app) return;
+
+      abortDesktopEditing();
+      clear(appWindow);
+      appWindow.classList.add("open");
+      clearUnread(appId);
+
+      try {
+        const module = await loadAppModule(app);
+        const appContext = {
+          app,
+          state: readState(),
+          close: closeApp,
+          openApp,
+          refresh: () => {
+            state = readState();
+            renderAll();
+          },
+        };
+
+        if (typeof module.mountApp === "function") {
+          module.mountApp(appWindow, appContext);
+        } else if (typeof module.renderApp === "function") {
+          appWindow.append(module.renderApp(appContext));
+        } else {
+          appWindow.append(createFallbackApp(app, "应用模块没有导出 mountApp 或 renderApp"));
+        }
+      } catch (error) {
+        appWindow.append(createFallbackApp(app, error.message));
+      }
+    }
+
+    async function loadAppModule(app) {
+      if (!appModules.has(app.id)) {
+        appModules.set(app.id, await import(app.module));
+      }
+
+      return appModules.get(app.id);
+    }
+
+    function closeApp() {
+      appWindow.classList.remove("open");
+
+      setTimeout(() => {
+        clear(appWindow);
+        state = readState();
+        renderAll();
+      }, 260);
+    }
+
+    function createFallbackApp(app, message) {
+      return createElement("div", {
+        className: "app-shell",
+        children: [
+          createElement("header", {
+            className: "app-nav",
+            children: [
+              createElement("button", {
+                className: "icon-button",
+                html: ICONS.back,
+                on: { click: closeApp },
+              }),
+              createElement("div", { className: "app-nav-title", text: app.name }),
+              createElement("div"),
+            ],
+          }),
+          createElement("main", {
+            className: "app-content",
+            children: [
+              createElement("section", {
+                className: "card card-padding stack",
+                children: [
+                  createElement("h2", { className: "section-title", text: "应用打开失败" }),
+                  createElement("p", { className: "muted", text: message || "请检查应用文件。" }),
+                ],
+              }),
+            ],
+          }),
+        ],
+      });
+    }
+
+    function abortDesktopEditing() {
+      editing = false;
+      activeDrag = null;
+      desktop.classList.remove("editing");
+      document.querySelectorAll(".dragging").forEach((node) => node.classList.remove("dragging"));
+    }
+
+    function clamp(value, min, max) {
+      return Math.max(min, Math.min(max, value));
+    }
+  </script>
+</body>
+</html>
