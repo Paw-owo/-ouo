@@ -1,0 +1,2046 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>AI 手机桌面系统</title>
+  <link rel="stylesheet" href="./style.css">
+
+  <style>
+    :root {
+      --desktop-bg: #fff8fb;
+      --desktop-bg-2: #f7eff6;
+      --desktop-text: #4d3f4a;
+      --desktop-muted: #7e6d79;
+      --desktop-line: rgba(110, 88, 104, 0.14);
+      --desktop-card: rgba(255, 255, 255, 0.66);
+      --desktop-card-strong: rgba(255, 255, 255, 0.88);
+      --desktop-accent: #eaa6c4;
+      --desktop-accent-2: #f3bfd4;
+      --desktop-soft: rgba(243, 191, 212, 0.24);
+      --desktop-danger: #d98798;
+      --desktop-shadow: 0 16px 38px rgba(105, 78, 96, 0.12);
+      --dock-height: 86px;
+      --safe-top: env(safe-area-inset-top, 0px);
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 18% 8%, rgba(255, 255, 255, 0.92), transparent 32%),
+        radial-gradient(circle at 82% 16%, rgba(243, 191, 212, 0.22), transparent 30%),
+        linear-gradient(180deg, var(--desktop-bg), var(--desktop-bg-2));
+      color: var(--desktop-text);
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Helvetica Neue", Arial, sans-serif;
+    }
+
+    button,
+    input,
+    textarea {
+      font: inherit;
+      color: inherit;
+    }
+
+    button {
+      border: 0;
+      background: none;
+      cursor: pointer;
+      transition: transform 120ms ease, opacity 120ms ease, background 160ms ease;
+    }
+
+    button:active {
+      transform: scale(0.97);
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    .app-root {
+      position: relative;
+      width: 100vw;
+      height: 100dvh;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 18% 8%, rgba(255, 255, 255, 0.92), transparent 32%),
+        radial-gradient(circle at 82% 16%, rgba(243, 191, 212, 0.22), transparent 30%),
+        linear-gradient(180deg, var(--desktop-bg), var(--desktop-bg-2));
+    }
+
+    .desktop {
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      background:
+        linear-gradient(180deg, rgba(255, 250, 253, 0.12), rgba(247, 239, 246, 0.16)),
+        linear-gradient(180deg, var(--desktop-bg), var(--desktop-bg-2));
+      background-size: cover;
+      background-position: center;
+      color: var(--desktop-text);
+    }
+
+    .desktop::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background:
+        radial-gradient(circle at 16% 14%, rgba(255, 255, 255, 0.8), transparent 26%),
+        radial-gradient(circle at 86% 20%, rgba(243, 191, 212, 0.2), transparent 28%),
+        radial-gradient(circle at 50% 80%, rgba(255, 255, 255, 0.56), transparent 34%);
+      z-index: 0;
+    }
+
+    .status-bar {
+      position: relative;
+      z-index: 8;
+      height: calc(36px + var(--safe-top));
+      padding: calc(8px + var(--safe-top)) 20px 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex: none;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--desktop-text);
+      text-shadow: 0 1px 8px rgba(255, 255, 255, 0.72);
+    }
+
+    .status-icons {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      color: var(--desktop-muted);
+    }
+
+    .signal-icon {
+      width: 18px;
+      height: 12px;
+      display: inline-flex;
+      align-items: flex-end;
+      gap: 2px;
+    }
+
+    .signal-icon::before,
+    .signal-icon::after {
+      content: "";
+      display: block;
+      width: 3px;
+      border-radius: 8px;
+      background: currentColor;
+    }
+
+    .signal-icon::before {
+      height: 6px;
+      box-shadow: 5px -2px 0 currentColor, 10px -5px 0 currentColor, 15px -8px 0 currentColor;
+      opacity: 0.9;
+    }
+
+    .signal-icon::after {
+      display: none;
+    }
+
+    .wifi-icon {
+      position: relative;
+      width: 18px;
+      height: 14px;
+    }
+
+    .wifi-icon::before {
+      content: "";
+      position: absolute;
+      left: 1px;
+      top: 0;
+      width: 16px;
+      height: 16px;
+      border: 2px solid currentColor;
+      border-left-color: transparent;
+      border-bottom-color: transparent;
+      border-radius: 50%;
+      transform: rotate(-45deg);
+      opacity: 0.9;
+    }
+
+    .wifi-icon::after {
+      content: "";
+      position: absolute;
+      left: 7px;
+      bottom: 1px;
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    .battery-icon {
+      position: relative;
+      width: 25px;
+      height: 13px;
+      border: 1.5px solid currentColor;
+      border-radius: 5px;
+    }
+
+    .battery-icon::before {
+      content: "";
+      position: absolute;
+      left: 2px;
+      top: 2px;
+      bottom: 2px;
+      width: 72%;
+      border-radius: 3px;
+      background: currentColor;
+    }
+
+    .battery-icon::after {
+      content: "";
+      position: absolute;
+      right: -4px;
+      top: 4px;
+      width: 2px;
+      height: 5px;
+      border-radius: 2px;
+      background: currentColor;
+    }
+
+    .desktop-top {
+      position: relative;
+      z-index: 5;
+      flex: none;
+      padding: 8px 16px 4px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .user-widget {
+      min-width: 0;
+      max-width: 56%;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 12px 8px 9px;
+      border-radius: 22px;
+      color: var(--desktop-text);
+      background: rgba(255, 255, 255, 0.58);
+      border: 1px solid rgba(255, 255, 255, 0.62);
+      box-shadow: 0 10px 22px rgba(105, 78, 96, 0.09);
+      backdrop-filter: blur(22px);
+      -webkit-backdrop-filter: blur(22px);
+    }
+
+    .user-widget-avatar {
+      width: 36px;
+      height: 36px;
+      flex: none;
+      border-radius: 14px;
+      overflow: hidden;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(180deg, var(--desktop-soft), rgba(255, 255, 255, 0.5));
+      color: var(--desktop-accent);
+      font-size: 15px;
+      font-weight: 800;
+    }
+
+    .user-widget-avatar img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .user-widget-name {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .desktop-actions {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      flex: none;
+    }
+
+    .desktop-action-button {
+      width: 38px;
+      height: 38px;
+      border-radius: 15px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(255, 255, 255, 0.58);
+      border: 1px solid rgba(255, 255, 255, 0.62);
+      box-shadow: 0 10px 22px rgba(105, 78, 96, 0.09);
+      backdrop-filter: blur(22px);
+      -webkit-backdrop-filter: blur(22px);
+      color: var(--desktop-muted);
+    }
+
+    .desktop-action-button svg {
+      width: 19px;
+      height: 19px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 1.9;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .desktop-content {
+      position: relative;
+      z-index: 4;
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
+      padding: 0;
+    }
+
+    .desktop-pages {
+      height: 100%;
+      display: flex;
+      width: 200%;
+      transition: transform 260ms ease;
+      will-change: transform;
+    }
+
+    .desktop-page {
+      position: relative;
+      width: 50%;
+      flex: 0 0 50%;
+      overflow: hidden;
+      padding: 0 14px calc(var(--dock-height) + 52px);
+    }
+
+    .desktop-widget {
+      position: absolute;
+      left: 14px;
+      top: 12px;
+      width: calc(100% - 28px);
+      min-height: 154px;
+      border-radius: 30px;
+      padding: 18px;
+      overflow: hidden;
+      color: var(--desktop-text);
+      background: rgba(255, 255, 255, 0.62);
+      border: 1px solid rgba(255, 255, 255, 0.58);
+      box-shadow: var(--desktop-shadow);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      touch-action: none;
+      user-select: none;
+      z-index: 4;
+    }
+
+    .desktop-widget.dragging {
+      transform: scale(1.015);
+      box-shadow: 0 20px 50px rgba(105, 78, 96, 0.16);
+    }
+
+    .desktop-widget::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background:
+        radial-gradient(circle at 20% 5%, rgba(255, 255, 255, 0.78), transparent 38%),
+        linear-gradient(135deg, rgba(243, 191, 212, 0.16), transparent 60%);
+    }
+
+    .desktop-widget-inner {
+      position: relative;
+      z-index: 2;
+    }
+
+    .desktop-widget-kicker {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 18px;
+      font-size: 11px;
+      color: var(--desktop-muted);
+    }
+
+    .desktop-widget-kicker::before {
+      content: "";
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--desktop-accent);
+      box-shadow: 0 0 0 5px var(--desktop-soft);
+    }
+
+    .desktop-widget-title {
+      margin: 0 0 9px;
+      max-width: 86%;
+      font-size: 21px;
+      line-height: 1.22;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+    }
+
+    .desktop-widget-text {
+      margin: 0;
+      max-width: 88%;
+      font-size: 13px;
+      line-height: 1.65;
+      color: var(--desktop-muted);
+    }
+
+    .desktop-widget-tip {
+      position: absolute;
+      right: 16px;
+      bottom: 14px;
+      z-index: 2;
+      font-size: 10px;
+      color: rgba(126, 109, 121, 0.74);
+    }
+
+    .desktop-app-layer {
+      position: absolute;
+      inset: 0;
+      z-index: 3;
+    }
+
+    .app-icon {
+      position: absolute;
+      width: 74px;
+      min-height: 88px;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 7px;
+      color: var(--desktop-text);
+      touch-action: none;
+      user-select: none;
+    }
+
+    .app-icon.dragging {
+      z-index: 30;
+      opacity: 0.86;
+      transform: scale(1.06);
+    }
+
+    .app-icon-image,
+    .dock-icon .app-icon-image {
+      width: 60px;
+      height: 60px;
+      border-radius: 21px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      color: var(--desktop-accent);
+      background: rgba(255, 255, 255, 0.62);
+      border: 1px solid rgba(255, 255, 255, 0.68);
+      box-shadow: 0 11px 24px rgba(105, 78, 96, 0.12);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+    }
+
+    .app-icon-image img,
+    .dock-icon .app-icon-image img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .app-icon-image svg,
+    .dock-icon svg {
+      width: 30px;
+      height: 30px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .app-icon-name {
+      width: 74px;
+      font-size: 11px;
+      line-height: 1.25;
+      text-align: center;
+      color: var(--desktop-text);
+      text-shadow: 0 1px 8px rgba(255, 255, 255, 0.72);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .desktop-page-indicator {
+      position: absolute;
+      left: 50%;
+      bottom: calc(var(--dock-height) + 18px + var(--safe-bottom));
+      transform: translateX(-50%);
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      padding: 6px 9px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.54);
+      border: 1px solid rgba(255, 255, 255, 0.64);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      box-shadow: 0 8px 18px rgba(105, 78, 96, 0.08);
+    }
+
+    .desktop-page-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 999px;
+      background: rgba(126, 109, 121, 0.28);
+      transition: width 220ms ease, background 220ms ease;
+    }
+
+    .desktop-page-dot.active {
+      width: 18px;
+      background: var(--desktop-accent);
+    }
+
+    .dock {
+      position: absolute;
+      left: 14px;
+      right: 14px;
+      bottom: calc(10px + var(--safe-bottom));
+      z-index: 22;
+      height: var(--dock-height);
+      padding: 10px 16px;
+      border-radius: 30px;
+      display: flex;
+      justify-content: space-around;
+      align-items: center;
+      gap: 8px;
+      background: rgba(255, 255, 255, 0.68);
+      border: 1px solid rgba(255, 255, 255, 0.68);
+      box-shadow: var(--desktop-shadow);
+      backdrop-filter: blur(26px);
+      -webkit-backdrop-filter: blur(26px);
+    }
+
+    .dock-icon {
+      width: 58px;
+      height: 64px;
+      padding: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--desktop-accent);
+      flex: none;
+    }
+
+    .dock-icon .app-icon-image {
+      width: 54px;
+      height: 54px;
+      border-radius: 19px;
+      box-shadow: 0 9px 18px rgba(105, 78, 96, 0.1);
+    }
+
+    .app-window {
+      position: absolute;
+      inset: 0;
+      z-index: 60;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 14% 8%, rgba(255, 255, 255, 0.9), transparent 30%),
+        linear-gradient(180deg, rgba(255, 250, 253, 0.96), rgba(247, 239, 246, 0.96));
+      color: var(--desktop-text);
+      animation: appIn 180ms ease both;
+    }
+
+    @keyframes appIn {
+      from {
+        opacity: 0;
+        transform: translateY(18px) scale(0.985);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+
+    .app-header {
+      position: relative;
+      z-index: 4;
+      flex: none;
+      height: calc(58px + var(--safe-top));
+      padding: calc(10px + var(--safe-top)) 14px 8px;
+      display: grid;
+      grid-template-columns: minmax(86px, auto) 1fr minmax(70px, auto);
+      align-items: center;
+      gap: 8px;
+      background: rgba(255, 250, 253, 0.72);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.46);
+      backdrop-filter: blur(22px);
+      -webkit-backdrop-filter: blur(22px);
+    }
+
+    .app-title {
+      margin: 0;
+      font-size: 17px;
+      line-height: 1;
+      text-align: center;
+      font-weight: 800;
+      color: var(--desktop-text);
+    }
+
+    .app-header-right {
+      min-width: 70px;
+      display: flex;
+      justify-content: flex-end;
+    }
+
+    .back-home-button {
+      min-width: 86px;
+      height: 38px;
+      padding: 0 12px;
+      border-radius: 15px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      color: var(--desktop-muted);
+      background: rgba(255, 255, 255, 0.62);
+      border: 1px solid rgba(255, 255, 255, 0.64);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      font-size: 13px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .back-home-button svg {
+      width: 16px;
+      height: 16px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .app-body {
+      position: relative;
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
+      background: transparent;
+    }
+
+    .app-body > * {
+      border: 0 !important;
+      box-shadow: none;
+    }
+
+    .context-menu {
+      position: fixed;
+      z-index: 120;
+      min-width: 178px;
+      padding: 8px;
+      border-radius: 22px;
+      background: rgba(255, 255, 255, 0.9);
+      border: 1px solid rgba(255, 255, 255, 0.68);
+      box-shadow: 0 18px 48px rgba(80, 60, 74, 0.18);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      color: var(--desktop-text);
+    }
+
+    .context-menu button {
+      width: 100%;
+      min-height: 38px;
+      padding: 0 12px;
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      text-align: left;
+      font-size: 13px;
+      color: var(--desktop-text);
+    }
+
+    .context-menu button:hover {
+      background: var(--desktop-soft);
+    }
+
+    .context-menu button.danger {
+      color: var(--desktop-danger);
+    }
+
+    .context-menu-divider {
+      height: 1px;
+      margin: 5px 4px;
+      background: rgba(110, 88, 104, 0.12);
+    }
+
+    .desktop-modal-mask {
+      position: fixed;
+      inset: 0;
+      z-index: 140;
+      display: none;
+      align-items: flex-end;
+      justify-content: center;
+      padding: 18px 14px calc(18px + var(--safe-bottom));
+      background: rgba(75, 58, 70, 0.2);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+    }
+
+    .desktop-modal-mask.show {
+      display: flex;
+    }
+
+    .desktop-modal-card {
+      width: 100%;
+      max-width: 560px;
+      max-height: 76vh;
+      overflow: auto;
+      padding: 16px;
+      border-radius: 28px;
+      background: rgba(255, 255, 255, 0.92);
+      border: 1px solid rgba(255, 255, 255, 0.66);
+      box-shadow: 0 22px 60px rgba(80, 60, 74, 0.2);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+    }
+
+    .desktop-modal-title {
+      margin: 0 0 14px;
+      font-size: 16px;
+      font-weight: 800;
+      color: var(--desktop-text);
+    }
+
+    .desktop-modal-field {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .desktop-modal-field label {
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+      font-size: 12px;
+      color: var(--desktop-muted);
+    }
+
+    .desktop-modal-field input,
+    .desktop-modal-field textarea {
+      width: 100%;
+      border: 1px solid var(--desktop-line);
+      outline: none;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.86);
+      padding: 11px 13px;
+      font-size: 13px;
+      color: var(--desktop-text);
+    }
+
+    .desktop-modal-field textarea {
+      min-height: 92px;
+      resize: vertical;
+      line-height: 1.55;
+    }
+
+    .desktop-modal-actions {
+      margin-top: 14px;
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .desktop-modal-button {
+      min-height: 38px;
+      padding: 0 14px;
+      border-radius: 15px;
+      background: rgba(255, 255, 255, 0.72);
+      border: 1px solid rgba(110, 88, 104, 0.14);
+      color: var(--desktop-text);
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .desktop-modal-button.primary {
+      color: #ffffff;
+      border-color: transparent;
+      background: linear-gradient(180deg, var(--desktop-accent-2), var(--desktop-accent));
+    }
+
+    .empty-state {
+      min-height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 32px;
+      text-align: center;
+      color: var(--desktop-muted);
+      gap: 10px;
+      line-height: 1.7;
+      font-size: 13px;
+    }
+
+    @media (min-width: 720px) {
+      .dock {
+        left: 50%;
+        right: auto;
+        width: min(560px, calc(100vw - 28px));
+        transform: translateX(-50%);
+      }
+
+      .desktop-page {
+        padding-left: calc((100vw - min(560px, 100vw)) / 2 + 14px);
+        padding-right: calc((100vw - min(560px, 100vw)) / 2 + 14px);
+      }
+
+      .desktop-widget {
+        width: min(532px, calc(100vw - 28px));
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div id="appRoot" class="app-root">
+    <main id="desktop" class="desktop">
+      <header class="status-bar">
+        <div id="statusTime">00:00</div>
+        <div class="status-icons" aria-hidden="true">
+          <span class="signal-icon"></span>
+          <span class="wifi-icon"></span>
+          <span class="battery-icon"></span>
+        </div>
+      </header>
+
+      <section class="desktop-top" aria-label="桌面顶部">
+        <button id="userWidget" class="user-widget" type="button" title="更换用户头像">
+          <span class="user-widget-avatar">
+            <img id="userAvatarImage" alt="用户头像" class="hidden">
+            <span id="userAvatarFallback">我</span>
+          </span>
+          <span id="userWidgetName" class="user-widget-name">用户</span>
+        </button>
+
+        <div class="desktop-actions">
+          <button id="editWidgetButton" class="desktop-action-button" type="button" title="编辑小组件">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 20h4l10.5-10.5a2.8 2.8 0 0 0-4-4L4 16v4Z"></path>
+              <path d="M13.5 6.5l4 4"></path>
+            </svg>
+          </button>
+          <button id="wallpaperButton" class="desktop-action-button" type="button" title="更换壁纸">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="3.5" y="4.5" width="17" height="15" rx="3"></rect>
+              <path d="M7 15l3-3 3 3 2-2 3 3"></path>
+              <circle cx="8.5" cy="8.8" r="1.3"></circle>
+            </svg>
+          </button>
+        </div>
+      </section>
+
+      <section class="desktop-content">
+        <div id="desktopPages" class="desktop-pages">
+          <section class="desktop-page" data-page="0">
+            <button id="desktopWidget" class="desktop-widget" type="button">
+              <span class="desktop-widget-inner">
+                <span id="desktopWidgetKicker" class="desktop-widget-kicker">私人桌面</span>
+                <h2 id="desktopWidgetTitle" class="desktop-widget-title">私人 AI 助手</h2>
+                <p id="desktopWidgetText" class="desktop-widget-text">干净、柔软、可装扮的专属手机桌面。</p>
+              </span>
+              <span class="desktop-widget-tip">长按拖动</span>
+            </button>
+
+            <div id="appLayerPage0" class="desktop-app-layer"></div>
+          </section>
+
+          <section class="desktop-page" data-page="1">
+            <div id="appLayerPage1" class="desktop-app-layer"></div>
+          </section>
+        </div>
+      </section>
+
+      <div id="desktopPageIndicator" class="desktop-page-indicator" aria-label="桌面页码">
+        <span class="desktop-page-dot active"></span>
+        <span class="desktop-page-dot"></span>
+      </div>
+
+      <nav id="dock" class="dock" aria-label="常用应用"></nav>
+    </main>
+
+    <div id="widgetModal" class="desktop-modal-mask">
+      <div class="desktop-modal-card">
+        <h2 class="desktop-modal-title">编辑小组件</h2>
+        <div class="desktop-modal-field">
+          <label>
+            小标题
+            <input id="widgetKickerInput" type="text" maxlength="20" placeholder="例如：私人桌面">
+          </label>
+          <label>
+            标题
+            <input id="widgetTitleInput" type="text" maxlength="28" placeholder="例如：私人 AI 助手">
+          </label>
+          <label>
+            文案
+            <textarea id="widgetTextInput" maxlength="120" placeholder="写一段放在桌面上的文字"></textarea>
+          </label>
+        </div>
+        <div class="desktop-modal-actions">
+          <button id="widgetCancelButton" class="desktop-modal-button" type="button">取消</button>
+          <button id="widgetResetButton" class="desktop-modal-button" type="button">恢复默认</button>
+          <button id="widgetSaveButton" class="desktop-modal-button primary" type="button">保存</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <input id="wallpaperInput" type="file" accept="image/*" class="hidden">
+  <input id="iconInput" type="file" accept="image/*" class="hidden">
+  <input id="avatarInput" type="file" accept="image/*" class="hidden">
+
+  <script type="module">
+    import { initTheme } from "./core/theme.js";
+    import { showAlert } from "./core/ui.js";
+
+    const STORAGE_KEYS = {
+      wallpaper: "ai_phone_wallpaper",
+      userAvatar: "ai_phone_user_avatar",
+      userName: "ai_phone_user_name",
+      appIcons: "ai_phone_app_icons",
+      appPages: "ai_phone_app_pages",
+      appPositions: "ai_phone_app_positions_v2",
+      widget: "ai_phone_desktop_widget",
+      widgetPosition: "ai_phone_desktop_widget_position",
+      currentDesktopPage: "ai_phone_current_desktop_page"
+    };
+
+    const DESKTOP_PAGE_COUNT = 2;
+
+    const DEFAULT_WIDGET = {
+      kicker: "私人桌面",
+      title: "私人 AI 助手",
+      text: "干净、柔软、可装扮的专属手机桌面。"
+    };
+
+    const ICONS = {
+      chat: `
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M5 6.5C5 4.57 6.57 3 8.5 3h7C17.43 3 19 4.57 19 6.5v5C19 13.43 17.43 15 15.5 15H11l-4.5 4v-4.1A3.5 3.5 0 0 1 5 12V6.5Z"></path>
+          <path d="M8.5 7.5h7"></path>
+          <path d="M8.5 10.5h4.5"></path>
+        </svg>
+      `,
+      moments: `
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 3.5v17"></path>
+          <path d="M4.5 12h15"></path>
+          <path d="M6.7 6.7l10.6 10.6"></path>
+          <path d="M17.3 6.7L6.7 17.3"></path>
+          <circle cx="12" cy="12" r="3.2"></circle>
+        </svg>
+      `,
+      call: `
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M8.2 4.5 10 8.7 8.4 10a11.5 11.5 0 0 0 5.6 5.6l1.3-1.6 4.2 1.8c.5.2.8.8.6 1.3l-.9 2.4c-.2.5-.7.8-1.2.8C10.2 20.3 3.7 13.8 3.7 6c0-.5.3-1 .8-1.2l2.4-.9c.5-.2 1.1.1 1.3.6Z"></path>
+          <path d="M14.5 5.5c1.8.5 3.2 1.9 3.8 3.7"></path>
+          <path d="M14.8 2.7c3.1.7 5.7 3.2 6.5 6.4"></path>
+        </svg>
+      `,
+      characters: `
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="12" cy="8" r="4"></circle>
+          <path d="M5 20c.8-4 3.3-6 7-6s6.2 2 7 6"></path>
+          <path d="M8.8 8.2h.1"></path>
+          <path d="M15.1 8.2h.1"></path>
+          <path d="M10 10.8c1.2.8 2.8.8 4 0"></path>
+        </svg>
+      `,
+      settings: `
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="12" cy="12" r="3"></circle>
+          <path d="M19.4 15a1.8 1.8 0 0 0 .36 1.98l.04.04a2.1 2.1 0 0 1-2.97 2.97l-.04-.04A1.8 1.8 0 0 0 14.8 19.6a1.8 1.8 0 0 0-1.3 1.72V21.4a2.1 2.1 0 0 1-4.2 0v-.08A1.8 1.8 0 0 0 8 19.6a1.8 1.8 0 0 0-1.98.36l-.04.04a2.1 2.1 0 0 1-2.97-2.97l.04-.04A1.8 1.8 0 0 0 3.4 15.2a1.8 1.8 0 0 0-1.72-1.3H1.6a2.1 2.1 0 0 1 0-4.2h.08A1.8 1.8 0 0 0 3.4 8a1.8 1.8 0 0 0-.36-1.98L3 5.98a2.1 2.1 0 0 1 2.97-2.97l.04.04A1.8 1.8 0 0 0 7.8 3.4a1.8 1.8 0 0 0 1.3-1.72V1.6a2.1 2.1 0 0 1 4.2 0v.08a1.8 1.8 0 0 0 1.3 1.72 1.8 1.8 0 0 0 1.98-.36l.04-.04a2.1 2.1 0 0 1 2.97 2.97l-.04.04A1.8 1.8 0 0 0 19.6 8c.25.78.95 1.32 1.72 1.32h.08a2.1 2.1 0 0 1 0 4.2h-.08A1.8 1.8 0 0 0 19.4 15Z"></path>
+        </svg>
+      `
+    };
+
+    const APPS = [
+      {
+        id: "chat",
+        name: "消息",
+        iconSvg: ICONS.chat,
+        icon: "",
+        module: "./apps/chat.js",
+        dock: true,
+        defaultPage: 0
+      },
+      {
+        id: "moments",
+        name: "朋友圈",
+        iconSvg: ICONS.moments,
+        icon: "",
+        module: "./apps/moments.js",
+        dock: true,
+        defaultPage: 0
+      },
+      {
+        id: "call",
+        name: "电话",
+        iconSvg: ICONS.call,
+        icon: "",
+        module: "./apps/call.js",
+        dock: true,
+        defaultPage: 0
+      },
+      {
+        id: "characters",
+        name: "角色管理",
+        iconSvg: ICONS.characters,
+        icon: "",
+        module: "./apps/characters.js",
+        dock: false,
+        defaultPage: 1
+      },
+      {
+        id: "settings",
+        name: "设置",
+        iconSvg: ICONS.settings,
+        icon: "",
+        module: "./apps/settings.js",
+        dock: true,
+        defaultPage: 1
+      }
+    ];
+
+    const appRoot = document.getElementById("appRoot");
+    const desktop = document.getElementById("desktop");
+    const desktopPages = document.getElementById("desktopPages");
+    const desktopPageIndicator = document.getElementById("desktopPageIndicator");
+    const statusTime = document.getElementById("statusTime");
+    const appLayerPage0 = document.getElementById("appLayerPage0");
+    const appLayerPage1 = document.getElementById("appLayerPage1");
+    const dock = document.getElementById("dock");
+
+    const userWidget = document.getElementById("userWidget");
+    const userAvatarImage = document.getElementById("userAvatarImage");
+    const userAvatarFallback = document.getElementById("userAvatarFallback");
+    const userWidgetName = document.getElementById("userWidgetName");
+
+    const desktopWidget = document.getElementById("desktopWidget");
+    const desktopWidgetKicker = document.getElementById("desktopWidgetKicker");
+    const desktopWidgetTitle = document.getElementById("desktopWidgetTitle");
+    const desktopWidgetText = document.getElementById("desktopWidgetText");
+
+    const widgetModal = document.getElementById("widgetModal");
+    const widgetKickerInput = document.getElementById("widgetKickerInput");
+    const widgetTitleInput = document.getElementById("widgetTitleInput");
+    const widgetTextInput = document.getElementById("widgetTextInput");
+    const widgetCancelButton = document.getElementById("widgetCancelButton");
+    const widgetResetButton = document.getElementById("widgetResetButton");
+    const widgetSaveButton = document.getElementById("widgetSaveButton");
+
+    const editWidgetButton = document.getElementById("editWidgetButton");
+    const wallpaperButton = document.getElementById("wallpaperButton");
+    const wallpaperInput = document.getElementById("wallpaperInput");
+    const iconInput = document.getElementById("iconInput");
+    const avatarInput = document.getElementById("avatarInput");
+
+    let pendingIconAppId = null;
+    let activeWindow = null;
+    let longPressTimer = null;
+    let currentDesktopPage = 0;
+    let touchStartX = 0;
+    let touchStartY = 0;
+    let touchEndX = 0;
+    let touchEndY = 0;
+    let dragMoved = false;
+    let appDragSwitchTimer = null;
+
+    function safeAlert(message) {
+      if (typeof showAlert === "function") {
+        showAlert(message);
+      } else {
+        console.warn(message);
+      }
+    }
+
+    function readJson(key, fallback) {
+      try {
+        const value = localStorage.getItem(key);
+        if (!value) return fallback;
+        return JSON.parse(value);
+      } catch {
+        return fallback;
+      }
+    }
+
+    function writeJson(key, value) {
+      localStorage.setItem(key, JSON.stringify(value));
+    }
+
+    function clamp(value, min, max) {
+      return Math.max(min, Math.min(max, value));
+    }
+
+    function readFileAsBase64(file) {
+      return new Promise((resolve, reject) => {
+        if (!file) {
+          reject(new Error("没有选择图片"));
+          return;
+        }
+
+        if (!file.type.startsWith("image/")) {
+          reject(new Error("请选择图片文件"));
+          return;
+        }
+
+        const reader = new FileReader();
+
+        reader.onload = () => {
+          resolve(reader.result);
+        };
+
+        reader.onerror = () => {
+          reject(new Error("图片读取失败"));
+        };
+
+        reader.readAsDataURL(file);
+      });
+    }
+
+    function getTimeContext() {
+      const now = new Date();
+      const weekNames = ["星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"];
+
+      return {
+        timestamp: now.toISOString(),
+        localText: `${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日 ${weekNames[now.getDay()]} ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`,
+        year: now.getFullYear(),
+        month: now.getMonth() + 1,
+        day: now.getDate(),
+        hour: now.getHours(),
+        minute: now.getMinutes(),
+        week: weekNames[now.getDay()]
+      };
+    }
+
+    function updateStatusTime() {
+      const now = new Date();
+      const hour = String(now.getHours()).padStart(2, "0");
+      const minute = String(now.getMinutes()).padStart(2, "0");
+      statusTime.textContent = `${hour}:${minute}`;
+    }
+
+    function loadWallpaper() {
+      const wallpaper = localStorage.getItem(STORAGE_KEYS.wallpaper);
+
+      if (wallpaper) {
+        desktop.style.backgroundImage = `linear-gradient(rgba(255,250,253,0.16), rgba(247,239,246,0.18)), url("${wallpaper}")`;
+      } else {
+        desktop.style.backgroundImage = "";
+      }
+    }
+
+    function setWallpaper(base64) {
+      localStorage.setItem(STORAGE_KEYS.wallpaper, base64);
+      loadWallpaper();
+    }
+
+    function clearWallpaper() {
+      localStorage.removeItem(STORAGE_KEYS.wallpaper);
+      loadWallpaper();
+    }
+
+    function loadUserAvatar() {
+      const avatar = localStorage.getItem(STORAGE_KEYS.userAvatar);
+      const name = localStorage.getItem(STORAGE_KEYS.userName) || "用户";
+
+      userWidgetName.textContent = name;
+
+      if (avatar) {
+        userAvatarImage.src = avatar;
+        userAvatarImage.classList.remove("hidden");
+        userAvatarFallback.classList.add("hidden");
+      } else {
+        userAvatarImage.removeAttribute("src");
+        userAvatarImage.classList.add("hidden");
+        userAvatarFallback.classList.remove("hidden");
+      }
+    }
+
+    function setUserAvatar(base64) {
+      localStorage.setItem(STORAGE_KEYS.userAvatar, base64);
+      loadUserAvatar();
+    }
+
+    function getWidgetData() {
+      const saved = readJson(STORAGE_KEYS.widget, null);
+      return {
+        kicker: saved && saved.kicker ? saved.kicker : DEFAULT_WIDGET.kicker,
+        title: saved && saved.title ? saved.title : DEFAULT_WIDGET.title,
+        text: saved && saved.text ? saved.text : DEFAULT_WIDGET.text
+      };
+    }
+
+    function setWidgetData(data) {
+      writeJson(STORAGE_KEYS.widget, {
+        kicker: data.kicker || DEFAULT_WIDGET.kicker,
+        title: data.title || DEFAULT_WIDGET.title,
+        text: data.text || DEFAULT_WIDGET.text
+      });
+
+      renderWidget();
+    }
+
+    function renderWidget() {
+      const data = getWidgetData();
+      const pos = readJson(STORAGE_KEYS.widgetPosition, { x: 14, y: 12 });
+
+      desktopWidgetKicker.textContent = data.kicker;
+      desktopWidgetTitle.textContent = data.title;
+      desktopWidgetText.textContent = data.text;
+
+      desktopWidget.style.left = `${Number.isFinite(Number(pos.x)) ? Number(pos.x) : 14}px`;
+      desktopWidget.style.top = `${Number.isFinite(Number(pos.y)) ? Number(pos.y) : 12}px`;
+    }
+
+    function openWidgetModal() {
+      const data = getWidgetData();
+
+      widgetKickerInput.value = data.kicker;
+      widgetTitleInput.value = data.title;
+      widgetTextInput.value = data.text;
+      widgetModal.classList.add("show");
+    }
+
+    function closeWidgetModal() {
+      widgetModal.classList.remove("show");
+    }
+
+    function getStoredAppIcons() {
+      return readJson(STORAGE_KEYS.appIcons, {});
+    }
+
+    function setStoredAppIcon(appId, base64) {
+      const icons = getStoredAppIcons();
+      icons[appId] = base64;
+      writeJson(STORAGE_KEYS.appIcons, icons);
+    }
+
+    function resetStoredAppIcon(appId) {
+      const icons = getStoredAppIcons();
+      delete icons[appId];
+      writeJson(STORAGE_KEYS.appIcons, icons);
+      renderApps();
+    }
+
+    function getStoredAppPages() {
+      const savedPages = readJson(STORAGE_KEYS.appPages, {});
+      const result = {};
+
+      APPS.forEach((app) => {
+        const savedPage = Number(savedPages[app.id]);
+        const defaultPage = Number(app.defaultPage) || 0;
+
+        if (Number.isInteger(savedPage) && savedPage >= 0 && savedPage < DESKTOP_PAGE_COUNT) {
+          result[app.id] = savedPage;
+        } else {
+          result[app.id] = Math.min(Math.max(defaultPage, 0), DESKTOP_PAGE_COUNT - 1);
+        }
+      });
+
+      return result;
+    }
+
+    function setAppPage(appId, pageIndex) {
+      const pages = getStoredAppPages();
+      const targetPage = clamp(Number(pageIndex) || 0, 0, DESKTOP_PAGE_COUNT - 1);
+      pages[appId] = targetPage;
+      writeJson(STORAGE_KEYS.appPages, pages);
+      renderApps();
+      setDesktopPage(targetPage);
+    }
+
+    function getStoredAppPositions() {
+      return readJson(STORAGE_KEYS.appPositions, {});
+    }
+
+    function setStoredAppPosition(appId, pageIndex, x, y) {
+      const positions = getStoredAppPositions();
+      positions[`${pageIndex}_${appId}`] = {
+        x: Math.round(x),
+        y: Math.round(y)
+      };
+      writeJson(STORAGE_KEYS.appPositions, positions);
+    }
+
+    function defaultAppPosition(index) {
+      const pageWidth = window.innerWidth;
+      const usableWidth = Math.min(pageWidth, 560);
+      const leftBase = pageWidth > 720 ? (pageWidth - usableWidth) / 2 + 14 : 14;
+      const cellWidth = Math.max(82, (usableWidth - 28) / 4);
+      const col = index % 4;
+      const row = Math.floor(index / 4);
+
+      return {
+        x: Math.round(leftBase + col * cellWidth),
+        y: Math.round(190 + row * 94)
+      };
+    }
+
+    function getAppIcon(app) {
+      const icons = getStoredAppIcons();
+
+      if (icons[app.id]) {
+        return {
+          type: "image",
+          value: icons[app.id]
+        };
+      }
+
+      if (app.icon) {
+        return {
+          type: "image",
+          value: app.icon
+        };
+      }
+
+      return {
+        type: "svg",
+        value: app.iconSvg || ""
+      };
+    }
+
+    function createIconInner(app) {
+      const iconBox = document.createElement("span");
+      const icon = getAppIcon(app);
+
+      iconBox.className = "app-icon-image";
+
+      if (icon.type === "image") {
+        const img = document.createElement("img");
+        img.src = icon.value;
+        img.alt = app.name;
+        iconBox.appendChild(img);
+      } else {
+        iconBox.innerHTML = icon.value;
+      }
+
+      return iconBox;
+    }
+
+    function createAppIconElement(app, pageIndex, visualIndex) {
+      const button = document.createElement("button");
+      const name = document.createElement("span");
+      const positions = getStoredAppPositions();
+      const savedPosition = positions[`${pageIndex}_${app.id}`];
+      const pos = savedPosition || defaultAppPosition(visualIndex);
+
+      button.type = "button";
+      button.className = "app-icon";
+      button.dataset.appId = app.id;
+      button.dataset.pageIndex = String(pageIndex);
+      button.title = app.name;
+      button.style.left = `${pos.x}px`;
+      button.style.top = `${pos.y}px`;
+
+      name.className = "app-icon-name";
+      name.textContent = app.name;
+
+      button.appendChild(createIconInner(app));
+      button.appendChild(name);
+
+      button.addEventListener("click", (event) => {
+        if (dragMoved) {
+          event.preventDefault();
+          event.stopPropagation();
+          return;
+        }
+
+        openApp(app.id);
+      });
+
+      button.addEventListener("contextmenu", (event) => {
+        event.preventDefault();
+        showAppContextMenu(event.clientX, event.clientY, app.id);
+      });
+
+      button.addEventListener("pointerdown", (event) => {
+        startAppDrag(event, button, app.id);
+      });
+
+      button.addEventListener("touchstart", () => {
+        clearLongPressTimer();
+
+        longPressTimer = window.setTimeout(() => {
+          const rect = button.getBoundingClientRect();
+          showAppContextMenu(rect.left + rect.width / 2, rect.top + rect.height / 2, app.id);
+        }, 650);
+      }, { passive: true });
+
+      button.addEventListener("touchend", clearLongPressTimer, { passive: true });
+      button.addEventListener("touchmove", clearLongPressTimer, { passive: true });
+      button.addEventListener("touchcancel", clearLongPressTimer, { passive: true });
+
+      return button;
+    }
+
+    function createDockIconElement(app) {
+      const button = document.createElement("button");
+
+      button.type = "button";
+      button.className = "dock-icon";
+      button.dataset.appId = app.id;
+      button.title = app.name;
+      button.appendChild(createIconInner(app));
+
+      button.addEventListener("click", () => {
+        openApp(app.id);
+      });
+
+      button.addEventListener("contextmenu", (event) => {
+        event.preventDefault();
+        showAppContextMenu(event.clientX, event.clientY, app.id);
+      });
+
+      return button;
+    }
+
+    function renderApps() {
+      const pages = getStoredAppPages();
+      const pageCounters = [0, 0];
+
+      appLayerPage0.innerHTML = "";
+      appLayerPage1.innerHTML = "";
+      dock.innerHTML = "";
+
+      APPS.forEach((app) => {
+        const pageIndex = pages[app.id] || 0;
+        const targetLayer = pageIndex === 0 ? appLayerPage0 : appLayerPage1;
+        const visualIndex = pageCounters[pageIndex];
+
+        targetLayer.appendChild(createAppIconElement(app, pageIndex, visualIndex));
+        pageCounters[pageIndex] += 1;
+
+        if (app.dock) {
+          dock.appendChild(createDockIconElement(app));
+        }
+      });
+    }
+
+    function setDesktopPage(pageIndex) {
+      currentDesktopPage = clamp(Number(pageIndex) || 0, 0, DESKTOP_PAGE_COUNT - 1);
+      desktopPages.style.transform = `translateX(-${currentDesktopPage * 50}%)`;
+      localStorage.setItem(STORAGE_KEYS.currentDesktopPage, String(currentDesktopPage));
+
+      Array.from(desktopPageIndicator.children).forEach((dot, index) => {
+        dot.classList.toggle("active", index === currentDesktopPage);
+      });
+    }
+
+    function clearLongPressTimer() {
+      if (longPressTimer) {
+        window.clearTimeout(longPressTimer);
+        longPressTimer = null;
+      }
+    }
+
+    function clearAppDragSwitchTimer() {
+      if (appDragSwitchTimer) {
+        window.clearTimeout(appDragSwitchTimer);
+        appDragSwitchTimer = null;
+      }
+    }
+
+    function startAppDrag(event, button, appId) {
+      if (event.button && event.button !== 0) return;
+
+      const startX = event.clientX;
+      const startY = event.clientY;
+      const originLeft = parseFloat(button.style.left) || 0;
+      const originTop = parseFloat(button.style.top) || 0;
+      const pageElement = button.closest(".desktop-page");
+      let moved = false;
+
+      button.setPointerCapture(event.pointerId);
+
+      button.onpointermove = (moveEvent) => {
+        const dx = moveEvent.clientX - startX;
+        const dy = moveEvent.clientY - startY;
+
+        if (Math.abs(dx) + Math.abs(dy) > 6) {
+          moved = true;
+          dragMoved = true;
+          clearLongPressTimer();
+          button.classList.add("dragging");
+        }
+
+        if (!moved) return;
+
+        const pageRect = pageElement.getBoundingClientRect();
+        const nextLeft = clamp(originLeft + dx, 0, pageRect.width - button.offsetWidth);
+        const nextTop = clamp(originTop + dy, 0, pageRect.height - button.offsetHeight - 10);
+
+        button.style.left = `${nextLeft}px`;
+        button.style.top = `${nextTop}px`;
+
+        if (moveEvent.clientX > window.innerWidth - 28 && currentDesktopPage < DESKTOP_PAGE_COUNT - 1) {
+          if (!appDragSwitchTimer) {
+            appDragSwitchTimer = window.setTimeout(() => {
+              setAppPage(appId, currentDesktopPage + 1);
+              clearAppDragSwitchTimer();
+            }, 520);
+          }
+        } else if (moveEvent.clientX < 28 && currentDesktopPage > 0) {
+          if (!appDragSwitchTimer) {
+            appDragSwitchTimer = window.setTimeout(() => {
+              setAppPage(appId, currentDesktopPage - 1);
+              clearAppDragSwitchTimer();
+            }, 520);
+          }
+        } else {
+          clearAppDragSwitchTimer();
+        }
+      };
+
+      button.onpointerup = (upEvent) => {
+        button.releasePointerCapture(upEvent.pointerId);
+        button.onpointermove = null;
+        button.onpointerup = null;
+        button.classList.remove("dragging");
+        clearAppDragSwitchTimer();
+
+        if (moved) {
+          const pageIndex = Number(button.dataset.pageIndex) || currentDesktopPage;
+          setStoredAppPosition(appId, pageIndex, parseFloat(button.style.left) || 0, parseFloat(button.style.top) || 0);
+
+          window.setTimeout(() => {
+            dragMoved = false;
+          }, 120);
+        } else {
+          dragMoved = false;
+        }
+      };
+    }
+
+    function bindWidgetDrag() {
+      let startX = 0;
+      let startY = 0;
+      let originLeft = 14;
+      let originTop = 12;
+      let moved = false;
+
+      desktopWidget.addEventListener("pointerdown", (event) => {
+        if (event.button && event.button !== 0) return;
+
+        startX = event.clientX;
+        startY = event.clientY;
+        originLeft = parseFloat(desktopWidget.style.left) || 14;
+        originTop = parseFloat(desktopWidget.style.top) || 12;
+        moved = false;
+
+        desktopWidget.setPointerCapture(event.pointerId);
+
+        desktopWidget.onpointermove = (moveEvent) => {
+          const dx = moveEvent.clientX - startX;
+          const dy = moveEvent.clientY - startY;
+
+          if (Math.abs(dx) + Math.abs(dy) > 5) {
+            moved = true;
+            desktopWidget.classList.add("dragging");
+          }
+
+          if (!moved) return;
+
+          const pageElement = desktopWidget.closest(".desktop-page");
+          const pageRect = pageElement.getBoundingClientRect();
+
+          desktopWidget.style.left = `${clamp(originLeft + dx, 0, pageRect.width - desktopWidget.offsetWidth)}px`;
+          desktopWidget.style.top = `${clamp(originTop + dy, 0, pageRect.height - desktopWidget.offsetHeight - 12)}px`;
+        };
+
+        desktopWidget.onpointerup = (upEvent) => {
+          desktopWidget.releasePointerCapture(upEvent.pointerId);
+          desktopWidget.onpointermove = null;
+          desktopWidget.onpointerup = null;
+          desktopWidget.classList.remove("dragging");
+
+          if (moved) {
+            writeJson(STORAGE_KEYS.widgetPosition, {
+              x: parseFloat(desktopWidget.style.left) || 14,
+              y: parseFloat(desktopWidget.style.top) || 12
+            });
+          } else {
+            openWidgetModal();
+          }
+        };
+      });
+    }
+
+    function showAppContextMenu(x, y, appId) {
+      closeContextMenu();
+
+      const pages = getStoredAppPages();
+      const currentPage = pages[appId] || 0;
+      const targetPage = currentPage === 0 ? 1 : 0;
+
+      const menu = document.createElement("div");
+      const changeIconButton = document.createElement("button");
+      const resetIconButton = document.createElement("button");
+      const moveButton = document.createElement("button");
+      const divider = document.createElement("div");
+
+      menu.className = "context-menu";
+      menu.id = "desktopContextMenu";
+
+      changeIconButton.type = "button";
+      changeIconButton.textContent = "更换图标";
+      changeIconButton.addEventListener("click", () => {
+        pendingIconAppId = appId;
+        iconInput.value = "";
+        iconInput.click();
+        closeContextMenu();
+      });
+
+      resetIconButton.type = "button";
+      resetIconButton.textContent = "恢复默认图标";
+      resetIconButton.addEventListener("click", () => {
+        resetStoredAppIcon(appId);
+        closeContextMenu();
+      });
+
+      divider.className = "context-menu-divider";
+
+      moveButton.type = "button";
+      moveButton.textContent = `移动到桌面 ${targetPage + 1}`;
+      moveButton.addEventListener("click", () => {
+        setAppPage(appId, targetPage);
+        closeContextMenu();
+      });
+
+      menu.appendChild(changeIconButton);
+      menu.appendChild(resetIconButton);
+      menu.appendChild(divider);
+      menu.appendChild(moveButton);
+
+      document.body.appendChild(menu);
+      placeContextMenu(menu, x, y);
+    }
+
+    function showDesktopContextMenu(event) {
+      closeContextMenu();
+
+      const menu = document.createElement("div");
+      const editWidgetMenuButton = document.createElement("button");
+      const changeWallpaperButton = document.createElement("button");
+      const clearWallpaperButton = document.createElement("button");
+      const resetLayoutButton = document.createElement("button");
+      const divider = document.createElement("div");
+
+      menu.className = "context-menu";
+      menu.id = "desktopContextMenu";
+
+      editWidgetMenuButton.type = "button";
+      editWidgetMenuButton.textContent = "编辑小组件";
+      editWidgetMenuButton.addEventListener("click", () => {
+        openWidgetModal();
+        closeContextMenu();
+      });
+
+      changeWallpaperButton.type = "button";
+      changeWallpaperButton.textContent = "更换壁纸";
+      changeWallpaperButton.addEventListener("click", () => {
+        wallpaperInput.value = "";
+        wallpaperInput.click();
+        closeContextMenu();
+      });
+
+      clearWallpaperButton.type = "button";
+      clearWallpaperButton.textContent = "清除壁纸";
+      clearWallpaperButton.addEventListener("click", () => {
+        clearWallpaper();
+        closeContextMenu();
+      });
+
+      divider.className = "context-menu-divider";
+
+      resetLayoutButton.type = "button";
+      resetLayoutButton.textContent = "重置桌面布局";
+      resetLayoutButton.className = "danger";
+      resetLayoutButton.addEventListener("click", () => {
+        localStorage.removeItem(STORAGE_KEYS.appPositions);
+        localStorage.removeItem(STORAGE_KEYS.widgetPosition);
+        renderWidget();
+        renderApps();
+        closeContextMenu();
+      });
+
+      menu.appendChild(editWidgetMenuButton);
+      menu.appendChild(changeWallpaperButton);
+      menu.appendChild(clearWallpaperButton);
+      menu.appendChild(divider);
+      menu.appendChild(resetLayoutButton);
+
+      document.body.appendChild(menu);
+      placeContextMenu(menu, event.clientX, event.clientY);
+    }
+
+    function placeContextMenu(menu, x, y) {
+      const menuRect = menu.getBoundingClientRect();
+      const maxLeft = window.innerWidth - menuRect.width - 8;
+      const maxTop = window.innerHeight - menuRect.height - 8;
+
+      menu.style.left = `${Math.max(8, Math.min(x, maxLeft))}px`;
+      menu.style.top = `${Math.max(8, Math.min(y, maxTop))}px`;
+
+      window.setTimeout(() => {
+        document.addEventListener("click", closeContextMenu, { once: true });
+      }, 0);
+    }
+
+    function closeContextMenu() {
+      const oldMenu = document.getElementById("desktopContextMenu");
+
+      if (oldMenu) {
+        oldMenu.remove();
+      }
+    }
+
+    function createAppWindow(app) {
+      closeActiveWindow();
+
+      const windowElement = document.createElement("section");
+      const header = document.createElement("header");
+      const backButton = document.createElement("button");
+      const title = document.createElement("h1");
+      const rightSpace = document.createElement("div");
+      const body = document.createElement("div");
+
+      windowElement.className = "app-window";
+      windowElement.dataset.appId = app.id;
+
+      header.className = "app-header";
+
+      backButton.type = "button";
+      backButton.className = "back-home-button";
+      backButton.title = "返回桌面";
+      backButton.innerHTML = `
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M15 5 8 12l7 7"></path>
+        </svg>
+        <span>返回桌面</span>
+      `;
+      backButton.addEventListener("click", closeActiveWindow);
+
+      title.className = "app-title";
+      title.textContent = app.name;
+
+      rightSpace.className = "app-header-right";
+
+      body.className = "app-body";
+      body.id = `appBody-${app.id}`;
+
+      header.appendChild(backButton);
+      header.appendChild(title);
+      header.appendChild(rightSpace);
+
+      windowElement.appendChild(header);
+      windowElement.appendChild(body);
+
+      appRoot.appendChild(windowElement);
+      activeWindow = windowElement;
+
+      return body;
+    }
+
+    function closeActiveWindow() {
+      if (activeWindow) {
+        activeWindow.remove();
+        activeWindow = null;
+      }
+    }
+
+    function renderMissingApp(body, app, error) {
+      body.innerHTML = "";
+
+      const empty = document.createElement("div");
+      const title = document.createElement("div");
+      const desc = document.createElement("p");
+
+      empty.className = "empty-state";
+
+      title.textContent = `${app.name} 暂未完成`;
+      title.style.fontWeight = "800";
+
+      desc.textContent = "对应模块写好后，这里会自动打开。";
+
+      empty.appendChild(title);
+      empty.appendChild(desc);
+      body.appendChild(empty);
+
+      if (error) {
+        console.warn(`${app.name} 加载失败：`, error);
+      }
+    }
+
+    async function openApp(appId) {
+      const app = APPS.find((item) => item.id === appId);
+
+      if (!app) return;
+
+      const body = createAppWindow(app);
+
+      try {
+        const module = await import(app.module);
+
+        if (typeof module.mountApp === "function") {
+          module.mountApp({
+            root: body,
+            app,
+            close: closeActiveWindow,
+            getTimeContext,
+            openApp
+          });
+          return;
+        }
+
+        if (typeof module.default === "function") {
+          module.default({
+            root: body,
+            app,
+            close: closeActiveWindow,
+            getTimeContext,
+            openApp
+          });
+          return;
+        }
+
+        renderMissingApp(body, app);
+      } catch (error) {
+        renderMissingApp(body, app, error);
+      }
+    }
+
+    function bindDesktopSwipe() {
+      desktop.addEventListener("touchstart", (event) => {
+        if (activeWindow) return;
+
+        const clickedControl = event.target.closest(".app-icon, .dock-icon, .user-widget, .desktop-widget, .desktop-action-button");
+
+        if (clickedControl) return;
+
+        const touch = event.touches[0];
+        touchStartX = touch.clientX;
+        touchStartY = touch.clientY;
+        touchEndX = touch.clientX;
+        touchEndY = touch.clientY;
+      }, { passive: true });
+
+      desktop.addEventListener("touchmove", (event) => {
+        if (activeWindow) return;
+
+        const touch = event.touches[0];
+        touchEndX = touch.clientX;
+        touchEndY = touch.clientY;
+      }, { passive: true });
+
+      desktop.addEventListener("touchend", () => {
+        if (activeWindow) return;
+
+        const diffX = touchEndX - touchStartX;
+        const diffY = touchEndY - touchStartY;
+
+        if (Math.abs(diffX) < 55) return;
+        if (Math.abs(diffX) < Math.abs(diffY) * 1.4) return;
+
+        if (diffX < 0) {
+          setDesktopPage(currentDesktopPage + 1);
+        } else {
+          setDesktopPage(currentDesktopPage - 1);
+        }
+      }, { passive: true });
+
+      desktop.addEventListener("wheel", (event) => {
+        if (activeWindow) return;
+        if (Math.abs(event.deltaX) < 20) return;
+
+        if (event.deltaX > 0) {
+          setDesktopPage(currentDesktopPage + 1);
+        } else {
+          setDesktopPage(currentDesktopPage - 1);
+        }
+      }, { passive: true });
+    }
+
+    function bindEvents() {
+      desktop.addEventListener("contextmenu", (event) => {
+        const clickedApp = event.target.closest(".app-icon, .dock-icon, .user-widget, .desktop-action-button, .desktop-widget");
+
+        if (clickedApp) return;
+
+        event.preventDefault();
+        showDesktopContextMenu(event);
+      });
+
+      desktopPageIndicator.addEventListener("click", (event) => {
+        const dot = event.target.closest(".desktop-page-dot");
+
+        if (!dot) return;
+
+        const index = Array.from(desktopPageIndicator.children).indexOf(dot);
+        setDesktopPage(index);
+      });
+
+      userWidget.addEventListener("click", () => {
+        avatarInput.value = "";
+        avatarInput.click();
+      });
+
+      editWidgetButton.addEventListener("click", openWidgetModal);
+
+      wallpaperButton.addEventListener("click", () => {
+        wallpaperInput.value = "";
+        wallpaperInput.click();
+      });
+
+      widgetModal.addEventListener("click", (event) => {
+        if (event.target === widgetModal) {
+          closeWidgetModal();
+        }
+      });
+
+      widgetCancelButton.addEventListener("click", closeWidgetModal);
+
+      widgetResetButton.addEventListener("click", () => {
+        setWidgetData(DEFAULT_WIDGET);
+        closeWidgetModal();
+      });
+
+      widgetSaveButton.addEventListener("click", () => {
+        setWidgetData({
+          kicker: widgetKickerInput.value.trim() || DEFAULT_WIDGET.kicker,
+          title: widgetTitleInput.value.trim() || DEFAULT_WIDGET.title,
+          text: widgetTextInput.value.trim() || DEFAULT_WIDGET.text
+        });
+
+        closeWidgetModal();
+      });
+
+      wallpaperInput.addEventListener("change", async () => {
+        try {
+          const file = wallpaperInput.files[0];
+          const base64 = await readFileAsBase64(file);
+          setWallpaper(base64);
+        } catch (error) {
+          safeAlert(error.message || "壁纸设置失败");
+        }
+      });
+
+      iconInput.addEventListener("change", async () => {
+        try {
+          if (!pendingIconAppId) return;
+
+          const file = iconInput.files[0];
+          const base64 = await readFileAsBase64(file);
+
+          setStoredAppIcon(pendingIconAppId, base64);
+          renderApps();
+
+          pendingIconAppId = null;
+        } catch (error) {
+          safeAlert(error.message || "图标设置失败");
+        }
+      });
+
+      avatarInput.addEventListener("change", async () => {
+        try {
+          const file = avatarInput.files[0];
+          const base64 = await readFileAsBase64(file);
+          setUserAvatar(base64);
+        } catch (error) {
+          safeAlert(error.message || "头像设置失败");
+        }
+      });
+
+      window.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") {
+          closeContextMenu();
+          closeWidgetModal();
+
+          if (activeWindow) {
+            closeActiveWindow();
+          }
+        }
+
+        if (!activeWindow && event.key === "ArrowLeft") {
+          setDesktopPage(currentDesktopPage - 1);
+        }
+
+        if (!activeWindow && event.key === "ArrowRight") {
+          setDesktopPage(currentDesktopPage + 1);
+        }
+      });
+
+      window.addEventListener("resize", () => {
+        renderApps();
+        renderWidget();
+      });
+
+      bindDesktopSwipe();
+      bindWidgetDrag();
+    }
+
+    function exposeGlobalHelpers() {
+      window.AIPhoneTime = {
+        getTimeContext
+      };
+
+      window.AIPhoneDesktop = {
+        openApp,
+        closeActiveWindow
+      };
+    }
+
+    function init() {
+      initTheme();
+      exposeGlobalHelpers();
+
+      updateStatusTime();
+      window.setInterval(updateStatusTime, 1000);
+
+      loadWallpaper();
+      loadUserAvatar();
+      renderWidget();
+      renderApps();
+
+      const savedPage = Number(localStorage.getItem(STORAGE_KEYS.currentDesktopPage));
+      setDesktopPage(Number.isInteger(savedPage) ? savedPage : 0);
+
+      bindEvents();
+    }
+
+    init();
+  </script>
+</body>
+</html>
