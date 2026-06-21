@@ -1,0 +1,683 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
+  <meta name="theme-color" content="#fbf7f0" />
+  <title>AI 手机桌面系统</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <div id="root" class="app-root">
+    <div class="status-bar">
+      <div id="statusTime">00:00</div>
+      <div class="status-cluster">
+        <svg class="signal-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M5 17v-3M10 17v-6M15 17V8M20 17V5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path>
+        </svg>
+        <span>5G</span>
+        <svg class="battery-icon" viewBox="0 0 28 16" aria-hidden="true">
+          <path d="M2 4a3 3 0 0 1 3-3h16a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3H5a3 3 0 0 1-3-3V4Z" fill="none" stroke="currentColor" stroke-width="1.8"></path>
+          <path d="M25 6h1.5v4H25" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path>
+          <path d="M5 4h13a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2H5V4Z" fill="currentColor" opacity=".42"></path>
+        </svg>
+      </div>
+    </div>
+
+    <main id="desktop" class="desktop">
+      <div id="desktopPages" class="desktop-pages">
+        <section class="desktop-page" data-page="0">
+          <div class="widget-layer" data-widget-layer="0"></div>
+          <div class="icon-layer" data-icon-layer="0"></div>
+        </section>
+        <section class="desktop-page" data-page="1">
+          <div class="widget-layer" data-widget-layer="1"></div>
+          <div class="icon-layer" data-icon-layer="1"></div>
+        </section>
+      </div>
+      <div id="pageDots" class="page-dots"></div>
+      <nav id="dock" class="dock" aria-label="常用应用"></nav>
+    </main>
+  </div>
+
+  <section id="appWindow" class="app-window" aria-live="polite"></section>
+
+  <script type="module">
+    import {
+      APP_DEFINITIONS,
+      readState,
+      updateState,
+      clearUnread,
+    } from "./core/storage.js";
+    import { restoreThemeFromStorage } from "./core/theme.js";
+    import {
+      ICONS,
+      createElement,
+      clear,
+      toast,
+    } from "./core/ui.js";
+
+    const root = document.getElementById("root");
+    const desktop = document.getElementById("desktop");
+    const desktopPages = document.getElementById("desktopPages");
+    const pageDots = document.getElementById("pageDots");
+    const dock = document.getElementById("dock");
+    const appWindow = document.getElementById("appWindow");
+    const statusTime = document.getElementById("statusTime");
+
+    const appModules = new Map();
+    const desktopModel = {
+      state: readState(),
+      currentPage: 0,
+      editing: false,
+      drag: null,
+      weather: null,
+      swipe: null,
+      editTimer: 0,
+      weatherTimer: 0,
+    };
+
+    restoreThemeFromStorage();
+    boot();
+
+    function boot() {
+      desktopModel.currentPage = Number(desktopModel.state.desktop.currentPage || 0);
+      renderDesktop();
+      updateClock();
+      loadWeather();
+      bindGlobalEvents();
+
+      setInterval(updateClock, 1000);
+      desktopModel.weatherTimer = setInterval(loadWeather, 20 * 60 * 1000);
+    }
+
+    function bindGlobalEvents() {
+      window.addEventListener("app:close", closeApp);
+      window.addEventListener("app:open", (event) => {
+        if (event.detail?.appId) openApp(event.detail.appId);
+      });
+      window.addEventListener("storage", () => {
+        desktopModel.state = readState();
+        renderDesktop();
+      });
+      window.addEventListener("resize", () => {
+        clampAllItemsIntoPages();
+        renderDesktop();
+      });
+
+      desktopPages.addEventListener("pointerdown", onDesktopPointerDown);
+      desktopPages.addEventListener("pointermove", onDesktopPointerMove);
+      desktopPages.addEventListener("pointerup", onDesktopPointerUp);
+      desktopPages.addEventListener("pointercancel", onDesktopPointerUp);
+    }
+
+    function renderDesktop() {
+      desktopModel.state = readState();
+      applyWallpaper();
+      renderPages();
+      renderDock();
+      renderDots();
+      goToPage(desktopModel.currentPage, false);
+    }
+
+    function applyWallpaper() {
+      const wallpaper = desktopModel.state.desktop.wallpaper || "";
+      root.style.setProperty("--wallpaper", wallpaper ? `url("${wallpaper}")` : "none");
+    }
+
+    function renderPages() {
+      document.querySelectorAll("[data-widget-layer]").forEach(clear);
+      document.querySelectorAll("[data-icon-layer]").forEach(clear);
+
+      Object.values(desktopModel.state.desktop.widgets || {}).forEach((widget) => {
+        if (!widget.enabled) return;
+        const layer = document.querySelector(`[data-widget-layer="${normalizePage(widget.page)}"]`);
+        if (!layer) return;
+        layer.append(createWidgetNode(widget));
+      });
+
+      const dockIds = new Set(desktopModel.state.desktop.dock || []);
+      APP_DEFINITIONS.forEach((app) => {
+        if (dockIds.has(app.id)) return;
+        const position = normalizeDesktopAppPosition(app.id);
+        const layer = document.querySelector(`[data-icon-layer="${position.page}"]`);
+        if (!layer) return;
+        layer.append(createAppIconNode(app, position, false));
+      });
+    }
+
+    function renderDock() {
+      clear(dock);
+      (desktopModel.state.desktop.dock || []).forEach((appId) => {
+        const app = APP_DEFINITIONS.find((item) => item.id === appId);
+        if (!app) return;
+        dock.append(createAppIconNode(app, { page: 0, x: 0, y: 0 }, true));
+      });
+    }
+
+    function renderDots() {
+      clear(pageDots);
+      [0, 1].forEach((page) => {
+        pageDots.append(createElement("span", {
+          className: `page-dot ${page === desktopModel.currentPage ? "active" : ""}`,
+        }));
+      });
+    }
+
+    function createWidgetNode(widget) {
+      const node = createElement("article", {
+        className: `desktop-widget widget-${widget.type || "small"} ${widget.id === "clock" ? "photo-widget" : ""}`,
+        dataset: {
+          draggableType: "widget",
+          itemId: widget.id,
+          page: String(normalizePage(widget.page)),
+        },
+        style: {
+          left: `${Number(widget.x) || 0}px`,
+          top: `${Number(widget.y) || 0}px`,
+          width: widget.width ? `${widget.width}px` : "",
+          height: widget.height ? `${widget.height}px` : "",
+        },
+      });
+
+      if (widget.id === "clock") {
+        node.style.backgroundImage = desktopModel.state.desktop.clockWidgetImage
+          ? `url("${desktopModel.state.desktop.clockWidgetImage}")`
+          : "";
+        node.append(createElement("div", {
+          className: "widget-content",
+          children: [
+            createElement("div", { className: "widget-title", text: "现在" }),
+            createElement("div", { className: "widget-value", attrs: { "data-clock-value": "" }, text: "00:00" }),
+            createElement("div", { className: "widget-note", attrs: { "data-clock-note": "" }, text: "" }),
+          ],
+        }));
+      }
+
+      if (widget.id === "weather") {
+        node.append(createElement("div", {
+          className: "widget-content",
+          children: [
+            createElement("div", { className: "widget-title", text: desktopModel.weather?.city || desktopModel.state.desktop.weatherCity || "温州" }),
+            createElement("div", { className: "widget-value", text: `${desktopModel.weather?.temperature ?? "--"}°` }),
+            createElement("div", { className: "widget-note", text: desktopModel.weather?.text || "正在更新" }),
+          ],
+        }));
+      }
+
+      if (widget.id === "anniversary") {
+        const next = getNextAnniversary();
+        node.append(createElement("div", {
+          className: "widget-content",
+          children: [
+            createElement("div", { className: "widget-title", text: "纪念日" }),
+            createElement("div", { className: "widget-value", text: next ? `${next.days}天` : "--" }),
+            createElement("div", { className: "widget-note", text: next ? next.title : "还没有纪念日" }),
+          ],
+        }));
+      }
+
+      bindHoldToEdit(node);
+      return node;
+    }
+
+    function createAppIconNode(app, position, inDock) {
+      const custom = desktopModel.state.desktop.customApps?.[app.id] || {};
+      const unread = Number(desktopModel.state.unreadBadges?.[app.id] || 0);
+      const name = custom.name || app.name;
+      const iconImage = custom.icon || "";
+
+      const node = createElement("button", {
+        className: "app-icon",
+        dataset: inDock ? { appId: app.id, dockIcon: "true" } : {
+          draggableType: "app",
+          itemId: app.id,
+          appId: app.id,
+          page: String(position.page),
+        },
+        style: inDock ? {} : {
+          left: `${position.x}px`,
+          top: `${position.y}px`,
+        },
+        children: [
+          createElement("span", {
+            className: "app-icon-art",
+            children: [
+              iconImage
+                ? createElement("img", { className: "app-icon-image", attrs: { src: iconImage, alt: name } })
+                : createElement("span", { html: ICONS[app.id] || ICONS.settings }),
+            ],
+          }),
+          createElement("span", { className: "app-icon-name", text: name }),
+          unread > 0 ? createElement("span", { className: "badge", text: unread > 99 ? "99" : String(unread) }) : null,
+        ].filter(Boolean),
+      });
+
+      node.addEventListener("click", (event) => {
+        if (desktopModel.editing || desktopModel.drag?.moved) {
+          event.preventDefault();
+          return;
+        }
+        openApp(app.id);
+      });
+
+      if (!inDock) bindHoldToEdit(node);
+
+      return node;
+    }
+
+    function bindHoldToEdit(node) {
+      let timer = 0;
+      let startX = 0;
+      let startY = 0;
+
+      node.addEventListener("pointerdown", (event) => {
+        if (event.button !== undefined && event.button !== 0) return;
+        startX = event.clientX;
+        startY = event.clientY;
+        timer = window.setTimeout(() => {
+          enterEditMode();
+          startDrag(event, node);
+        }, 420);
+      });
+
+      node.addEventListener("pointermove", (event) => {
+        if (Math.abs(event.clientX - startX) > 8 || Math.abs(event.clientY - startY) > 8) {
+          clearTimeout(timer);
+        }
+      });
+
+      node.addEventListener("pointerup", () => clearTimeout(timer));
+      node.addEventListener("pointercancel", () => clearTimeout(timer));
+    }
+
+    function onDesktopPointerDown(event) {
+      const target = event.target.closest("[data-draggable-type]");
+      if (!target) {
+        desktopModel.swipe = {
+          startX: event.clientX,
+          startY: event.clientY,
+          pointerId: event.pointerId,
+        };
+        return;
+      }
+
+      if (desktopModel.editing) {
+        startDrag(event, target);
+      }
+    }
+
+    function onDesktopPointerMove(event) {
+      if (desktopModel.drag) {
+        moveDrag(event);
+        return;
+      }
+
+      if (!desktopModel.swipe || desktopModel.editing) return;
+      const dx = event.clientX - desktopModel.swipe.startX;
+      const dy = event.clientY - desktopModel.swipe.startY;
+      if (Math.abs(dx) > 66 && Math.abs(dx) > Math.abs(dy) * 1.4) {
+        goToPage(dx < 0 ? desktopModel.currentPage + 1 : desktopModel.currentPage - 1);
+        desktopModel.swipe = null;
+      }
+    }
+
+    function onDesktopPointerUp(event) {
+      if (desktopModel.drag) {
+        endDrag(event);
+        return;
+      }
+      desktopModel.swipe = null;
+    }
+
+    function startDrag(event, node) {
+      const type = node.dataset.draggableType;
+      const id = node.dataset.itemId;
+      if (!type || !id) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      enterEditMode();
+
+      const rect = node.getBoundingClientRect();
+      const pageRect = getCurrentPageRect();
+      desktopModel.drag = {
+        node,
+        type,
+        id,
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        offsetX: event.clientX - rect.left,
+        offsetY: event.clientY - rect.top,
+        width: rect.width,
+        height: rect.height,
+        moved: false,
+        currentPage: desktopModel.currentPage,
+      };
+
+      node.classList.add("dragging");
+      node.setPointerCapture?.(event.pointerId);
+      positionNodeInCurrentPage(node, event.clientX - pageRect.left - desktopModel.drag.offsetX, event.clientY - pageRect.top - desktopModel.drag.offsetY);
+    }
+
+    function moveDrag(event) {
+      const drag = desktopModel.drag;
+      if (!drag) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      const dx = event.clientX - drag.startX;
+      const dy = event.clientY - drag.startY;
+      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) drag.moved = true;
+
+      const screenWidth = getViewportWidth();
+      if (event.clientX > screenWidth - 32 && desktopModel.currentPage < 1) {
+        moveDraggingNodeToPage(1);
+      } else if (event.clientX < 32 && desktopModel.currentPage > 0) {
+        moveDraggingNodeToPage(0);
+      }
+
+      const pageRect = getCurrentPageRect();
+      const x = clamp(event.clientX - pageRect.left - drag.offsetX, 0, pageRect.width - drag.width);
+      const y = clamp(event.clientY - pageRect.top - drag.offsetY, 0, pageRect.height - drag.height);
+      positionNodeInCurrentPage(drag.node, x, y);
+    }
+
+    function endDrag(event) {
+      const drag = desktopModel.drag;
+      if (!drag) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      const pageRect = getCurrentPageRect();
+      const x = clamp(parseFloat(drag.node.style.left) || 0, 0, pageRect.width - drag.width);
+      const y = clamp(parseFloat(drag.node.style.top) || 0, 0, pageRect.height - drag.height);
+      const page = desktopModel.currentPage;
+
+      drag.node.classList.remove("dragging");
+      drag.node.releasePointerCapture?.(drag.pointerId);
+
+      updateState((draft) => {
+        if (drag.type === "widget") {
+          draft.desktop.widgets[drag.id] = {
+            ...draft.desktop.widgets[drag.id],
+            page,
+            x: Math.round(x),
+            y: Math.round(y),
+          };
+        } else {
+          draft.desktop.apps[drag.id] = {
+            ...draft.desktop.apps[drag.id],
+            page,
+            x: Math.round(x),
+            y: Math.round(y),
+          };
+        }
+        draft.desktop.currentPage = page;
+        return draft;
+      });
+
+      desktopModel.drag = null;
+      desktopModel.state = readState();
+      renderDesktop();
+      scheduleExitEditMode();
+    }
+
+    function moveDraggingNodeToPage(page) {
+      if (!desktopModel.drag || page === desktopModel.currentPage) return;
+
+      desktopModel.currentPage = normalizePage(page);
+      goToPage(desktopModel.currentPage, false);
+
+      const layerSelector = desktopModel.drag.type === "widget"
+        ? `[data-widget-layer="${desktopModel.currentPage}"]`
+        : `[data-icon-layer="${desktopModel.currentPage}"]`;
+      const nextLayer = document.querySelector(layerSelector);
+      if (nextLayer && desktopModel.drag.node.parentElement !== nextLayer) {
+        nextLayer.append(desktopModel.drag.node);
+        desktopModel.drag.node.dataset.page = String(desktopModel.currentPage);
+      }
+    }
+
+    function positionNodeInCurrentPage(node, x, y) {
+      node.style.left = `${Math.round(x)}px`;
+      node.style.top = `${Math.round(y)}px`;
+    }
+
+    function enterEditMode() {
+      desktopModel.editing = true;
+      desktop.classList.add("editing");
+      clearTimeout(desktopModel.editTimer);
+    }
+
+    function scheduleExitEditMode() {
+      clearTimeout(desktopModel.editTimer);
+      desktopModel.editTimer = setTimeout(() => {
+        desktopModel.editing = false;
+        desktop.classList.remove("editing");
+      }, 1600);
+    }
+
+    function goToPage(page, persist = true) {
+      desktopModel.currentPage = normalizePage(page);
+      desktopPages.style.transform = `translateX(${-desktopModel.currentPage * getViewportWidth()}px)`;
+      renderDots();
+
+      if (persist) {
+        updateState((draft) => {
+          draft.desktop.currentPage = desktopModel.currentPage;
+          return draft;
+        });
+      }
+    }
+
+    function normalizeDesktopAppPosition(appId) {
+      const fallbackIndex = APP_DEFINITIONS.findIndex((app) => app.id === appId);
+      const fallback = {
+        page: fallbackIndex > 4 ? 1 : 0,
+        x: 34 + (fallbackIndex % 4) * 85,
+        y: 374 + Math.floor((fallbackIndex % 8) / 4) * 118,
+      };
+
+      const position = desktopModel.state.desktop.apps?.[appId] || fallback;
+      return {
+        page: normalizePage(position.page),
+        x: Number(position.x ?? fallback.x),
+        y: Number(position.y ?? fallback.y),
+      };
+    }
+
+    function normalizePage(page) {
+      return Math.max(0, Math.min(1, Number(page) || 0));
+    }
+
+    function getViewportWidth() {
+      return root.getBoundingClientRect().width || window.innerWidth;
+    }
+
+    function getCurrentPageRect() {
+      const page = document.querySelector(`.desktop-page[data-page="${desktopModel.currentPage}"]`);
+      const layer = page?.querySelector(".icon-layer");
+      return (layer || page || root).getBoundingClientRect();
+    }
+
+    function clampAllItemsIntoPages() {
+      const pageRect = getCurrentPageRect();
+      updateState((draft) => {
+        Object.values(draft.desktop.apps || {}).forEach((position) => {
+          position.page = normalizePage(position.page);
+          position.x = clamp(Number(position.x) || 0, 0, Math.max(0, pageRect.width - 74));
+          position.y = clamp(Number(position.y) || 0, 0, Math.max(0, pageRect.height - 104));
+        });
+        Object.values(draft.desktop.widgets || {}).forEach((widget) => {
+          widget.page = normalizePage(widget.page);
+          widget.x = clamp(Number(widget.x) || 0, 0, Math.max(0, pageRect.width - (widget.width || 112)));
+          widget.y = clamp(Number(widget.y) || 0, 0, Math.max(0, pageRect.height - (widget.height || 112)));
+        });
+        return draft;
+      });
+    }
+
+    function updateClock() {
+      const now = new Date();
+      statusTime.textContent = now.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" });
+
+      document.querySelectorAll("[data-clock-value]").forEach((node) => {
+        node.textContent = now.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" });
+      });
+
+      document.querySelectorAll("[data-clock-note]").forEach((node) => {
+        node.textContent = now.toLocaleDateString("zh-CN", { month: "long", day: "numeric", weekday: "long" });
+      });
+    }
+
+    async function loadWeather() {
+      const city = desktopModel.state.desktop.weatherCity || "温州";
+
+      try {
+        const geoResponse = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1&language=zh&format=json`);
+        const geoData = await geoResponse.json();
+        const place = geoData?.results?.[0];
+
+        if (!place) throw new Error("未找到城市");
+
+        const weatherResponse = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${place.latitude}&longitude=${place.longitude}&current=temperature_2m,weather_code&timezone=auto`);
+        const weatherData = await weatherResponse.json();
+
+        desktopModel.weather = {
+          city: place.name || city,
+          temperature: Math.round(weatherData.current?.temperature_2m || 0),
+          text: weatherText(weatherData.current?.weather_code),
+        };
+      } catch {
+        desktopModel.weather = {
+          city,
+          temperature: "--",
+          text: "天气暂不可用",
+        };
+      }
+
+      renderPages();
+    }
+
+    function weatherText(code) {
+      const value = Number(code);
+      if (value === 0) return "晴";
+      if ([1, 2, 3].includes(value)) return "多云";
+      if ([45, 48].includes(value)) return "雾";
+      if ([51, 53, 55, 61, 63, 65, 80, 81, 82].includes(value)) return "雨";
+      if ([71, 73, 75, 77, 85, 86].includes(value)) return "雪";
+      if ([95, 96, 99].includes(value)) return "雷雨";
+      return "天气";
+    }
+
+    function getNextAnniversary() {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      return (desktopModel.state.anniversaries || [])
+        .map((item) => {
+          const date = new Date(item.date);
+          date.setHours(0, 0, 0, 0);
+          return {
+            ...item,
+            days: Math.ceil((date - today) / 86400000),
+          };
+        })
+        .filter((item) => item.days >= 0)
+        .sort((a, b) => a.days - b.days)[0];
+    }
+
+    async function openApp(appId) {
+      if (desktopModel.editing) return;
+
+      const app = APP_DEFINITIONS.find((item) => item.id === appId);
+      if (!app) return;
+
+      clear(appWindow);
+      appWindow.classList.add("open");
+      clearUnread(appId);
+
+      try {
+        const module = await loadAppModule(app);
+        const appContext = {
+          app,
+          state: readState(),
+          close: closeApp,
+          openApp,
+          refresh: () => {
+            desktopModel.state = readState();
+            renderDesktop();
+          },
+        };
+
+        if (typeof module.mountApp === "function") {
+          module.mountApp(appWindow, appContext);
+        } else if (typeof module.renderApp === "function") {
+          appWindow.append(module.renderApp(appContext));
+        } else {
+          appWindow.append(createFallbackApp(app, "应用没有导出 mountApp 或 renderApp。"));
+        }
+      } catch (error) {
+        appWindow.append(createFallbackApp(app, error.message));
+      }
+    }
+
+    async function loadAppModule(app) {
+      if (!appModules.has(app.id)) {
+        appModules.set(app.id, await import(app.module));
+      }
+      return appModules.get(app.id);
+    }
+
+    function closeApp() {
+      appWindow.classList.remove("open");
+      setTimeout(() => {
+        clear(appWindow);
+        desktopModel.state = readState();
+        renderDesktop();
+      }, 260);
+    }
+
+    function createFallbackApp(app, message) {
+      return createElement("div", {
+        className: "app-shell",
+        children: [
+          createElement("header", {
+            className: "app-nav",
+            children: [
+              createElement("button", {
+                className: "icon-button",
+                html: ICONS.back,
+                on: { click: closeApp },
+              }),
+              createElement("div", { className: "app-nav-title", text: app.name }),
+              createElement("div"),
+            ],
+          }),
+          createElement("main", {
+            className: "app-content",
+            children: [
+              createElement("section", {
+                className: "card card-padding stack",
+                children: [
+                  createElement("h2", { className: "section-title", text: "应用暂不可用" }),
+                  createElement("p", { className: "muted", text: message || "请检查对应应用文件。" }),
+                ],
+              }),
+            ],
+          }),
+        ],
+      });
+    }
+
+    function clamp(value, min, max) {
+      return Math.max(min, Math.min(max, value));
+    }
+  </script>
+</body>
+</html>
