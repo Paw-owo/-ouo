@@ -13,22 +13,22 @@ const DEFAULT_MODE = 'light';
 const FONT_FALLBACK = "'PingFang SC', 'Microsoft YaHei', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 
 // ═══════════════════════════════════════
-// 【基础变量】默认值（对应雾蓝主题）
+// 【基础变量】默认值（对应浅蓝主题）
 // ═══════════════════════════════════════
 
 const BASE_VARIABLES = {
-  'bg-primary': '#DED4E6',
-  'bg-secondary': '#E5F3FA',
+  'bg-primary': '#DAE8F5',
+  'bg-secondary': '#E8F0F8',
   'bg-card': '#FFFFFF',
   'bg-overlay': 'rgba(0, 0, 0, 0.28)',
   'surface': '#FFFFFF',
-  'accent': '#9F8F82',
-  'accent-light': '#E7E3DF',
-  'accent-dark': '#786E64',
+  'accent': '#7AACDB',
+  'accent-light': '#D4E6F5',
+  'accent-dark': '#5A8DBB',
   'text-primary': '#1C1C1E',
   'text-secondary': '#8A8A8E',
   'text-hint': '#C4C4C8',
-  'bubble-user-bg': '#9F8F82',
+  'bubble-user-bg': '#7AACDB',
   'bubble-user-text': '#FFFFFF',
   'bubble-ai-bg': '#FFFFFF',
   'bubble-ai-text': '#1C1C1E',
@@ -72,30 +72,30 @@ const DARK_SHADOWS = {
 };
 
 // ═══════════════════════════════════════
-// 【主题预设】5 浅色 + 2 夜间
+// 【主题预设】3 浅色 + 2 夜间
 // ═══════════════════════════════════════
 
 const PRESETS = {
   // ────────────────────────────────────────────
-  // 雾蓝 — #DED4E6 #9F8F82 #E5F3FA #FFFFFF
+  // 浅蓝 — 清爽蓝调，蓝天白云
   // ────────────────────────────────────────────
   blue: {
     id: 'blue',
-    name: '雾蓝',
+    name: '浅蓝',
     mode: 'light',
     variables: {
-      'bg-primary': '#DED4E6',
-      'bg-secondary': '#E5F3FA',
+      'bg-primary': '#DAE8F5',
+      'bg-secondary': '#E8F0F8',
       'bg-card': '#FFFFFF',
       'bg-overlay': 'rgba(0, 0, 0, 0.28)',
       'surface': '#FFFFFF',
-      'accent': '#9F8F82',
-      'accent-light': '#E7E3DF',
-      'accent-dark': '#786E64',
+      'accent': '#7AACDB',
+      'accent-light': '#D4E6F5',
+      'accent-dark': '#5A8DBB',
       'text-primary': '#1C1C1E',
       'text-secondary': '#8A8A8E',
       'text-hint': '#C4C4C8',
-      'bubble-user-bg': '#9F8F82',
+      'bubble-user-bg': '#7AACDB',
       'bubble-user-text': '#FFFFFF',
       'bubble-ai-bg': '#FFFFFF',
       'bubble-ai-text': '#1C1C1E',
@@ -104,25 +104,25 @@ const PRESETS = {
   },
 
   // ────────────────────────────────────────────
-  // 蜜桃 — #F4E2E5 #9F8F82 #ECC9CF #FFFFFF
+  // 浅粉 — 温柔粉调，蜜桃汽水
   // ────────────────────────────────────────────
   pink: {
     id: 'pink',
-    name: '蜜桃',
+    name: '浅粉',
     mode: 'light',
     variables: {
-      'bg-primary': '#F4E2E5',
-      'bg-secondary': '#ECC9CF',
+      'bg-primary': '#F8DEE4',
+      'bg-secondary': '#FCE8EC',
       'bg-card': '#FFFFFF',
       'bg-overlay': 'rgba(0, 0, 0, 0.28)',
       'surface': '#FFFFFF',
-      'accent': '#9F8F82',
-      'accent-light': '#E7E3DF',
-      'accent-dark': '#786E64',
+      'accent': '#D4899A',
+      'accent-light': '#F3DCE1',
+      'accent-dark': '#B86B7E',
       'text-primary': '#1C1C1E',
       'text-secondary': '#8A8A8E',
       'text-hint': '#C4C4C8',
-      'bubble-user-bg': '#9F8F82',
+      'bubble-user-bg': '#D4899A',
       'bubble-user-text': '#FFFFFF',
       'bubble-ai-bg': '#FFFFFF',
       'bubble-ai-text': '#1C1C1E',
@@ -131,88 +131,34 @@ const PRESETS = {
   },
 
   // ────────────────────────────────────────────
-  // 珊瑚 — #DDE8F6 #9F8F82 #F5D7D6 #FDF4ED
+  // 浅黄 — 奶油暖调，奶黄包
   // ────────────────────────────────────────────
   cream: {
     id: 'cream',
-    name: '珊瑚',
+    name: '浅黄',
     mode: 'light',
     variables: {
-      'bg-primary': '#DDE8F6',
-      'bg-secondary': '#F5D7D6',
-      'bg-card': '#FDF4ED',
+      'bg-primary': '#F5EDE0',
+      'bg-secondary': '#F8F2E8',
+      'bg-card': '#FFFFFF',
       'bg-overlay': 'rgba(0, 0, 0, 0.28)',
-      'surface': '#FDF4ED',
-      'accent': '#9F8F82',
-      'accent-light': '#E7E3DF',
-      'accent-dark': '#786E64',
+      'surface': '#FFFFFF',
+      'accent': '#C8A87A',
+      'accent-light': '#EDE3D4',
+      'accent-dark': '#A88858',
       'text-primary': '#1C1C1E',
       'text-secondary': '#8A8A8E',
       'text-hint': '#C4C4C8',
-      'bubble-user-bg': '#9F8F82',
+      'bubble-user-bg': '#C8A87A',
       'bubble-user-text': '#FFFFFF',
-      'bubble-ai-bg': '#FDF4ED',
+      'bubble-ai-bg': '#FFFFFF',
       'bubble-ai-text': '#1C1C1E',
       ...LIGHT_SHADOWS
     }
   },
 
   // ────────────────────────────────────────────
-  // 玫瑰海 — #D1E3FF #FFF4F5 #E2F3FF #FAC7DA
-  // ────────────────────────────────────────────
-  blush: {
-    id: 'blush',
-    name: '玫瑰海',
-    mode: 'light',
-    variables: {
-      'bg-primary': '#D1E3FF',
-      'bg-secondary': '#E2F3FF',
-      'bg-card': '#FFF4F5',
-      'bg-overlay': 'rgba(0, 0, 0, 0.28)',
-      'surface': '#FFF4F5',
-      'accent': '#FAC7DA',
-      'accent-light': '#FDF0F5',
-      'accent-dark': '#D87A94',
-      'text-primary': '#1C1C1E',
-      'text-secondary': '#8A8A8E',
-      'text-hint': '#C4C4C8',
-      'bubble-user-bg': '#FAC7DA',
-      'bubble-user-text': '#1C1C1E',
-      'bubble-ai-bg': '#FFF4F5',
-      'bubble-ai-text': '#1C1C1E',
-      ...LIGHT_SHADOWS
-    }
-  },
-
-  // ────────────────────────────────────────────
-  // 薰紫 — #D5CFEC #EDECFA #F8F6FB #CAB7E3
-  // ────────────────────────────────────────────
-  lavender: {
-    id: 'lavender',
-    name: '薰紫',
-    mode: 'light',
-    variables: {
-      'bg-primary': '#D5CFEC',
-      'bg-secondary': '#EDECFA',
-      'bg-card': '#F8F6FB',
-      'bg-overlay': 'rgba(0, 0, 0, 0.28)',
-      'surface': '#F8F6FB',
-      'accent': '#CAB7E3',
-      'accent-light': '#F0ECF6',
-      'accent-dark': '#9680B8',
-      'text-primary': '#1C1C1E',
-      'text-secondary': '#8A8A8E',
-      'text-hint': '#C4C4C8',
-      'bubble-user-bg': '#CAB7E3',
-      'bubble-user-text': '#1C1C1E',
-      'bubble-ai-bg': '#F8F6FB',
-      'bubble-ai-text': '#1C1C1E',
-      ...LIGHT_SHADOWS
-    }
-  },
-
-  // ────────────────────────────────────────────
-  // 奶咖夜
+  // 奶咖夜 — 暖棕色夜间
   // ────────────────────────────────────────────
   'milk-cafe': {
     id: 'milk-cafe',
@@ -239,7 +185,7 @@ const PRESETS = {
   },
 
   // ────────────────────────────────────────────
-  // 黑粉
+  // 黑粉 — 暗夜粉调
   // ────────────────────────────────────────────
   'rose-noir': {
     id: 'rose-noir',
@@ -286,7 +232,9 @@ const LEGACY_PRESET_ALIAS = {
   milk: 'milk-cafe',
   cocoa: 'milk-cafe',
   'warm-gray': 'milk-cafe',
-  purple: 'lavender'
+  purple: 'blue',
+  blush: 'pink',
+  lavender: 'blue'
 };
 
 let currentTheme = null;
@@ -396,7 +344,7 @@ export function setPreset(name) {
 }
 
 // ═══════════════════════════════════════
-// 【模式切换】浅色 → 雾蓝 / 夜间 → 奶咖夜
+// 【模式切换】浅色 → 浅蓝 / 夜间 → 奶咖夜
 // ═══════════════════════════════════════
 
 export function setThemeMode(mode) {
