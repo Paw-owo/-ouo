@@ -3,13 +3,15 @@
 
 import { getData } from './storage.js';
 
-const CHAT_PATH = '/v1/chat/completions';
-const ANTHROPIC_MESSAGES_PATH = '/v1/messages';
-const GEMINI_MODEL_PREFIX = '/v1beta/models/';
-const OLLAMA_CHAT_PATH = '/api/chat';
-const MODELS_PATH = '/v1/models';
+// ═══════════════════════════════════════
+// 【常量】
+// ═══════════════════════════════════════
 const DEFAULT_TIMEOUT = 60000;
 const ANTHROPIC_VERSION = '2023-06-01';
+
+// ───────────────────
+// Toast / 错误通知
+// ───────────────────
 
 function notifyApiError(message) {
   try {
@@ -17,7 +19,6 @@ function notifyApiError(message) {
       window.showToast(message);
       return;
     }
-
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('api:error', { detail: message }));
     }
@@ -26,15 +27,96 @@ function notifyApiError(message) {
   }
 }
 
-function normalizeEndpointUrl(endpoint) {
-  let url = String(endpoint || '').trim().replace(/\/+$/, '');
+// ═══════════════════════════════════════
+// 【URL 处理】智能拼接，兼容各种中转站
+// ═══════════════════════════════════════
 
-  if (url.endsWith('/v1')) {
-    url = url.slice(0, -3);
+function normalizeEndpointUrl(endpoint) {
+  return String(endpoint || '').trim().replace(/\/+$/, '');
+}
+
+// ───────────────────
+// 检测 URL 的路径部分是否已包含某个关键词
+// 只取 URL 的 pathname 段去匹配，不影响域名判断
+// ───────────────────
+
+function urlHasPathKeyword(url, keyword) {
+  try {
+    const pathname = new URL(url).pathname.toLowerCase();
+    return pathname.includes(keyword.toLowerCase());
+  } catch {
+    return url.toLowerCase().includes(keyword.toLowerCase());
+  }
+}
+
+// ───────────────────
+// 智能拼接聊天 URL
+// 路径里已经有 /chat/completions /messages /api/chat 就不重复追加
+// ───────────────────
+
+function smartChatUrl(base, provider) {
+  const lower = base.toLowerCase();
+
+  if (provider === 'anthropic') {
+    if (urlHasPathKeyword(base, '/messages')) return base;
+    return base + '/v1/messages';
   }
 
-  return url;
+  if (provider === 'ollama') {
+    if (urlHasPathKeyword(base, '/api/chat')) return base;
+    return base + '/api/chat';
+  }
+
+  // openai 兼容（默认）：只要路径里已经有 /chat/completions 就不追加
+  if (urlHasPathKeyword(base, '/chat/completions')) return base;
+  return base + '/v1/chat/completions';
 }
+
+// ───────────────────
+// 智能拼接模型列表 URL
+// ───────────────────
+
+function smartModelsUrl(base, provider) {
+  if (provider === 'ollama') {
+    if (urlHasPathKeyword(base, '/api/tags')) return base;
+    return base + '/api/tags';
+  }
+
+  if (urlHasPathKeyword(base, '/v1/models')) return base;
+  return base + '/v1/models';
+}
+
+// ───────────────────
+// 智能拼接 Gemini URL
+// ───────────────────
+
+function smartGeminiUrl(base, model, apiKey) {
+  const cleanModel = String(model || '').trim();
+  if (!cleanModel) {
+    throw new Error('请先选择模型');
+  }
+
+  let origin = base.replace(/\/+$/, '');
+
+  // 已经包含完整路径（含 :generateContent）→ 直接用
+  if (/\/v1beta\/models\/[^/]+:generateContent/i.test(origin)) {
+    return origin;
+  }
+
+  // 去掉末尾的 /v1beta 或 /v1beta/models
+  origin = origin
+    .replace(/\/v1beta\/models\/?$/i, '')
+    .replace(/\/v1beta\/?$/i, '')
+    .replace(/\/+$/, '');
+
+  const url = new URL(`${origin}/v1beta/models/${encodeURIComponent(cleanModel)}:generateContent`);
+  if (apiKey) url.searchParams.set('key', apiKey);
+  return url.toString();
+}
+
+// ═══════════════════════════════════════
+// 【配置读取】从 localStorage 读设置
+// ═══════════════════════════════════════
 
 function getSettings() {
   const settings = getData('app_settings') || {};
@@ -64,6 +146,10 @@ function getSettings() {
   };
 }
 
+// ═══════════════════════════════════════
+// 【Provider 检测】自动识别 API 提供商
+// ═══════════════════════════════════════
+
 function detectProvider(endpoint) {
   const raw = String(endpoint || '').toLowerCase();
 
@@ -72,6 +158,10 @@ function detectProvider(endpoint) {
   if (raw.includes('localhost') || raw.includes('127.0.0.1')) return 'ollama';
   return 'openai';
 }
+
+// ═══════════════════════════════════════
+// 【端点查找】从配置中找到要用的 API 端点
+// ═══════════════════════════════════════
 
 function findEndpoint(endpointId = '') {
   const settings = getSettings();
@@ -101,6 +191,10 @@ function findEndpoint(endpointId = '') {
   };
 }
 
+// ═══════════════════════════════════════
+// 【请求构建】各 Provider 的 Body/Header/URL
+// ═══════════════════════════════════════
+
 function createTimeoutController(timeout = DEFAULT_TIMEOUT) {
   const controller = new AbortController();
   const timer = setTimeout(() => {
@@ -129,17 +223,12 @@ function buildHeaders(apiKey, provider = 'openai') {
 }
 
 function normalizeMessage(message) {
-  if (!message || typeof message !== 'object') {
-    return null;
-  }
+  if (!message || typeof message !== 'object') return null;
 
   const role = ['system', 'user', 'assistant'].includes(message.role) ? message.role : 'user';
   const content = typeof message.content === 'string' ? message.content : '';
 
-  if (!content.trim()) {
-    return null;
-  }
-
+  if (!content.trim()) return null;
   return { role, content };
 }
 
@@ -153,13 +242,14 @@ function buildMessages(messages = [], systemPrompt = '') {
   }
 
   return [
-    {
-      role: 'system',
-      content: String(systemPrompt)
-    },
+    { role: 'system', content: String(systemPrompt) },
     ...normalizedMessages
   ];
 }
+
+// ───────────────────
+// OpenAI Body
+// ───────────────────
 
 function buildOpenAIRequestBody({ messages, systemPrompt, model, stream, temperature, maxTokens }) {
   const body = {
@@ -171,29 +261,29 @@ function buildOpenAIRequestBody({ messages, systemPrompt, model, stream, tempera
   if (typeof temperature === 'number' && Number.isFinite(temperature)) {
     body.temperature = temperature;
   }
-
   if (typeof maxTokens === 'number' && Number.isFinite(maxTokens) && maxTokens > 0) {
     body.max_tokens = maxTokens;
   }
-
   return body;
 }
+
+// ───────────────────
+// Anthropic Body
+// ───────────────────
 
 function buildAnthropicMessages(messages = [], systemPrompt = '') {
   const normalized = Array.isArray(messages)
     ? messages.map(normalizeMessage).filter(Boolean)
     : [];
 
-  const anthropicMessages = normalized
-    .filter((message) => message.role === 'user' || message.role === 'assistant')
-    .map((message) => ({
-      role: message.role,
-      content: [{ type: 'text', text: message.content }]
-    }));
-
   return {
     system: String(systemPrompt || '').trim(),
-    messages: anthropicMessages
+    messages: normalized
+      .filter((m) => m.role === 'user' || m.role === 'assistant')
+      .map((m) => ({
+        role: m.role,
+        content: [{ type: 'text', text: m.content }]
+      }))
   };
 }
 
@@ -205,40 +295,32 @@ function buildAnthropicRequestBody({ messages, systemPrompt, model, stream, temp
     stream
   };
 
-  if (system) {
-    body.system = system;
-  }
-
+  if (system) body.system = system;
   if (typeof temperature === 'number' && Number.isFinite(temperature)) {
     body.temperature = temperature;
   }
-
   if (typeof maxTokens === 'number' && Number.isFinite(maxTokens) && maxTokens > 0) {
     body.max_tokens = maxTokens;
   }
-
   return body;
 }
 
+// ───────────────────
+// Gemini Body
+// ───────────────────
+
 function toGeminiParts(content) {
-  if (typeof content === 'string') {
-    return [{ text: content }];
-  }
-
+  if (typeof content === 'string') return [{ text: content }];
   if (Array.isArray(content)) {
-    return content
-      .map((item) => {
-        if (typeof item === 'string') return { text: item };
-        if (!item || typeof item !== 'object') return null;
-        return item.text ? { text: item.text } : null;
-      })
-      .filter(Boolean);
+    return content.map((item) => {
+      if (typeof item === 'string') return { text: item };
+      if (!item || typeof item !== 'object') return null;
+      return item.text ? { text: item.text } : null;
+    }).filter(Boolean);
   }
-
   if (content && typeof content === 'object' && content.text) {
     return [{ text: content.text }];
   }
-
   return [];
 }
 
@@ -248,33 +330,19 @@ function buildGeminiContents(messages = [], systemPrompt = '') {
     : [];
 
   const contents = normalized
-    .filter((message) => message.role === 'user' || message.role === 'assistant')
-    .map((message) => ({
-      role: message.role === 'assistant' ? 'model' : 'user',
-      parts: toGeminiParts(message.content)
+    .filter((m) => m.role === 'user' || m.role === 'assistant')
+    .map((m) => ({
+      role: m.role === 'assistant' ? 'model' : 'user',
+      parts: toGeminiParts(m.content)
     }))
-    .filter((message) => message.parts.length);
+    .filter((m) => m.parts.length);
 
   return {
     systemInstruction: systemPrompt
-      ? {
-          parts: [{ text: String(systemPrompt) }]
-        }
+      ? { parts: [{ text: String(systemPrompt) }] }
       : undefined,
     contents
   };
-}
-
-function buildGeminiRequestUrl(endpoint, model, apiKey) {
-  const cleanModel = String(model || '').trim();
-  if (!cleanModel) {
-    throw new Error('请先选择模型');
-  }
-
-  const base = endpoint.replace(/\/v1beta\/models\/?$/i, '').replace(/\/+$/, '');
-  const url = new URL(`${base}${GEMINI_MODEL_PREFIX}${encodeURIComponent(cleanModel)}:generateContent`);
-  if (apiKey) url.searchParams.set('key', apiKey);
-  return url.toString();
 }
 
 function buildGeminiRequestBody({ messages, systemPrompt, stream, temperature, maxTokens }) {
@@ -284,24 +352,21 @@ function buildGeminiRequestBody({ messages, systemPrompt, stream, temperature, m
     generationConfig: {}
   };
 
-  if (systemInstruction) {
-    body.systemInstruction = systemInstruction;
-  }
-
+  if (systemInstruction) body.systemInstruction = systemInstruction;
   if (typeof temperature === 'number' && Number.isFinite(temperature)) {
     body.generationConfig.temperature = temperature;
   }
-
   if (typeof maxTokens === 'number' && Number.isFinite(maxTokens) && maxTokens > 0) {
     body.generationConfig.maxOutputTokens = maxTokens;
   }
-
-  if (stream) {
-    body.stream = true;
-  }
+  if (stream) body.stream = true;
 
   return body;
 }
+
+// ───────────────────
+// Ollama Body
+// ───────────────────
 
 function buildOllamaRequestBody({ messages, systemPrompt, model, stream, temperature, maxTokens }) {
   const body = {
@@ -311,51 +376,84 @@ function buildOllamaRequestBody({ messages, systemPrompt, model, stream, tempera
   };
 
   if (typeof temperature === 'number' && Number.isFinite(temperature)) {
-    body.options = {
-      ...(body.options || {}),
-      temperature
-    };
+    body.options = { ...(body.options || {}), temperature };
   }
-
   if (typeof maxTokens === 'number' && Number.isFinite(maxTokens) && maxTokens > 0) {
-    body.options = {
-      ...(body.options || {}),
-      num_predict: maxTokens
-    };
+    body.options = { ...(body.options || {}), num_predict: maxTokens };
   }
-
   return body;
 }
 
+// ═══════════════════════════════════════
+// 【请求上下文构建】智能拼 URL + 组装请求
+// ═══════════════════════════════════════
+
+function buildRequestContext({ endpointConfig, model, systemPrompt, messages, stream, temperature, maxTokens }) {
+  const provider = endpointConfig.provider || 'openai';
+  const requestModel = model || endpointConfig.model;
+  const base = endpointConfig.endpoint;
+
+  if (provider !== 'gemini' && !requestModel) {
+    throw new Error('请先选择模型');
+  }
+
+  if (provider === 'openai') {
+    return {
+      provider,
+      url: smartChatUrl(base, 'openai'),
+      headers: buildHeaders(endpointConfig.apiKey, provider),
+      body: buildOpenAIRequestBody({ messages, systemPrompt, model: requestModel, stream, temperature, maxTokens })
+    };
+  }
+
+  if (provider === 'anthropic') {
+    return {
+      provider,
+      url: smartChatUrl(base, 'anthropic'),
+      headers: buildHeaders(endpointConfig.apiKey, provider),
+      body: buildAnthropicRequestBody({ messages, systemPrompt, model: requestModel, stream, temperature, maxTokens })
+    };
+  }
+
+  if (provider === 'gemini') {
+    return {
+      provider,
+      url: smartGeminiUrl(base, requestModel, endpointConfig.apiKey),
+      headers: buildHeaders('', provider),
+      body: buildGeminiRequestBody({ messages, systemPrompt, stream, temperature, maxTokens })
+    };
+  }
+
+  if (provider === 'ollama') {
+    return {
+      provider,
+      url: smartChatUrl(base, 'ollama'),
+      headers: buildHeaders('', provider),
+      body: buildOllamaRequestBody({ messages, systemPrompt, model: requestModel, stream, temperature, maxTokens })
+    };
+  }
+
+  // 兜底走 OpenAI
+  return {
+    provider: 'openai',
+    url: smartChatUrl(base, 'openai'),
+    headers: buildHeaders(endpointConfig.apiKey, 'openai'),
+    body: buildOpenAIRequestBody({ messages, systemPrompt, model: requestModel, stream, temperature, maxTokens })
+  };
+}
+
+// ═══════════════════════════════════════
+// 【错误处理】HTTP 状态码 + 网络错误
+// ═══════════════════════════════════════
+
 function getErrorMessage(status) {
-  if (status === 400) {
-    return '请求格式有误，请检查模型和消息内容';
-  }
-
-  if (status === 401) {
-    return 'API Key 无效或已过期';
-  }
-
-  if (status === 403) {
-    return '当前 API Key 没有访问权限';
-  }
-
-  if (status === 404) {
-    return 'API 地址不正确，请检查端点';
-  }
-
-  if (status === 429) {
-    return '请求太频繁，请稍后再试';
-  }
-
-  if (status >= 500) {
-    return 'AI 服务暂时不可用';
-  }
-
-  if (status >= 400) {
-    return '请求失败，请检查 API 配置';
-  }
-
+  if (status === 400) return '请求格式有误，请检查模型和消息内容';
+  if (status === 401) return 'API Key 无效或已过期';
+  if (status === 403) return '当前 API Key 没有访问权限';
+  if (status === 404) return 'API 地址不正确，请检查端点';
+  if (status === 429) return '请求太频繁，请稍后再试';
+  if (status >= 500) return 'AI 服务暂时不可用';
+  if (status >= 400) return '请求失败，请检查 API 配置';
   return '网络连接失败';
 }
 
@@ -364,53 +462,38 @@ async function parseErrorResponse(response) {
     const data = await response.json();
     const detail = data?.error?.message || data?.message || data?.error || '';
     return detail ? `${getErrorMessage(response.status)}：${detail}` : getErrorMessage(response.status);
-  } catch (error) {
+  } catch {
     return getErrorMessage(response.status);
   }
 }
 
 function normalizeApiError(error, fallbackMessage) {
-  if (error?.name === 'AbortError') {
-    return '网络超时，请稍后重试';
-  }
-
+  if (error?.name === 'AbortError') return '网络超时，请稍后重试';
   if (typeof navigator !== 'undefined' && navigator && navigator.onLine === false) {
     return '网络已断开，请检查连接';
   }
-
   return error?.message || fallbackMessage;
 }
 
+// ═══════════════════════════════════════
+// 【响应解析】从各种格式中提取文字和思维链
+// ═══════════════════════════════════════
+
 function extractThinkingFromText(text) {
-  if (!text) {
-    return {
-      content: '',
-      thinking: ''
-    };
-  }
+  if (!text) return { content: '', thinking: '' };
 
   let thinking = '';
   const content = String(text).replace(/<thinking>([\s\S]*?)<\/thinking>/gi, (match, innerText) => {
-    const cleanInnerText = String(innerText || '').trim();
-
-    if (cleanInnerText) {
-      thinking += thinking ? `\n${cleanInnerText}` : cleanInnerText;
-    }
-
+    const clean = String(innerText || '').trim();
+    if (clean) thinking += thinking ? `\n${clean}` : clean;
     return '';
   });
 
-  return {
-    content,
-    thinking
-  };
+  return { content, thinking };
 }
 
 function readContentValue(value) {
-  if (typeof value === 'string') {
-    return value;
-  }
-
+  if (typeof value === 'string') return value;
   if (Array.isArray(value)) {
     return value.map((item) => {
       if (typeof item === 'string') return item;
@@ -418,11 +501,9 @@ function readContentValue(value) {
       return item.text || item.content || item.value || '';
     }).filter(Boolean).join('\n');
   }
-
   if (value && typeof value === 'object') {
     return value.text || value.content || value.value || '';
   }
-
   return '';
 }
 
@@ -433,28 +514,9 @@ function extractContentFromData(data) {
   const output = data?.output?.[0] || {};
   const outputContent = output?.content?.[0] || {};
   const candidate = data?.candidates?.[0] || {};
-  const candidateContent = candidate?.content || {};
-  const candidateParts = candidateContent?.parts || [];
+  const candidateParts = candidate?.content?.parts || [];
 
-  const geminiText = candidateParts
-    .map((part) => part?.text || '')
-    .filter(Boolean)
-    .join('');
-
-  const anthropicText = [
-    readContentValue(message.content),
-    readContentValue(delta.content),
-    readContentValue(data.content),
-    readContentValue(data.message)
-  ].filter(Boolean).join('');
-
-  const ollamaText = [
-    readContentValue(message.content),
-    readContentValue(delta.content),
-    readContentValue(data.response),
-    readContentValue(data.message),
-    readContentValue(data.reply)
-  ].filter(Boolean).join('');
+  const geminiText = candidateParts.map((p) => p?.text || '').filter(Boolean).join('');
 
   const text = [
     readContentValue(delta.content),
@@ -466,25 +528,15 @@ function extractContentFromData(data) {
     readContentValue(data.reply),
     readContentValue(outputContent.text),
     readContentValue(outputContent.content),
-    geminiText,
-    anthropicText,
-    ollamaText
+    geminiText
   ].filter(Boolean).join('');
 
   const reasoning = [
-    delta.reasoning_content,
-    delta.reasoning,
-    delta.thinking,
-    message.reasoning_content,
-    message.reasoning,
-    message.thinking,
-    choice.reasoning_content,
-    choice.reasoning,
-    data.reasoning_content,
-    data.reasoning,
-    data.thinking,
-    candidate?.reasoning,
-    candidate?.reasoningContent,
+    delta.reasoning_content, delta.reasoning, delta.thinking,
+    message.reasoning_content, message.reasoning, message.thinking,
+    choice.reasoning_content, choice.reasoning,
+    data.reasoning_content, data.reasoning, data.thinking,
+    candidate?.reasoning, candidate?.reasoningContent,
     data?.candidates?.[0]?.content?.thought || ''
   ].filter(Boolean).join('\n');
 
@@ -499,47 +551,27 @@ function extractContentFromData(data) {
   };
 }
 
+// ═══════════════════════════════════════
+// 【流式读取】SSE 解析
+// ═══════════════════════════════════════
+
 function parseStreamPayload(payload) {
   if (!payload || payload === '[DONE]') {
-    return {
-      done: payload === '[DONE]',
-      content: '',
-      thinking: '',
-      finishReason: '',
-      raw: null
-    };
+    return { done: payload === '[DONE]', content: '', thinking: '', finishReason: '', raw: null };
   }
-
   try {
     const parsed = JSON.parse(payload);
-
     if (parsed?.error) {
-      return {
-        done: true,
-        content: '',
-        thinking: '',
-        finishReason: '',
-        raw: parsed
-      };
+      return { done: true, content: '', thinking: '', finishReason: '', raw: parsed };
     }
-
     return extractContentFromData(parsed);
-  } catch (error) {
-    return {
-      done: false,
-      content: '',
-      thinking: '',
-      finishReason: '',
-      raw: null
-    };
+  } catch {
+    return { done: false, content: '', thinking: '', finishReason: '', raw: null };
   }
 }
 
 function appendValue(base, value) {
-  if (!value) {
-    return base;
-  }
-
+  if (!value) return base;
   return base ? `${base}\n${value}` : value;
 }
 
@@ -553,56 +585,35 @@ async function readStream(response, callbacks) {
 
   while (!completed) {
     const { value, done } = await reader.read();
-
-    if (done) {
-      break;
-    }
+    if (done) break;
 
     buffer += decoder.decode(value, { stream: true });
-
     const eventBlocks = buffer.split('\n\n');
     buffer = eventBlocks.pop() || '';
 
     for (const event of eventBlocks) {
       const dataLines = event
         .split('\n')
-        .map((line) => line.trim())
-        .filter((line) => line.startsWith('data:'))
-        .map((line) => line.replace(/^data:\s*/, ''));
+        .map((l) => l.trim())
+        .filter((l) => l.startsWith('data:'))
+        .map((l) => l.replace(/^data:\s*/, ''));
 
-      if (!dataLines.length) {
-        continue;
-      }
+      if (!dataLines.length) continue;
 
-      const payload = dataLines.join('\n');
-      const chunk = parseStreamPayload(payload);
-
+      const chunk = parseStreamPayload(dataLines.join('\n'));
       fullContent += chunk.content || '';
       fullThinking = appendValue(fullThinking, chunk.thinking);
 
       if (chunk.content || chunk.thinking) {
-        callbacks.onChunk?.({
-          content: chunk.content,
-          thinking: chunk.thinking,
-          raw: chunk.raw,
-          done: false
-        });
+        callbacks.onChunk?.({ content: chunk.content, thinking: chunk.thinking, raw: chunk.raw, done: false });
       }
 
-      if (chunk.done) {
-        completed = true;
-        break;
-      }
+      if (chunk.done) { completed = true; break; }
     }
   }
 
   if (buffer.trim()) {
-    const dataLines = buffer
-      .split('\n')
-      .map((line) => line.trim())
-      .filter((line) => line.startsWith('data:'))
-      .map((line) => line.replace(/^data:\s*/, ''));
-
+    const dataLines = buffer.split('\n').map((l) => l.trim()).filter((l) => l.startsWith('data:')).map((l) => l.replace(/^data:\s*/, ''));
     if (dataLines.length) {
       const chunk = parseStreamPayload(dataLines.join('\n'));
       fullContent += chunk.content || '';
@@ -610,190 +621,65 @@ async function readStream(response, callbacks) {
     }
   }
 
-  callbacks.onDone?.({
-    content: fullContent,
-    thinking: fullThinking
-  });
+  callbacks.onDone?.({ content: fullContent, thinking: fullThinking });
 }
+
+// ═══════════════════════════════════════
+// 【JSON 解析辅助】
+// ═══════════════════════════════════════
 
 function parseJsonFromText(text) {
   const cleanText = String(text || '').trim();
-
-  if (!cleanText) {
-    return null;
-  }
-
+  if (!cleanText) return null;
   try {
     return JSON.parse(cleanText);
-  } catch (error) {
+  } catch {
     const match = cleanText.match(/\{[\s\S]*\}/);
-
-    if (!match) {
-      return null;
-    }
-
-    try {
-      return JSON.parse(match[0]);
-    } catch (innerError) {
-      return null;
-    }
+    if (!match) return null;
+    try { return JSON.parse(match[0]); } catch { return null; }
   }
 }
 
-function buildRequestContext({ endpointConfig, model, systemPrompt, messages, stream, temperature, maxTokens }) {
-  const provider = endpointConfig.provider || 'openai';
-  const requestModel = model || endpointConfig.model;
-
-  if (provider !== 'gemini' && !requestModel) {
-    throw new Error('请先选择模型');
-  }
-
-  if (provider === 'openai') {
-    const body = buildOpenAIRequestBody({
-      messages,
-      systemPrompt,
-      model: requestModel,
-      stream,
-      temperature,
-      maxTokens
-    });
-
-    return {
-      provider,
-      url: `${endpointConfig.endpoint}${CHAT_PATH}`,
-      headers: buildHeaders(endpointConfig.apiKey, provider),
-      body
-    };
-  }
-
-  if (provider === 'anthropic') {
-    const body = buildAnthropicRequestBody({
-      messages,
-      systemPrompt,
-      model: requestModel,
-      stream,
-      temperature,
-      maxTokens
-    });
-
-    return {
-      provider,
-      url: `${endpointConfig.endpoint}${ANTHROPIC_MESSAGES_PATH}`,
-      headers: buildHeaders(endpointConfig.apiKey, provider),
-      body
-    };
-  }
-
-  if (provider === 'gemini') {
-    const url = buildGeminiRequestUrl(endpointConfig.endpoint, requestModel, endpointConfig.apiKey);
-    const body = buildGeminiRequestBody({
-      messages,
-      systemPrompt,
-      stream,
-      temperature,
-      maxTokens
-    });
-
-    return {
-      provider,
-      url,
-      headers: buildHeaders('', provider),
-      body
-    };
-  }
-
-  if (provider === 'ollama') {
-    const body = buildOllamaRequestBody({
-      messages,
-      systemPrompt,
-      model: requestModel,
-      stream,
-      temperature,
-      maxTokens
-    });
-
-    return {
-      provider,
-      url: `${endpointConfig.endpoint}${OLLAMA_CHAT_PATH}`,
-      headers: buildHeaders('', provider),
-      body
-    };
-  }
-
-  const body = buildOpenAIRequestBody({
-    messages,
-    systemPrompt,
-    model: requestModel,
-    stream,
-    temperature,
-    maxTokens
-  });
-
-  return {
-    provider: 'openai',
-    url: `${endpointConfig.endpoint}${CHAT_PATH}`,
-    headers: buildHeaders(endpointConfig.apiKey, 'openai'),
-    body
-  };
-}
+// ═══════════════════════════════════════
+// 【非流式响应读取】
+// ═══════════════════════════════════════
 
 function normalizeResponsePayload(data, provider) {
   if (provider === 'gemini') {
-    const candidates = Array.isArray(data?.candidates) ? data.candidates : [];
-    const candidate = candidates[0] || {};
-    const parts = candidate?.content?.parts || [];
-    const text = parts.map((part) => part?.text || '').filter(Boolean).join('');
+    const candidate = (Array.isArray(data?.candidates) ? data.candidates : [])[0] || {};
+    const text = (candidate?.content?.parts || []).map((p) => p?.text || '').filter(Boolean).join('');
     return extractThinkingFromText(text);
   }
-
   if (provider === 'ollama') {
-    const text = data?.message?.content || data?.response || '';
-    return extractThinkingFromText(text);
+    return extractThinkingFromText(data?.message?.content || data?.response || '');
   }
-
   if (provider === 'anthropic') {
-    const text = data?.content
-      ? Array.isArray(data.content)
-        ? data.content.map((item) => item?.text || '').filter(Boolean).join('')
-        : String(data.content)
-      : '';
+    const raw = data?.content;
+    const text = raw ? (Array.isArray(raw) ? raw.map((i) => i?.text || '').filter(Boolean).join('') : String(raw)) : '';
     return extractThinkingFromText(text);
   }
-
   const extracted = extractContentFromData(data);
-  return {
-    content: extracted.content,
-    thinking: extracted.thinking
-  };
+  return { content: extracted.content, thinking: extracted.thinking };
 }
 
 async function readJsonResponse(response, provider) {
-  const data = await response.json();
-  return normalizeResponsePayload(data, provider);
+  return normalizeResponsePayload(await response.json(), provider);
 }
 
 async function readTextResponse(response, provider) {
   const text = await response.text();
   const parsed = parseJsonFromText(text);
+  if (parsed) return normalizeResponsePayload(parsed, provider);
 
-  if (parsed) {
-    return normalizeResponsePayload(parsed, provider);
-  }
-
-  if (provider === 'gemini') {
-    return normalizeResponsePayload({ candidates: [{ content: { parts: [{ text }] } }] }, provider);
-  }
-
-  if (provider === 'ollama') {
-    return normalizeResponsePayload({ message: { content: text } }, provider);
-  }
-
-  if (provider === 'anthropic') {
-    return normalizeResponsePayload({ content: [{ text }] }, provider);
-  }
-
+  if (provider === 'gemini') return normalizeResponsePayload({ candidates: [{ content: { parts: [{ text }] } }] }, provider);
+  if (provider === 'ollama') return normalizeResponsePayload({ message: { content: text } }, provider);
+  if (provider === 'anthropic') return normalizeResponsePayload({ content: [{ text }] }, provider);
   return normalizeResponsePayload({ content: text }, provider);
 }
+
+// ═══════════════════════════════════════
+// 【导出 API】streamMessage / silentRequest / fetchModels
+// ═══════════════════════════════════════
 
 export async function streamMessage({
   messages = [],
@@ -812,22 +698,14 @@ export async function streamMessage({
   try {
     const endpointConfig = findEndpoint(endpointId);
     const requestContext = buildRequestContext({
-      endpointConfig,
-      model,
-      systemPrompt,
-      messages,
-      stream: true,
-      temperature,
-      maxTokens
+      endpointConfig, model, systemPrompt, messages, stream: true, temperature, maxTokens
     });
 
     const hasMessages = requestContext.provider === 'gemini'
       ? Array.isArray(requestContext.body.contents) && requestContext.body.contents.length > 0
       : Array.isArray(requestContext.body.messages) && requestContext.body.messages.length > 0;
 
-    if (!hasMessages) {
-      throw new Error(requestContext.provider === 'gemini' ? '消息内容不能为空' : '消息内容不能为空');
-    }
+    if (!hasMessages) throw new Error('消息内容不能为空');
 
     const response = await fetch(requestContext.url, {
       method: 'POST',
@@ -836,9 +714,7 @@ export async function streamMessage({
       body: JSON.stringify(requestContext.body)
     });
 
-    if (!response.ok) {
-      throw new Error(await parseErrorResponse(response));
-    }
+    if (!response.ok) throw new Error(await parseErrorResponse(response));
 
     if (!response.body) {
       const fallback = await readTextResponse(response, requestContext.provider);
@@ -847,17 +723,11 @@ export async function streamMessage({
     }
 
     await readStream(response, { onChunk, onDone });
-
     return true;
   } catch (error) {
     const message = normalizeApiError(error, 'AI 请求失败');
-
     notifyApiError(message);
-    onError?.({
-      message,
-      raw: error
-    });
-
+    onError?.({ message, raw: error });
     return false;
   } finally {
     clearTimeout(timer);
@@ -880,22 +750,16 @@ export async function silentRequest({
   try {
     const endpointConfig = findEndpoint(endpointId);
     const requestContext = buildRequestContext({
-      endpointConfig,
-      model,
-      systemPrompt,
+      endpointConfig, model, systemPrompt,
       messages: Array.isArray(messages) && messages.length ? messages : [{ role: 'user', content: prompt }],
-      stream: false,
-      temperature,
-      maxTokens
+      stream: false, temperature, maxTokens
     });
 
     const hasMessages = requestContext.provider === 'gemini'
       ? Array.isArray(requestContext.body.contents) && requestContext.body.contents.length > 0
       : Array.isArray(requestContext.body.messages) && requestContext.body.messages.length > 0;
 
-    if (!hasMessages) {
-      throw new Error(requestContext.provider === 'gemini' ? '请求内容不能为空' : '请求内容不能为空');
-    }
+    if (!hasMessages) throw new Error('请求内容不能为空');
 
     const response = await fetch(requestContext.url, {
       method: 'POST',
@@ -904,9 +768,7 @@ export async function silentRequest({
       body: JSON.stringify(requestContext.body)
     });
 
-    if (!response.ok) {
-      throw new Error(await parseErrorResponse(response));
-    }
+    if (!response.ok) throw new Error(await parseErrorResponse(response));
 
     const { content, thinking } = response.body
       ? await readJsonResponse(response, requestContext.provider)
@@ -915,16 +777,11 @@ export async function silentRequest({
     const finalContent = String(content || '').trim();
     const finalThinking = String(thinking || '').trim();
 
-    if (json) {
-      return parseJsonFromText(finalContent || finalThinking);
-    }
-
+    if (json) return parseJsonFromText(finalContent || finalThinking);
     return finalContent || finalThinking;
   } catch (error) {
     const message = normalizeApiError(error, '后台请求失败');
-
     notifyApiError(message);
-
     return json ? null : '';
   } finally {
     clearTimeout(timer);
@@ -937,65 +794,32 @@ export async function fetchModels(endpointId, timeout = DEFAULT_TIMEOUT) {
   try {
     const endpointConfig = findEndpoint(endpointId);
 
-    if (endpointConfig.provider === 'gemini') {
-      return [];
-    }
+    if (endpointConfig.provider === 'gemini') return [];
 
-    if (endpointConfig.provider === 'ollama') {
-      const response = await fetch(`${endpointConfig.endpoint}/api/tags`, {
-        method: 'GET',
-        headers: buildHeaders('', 'ollama'),
-        signal: controller.signal
-      });
+    const url = smartModelsUrl(endpointConfig.endpoint, endpointConfig.provider);
 
-      if (!response.ok) {
-        throw new Error(await parseErrorResponse(response));
-      }
-
-      const data = await response.json();
-      const models = Array.isArray(data.models) ? data.models : [];
-
-      return models
-        .map((item) => item?.name)
-        .filter(Boolean)
-        .sort((first, second) => first.localeCompare(second));
-    }
-
-    const response = await fetch(`${endpointConfig.endpoint}${MODELS_PATH}`, {
+    const response = await fetch(url, {
       method: 'GET',
       headers: buildHeaders(endpointConfig.apiKey, endpointConfig.provider),
       signal: controller.signal
     });
 
-    if (!response.ok) {
-      throw new Error(await parseErrorResponse(response));
-    }
+    if (!response.ok) throw new Error(await parseErrorResponse(response));
 
     const data = await response.json();
-    const models = Array.isArray(data.data) ? data.data : [];
 
-    return models
-      .map((item) => item?.id)
-      .filter(Boolean)
-      .sort((first, second) => first.localeCompare(second));
+    if (endpointConfig.provider === 'ollama') {
+      const models = Array.isArray(data.models) ? data.models : [];
+      return models.map((m) => m?.name).filter(Boolean).sort((a, b) => a.localeCompare(b));
+    }
+
+    const models = Array.isArray(data.data) ? data.data : [];
+    return models.map((m) => m?.id).filter(Boolean).sort((a, b) => a.localeCompare(b));
   } catch (error) {
     const message = normalizeApiError(error, '拉取模型失败');
-
     notifyApiError(message);
-
     return [];
   } finally {
     clearTimeout(timer);
   }
 }
-
-// 改了什么：
-// 1. 保留 OpenAI 默认路径，同时增加 Anthropic / Gemini / Ollama 分流。
-// 2. 增强流式与非流式返回兼容：当非标准响应没有 body 时，退回到 text/json 解析。
-// 3. Gemini 通过 URL key 参数请求，Anthropic 使用 x-api-key + anthropic-version，Ollama 使用 /api/chat。
-// 4. fetchModels 对 Ollama 做了 tags 适配，Gemini 继续返回空数组以避免错误。
-// 5. 错误提示、超时和网络断开提示保持友好。
-// 会不会影响其他文件：
-// - 函数签名未变，通常不需要其他文件配合。
-// - 如果 settings 以后补 provider 字段，会更精准；不补也能靠 URL 自动识别。
-// - 上层若依赖非标准流式格式，这版比之前更稳，不应破坏现有功能。
