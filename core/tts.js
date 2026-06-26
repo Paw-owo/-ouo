@@ -26,9 +26,7 @@ function pickFirstString(...args) {
 }
 
 function normalizeEndpoint(raw) {
-  let url = String(raw || '').trim().replace(/\/+$/, '');
-  url = url.replace(/\/v1\/?$/, '');
-  return url;
+  return String(raw || '').trim().replace(/\/+$/, '');
 }
 
 function normalizeProvider(provider, endpoint) {
@@ -55,6 +53,37 @@ function toast(message) {
   } catch (error) {
     // silent
   }
+}
+
+// ═══════════════════════════════════════
+// 【URL 智能检测】路径里已有关键词就不重复拼接
+// ═══════════════════════════════════════
+
+function urlHasPathKeyword(url, keyword) {
+  try {
+    return new URL(url).pathname.toLowerCase().includes(keyword.toLowerCase());
+  } catch {
+    return url.toLowerCase().includes(keyword.toLowerCase());
+  }
+}
+
+function smartTTSUrl(base, provider, voiceId) {
+  const lower = base.toLowerCase();
+
+  if (provider === 'elevenlabs') {
+    const suffix = '/v1/text-to-speech/';
+    if (urlHasPathKeyword(base, '/text-to-speech/')) return base;
+    return `${base}/v1/text-to-speech/${encodeURIComponent(voiceId || 'default')}`;
+  }
+
+  if (provider === 'azure') {
+    if (urlHasPathKeyword(base, '/cognitiveservices/v1')) return base;
+    return `${base}/cognitiveservices/v1`;
+  }
+
+  // openai / custom：路径里有 /audio/speech 就不追加
+  if (urlHasPathKeyword(base, '/audio/speech')) return base;
+  return `${base}/v1/audio/speech`;
 }
 
 // ═══════════════════════════════════════
@@ -220,7 +249,7 @@ function speakWithWebSpeech(text, config, state, instance) {
 }
 
 // ═══════════════════════════════════════
-// 【请求构建】各 provider 的 TTS 请求
+// 【请求构建】各 provider 的 TTS 请求（智能拼 URL）
 // ═══════════════════════════════════════
 
 function resolveVoiceId(config) {
@@ -228,10 +257,9 @@ function resolveVoiceId(config) {
 }
 
 function buildOpenAIRequest(config, text) {
-  const baseUrl = normalizeEndpoint(config.endpoint);
-
+  const base = normalizeEndpoint(config.endpoint);
   return {
-    url: `${baseUrl}/v1/audio/speech`,
+    url: smartTTSUrl(base, 'openai'),
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${config.apiKey}`
@@ -246,11 +274,9 @@ function buildOpenAIRequest(config, text) {
 }
 
 function buildCustomRequest(config, text) {
-  const baseUrl = normalizeEndpoint(config.endpoint);
-  const url = `${baseUrl}/v1/audio/speech`;
-
+  const base = normalizeEndpoint(config.endpoint);
   return {
-    url,
+    url: smartTTSUrl(base, 'custom'),
     headers: {
       'Content-Type': 'application/json'
     },
@@ -264,11 +290,10 @@ function buildCustomRequest(config, text) {
 }
 
 function buildElevenLabsRequest(config, text) {
-  const baseUrl = normalizeEndpoint(config.endpoint);
+  const base = normalizeEndpoint(config.endpoint);
   const voiceId = resolveVoiceId(config) || 'default';
-
   return {
-    url: `${baseUrl}/v1/text-to-speech/${encodeURIComponent(voiceId)}`,
+    url: smartTTSUrl(base, 'elevenlabs', voiceId),
     headers: {
       'Content-Type': 'application/json',
       'xi-api-key': config.apiKey
@@ -305,13 +330,9 @@ function buildAzureSsml(text, config) {
 }
 
 function buildAzureRequest(config, text) {
-  const baseUrl = normalizeEndpoint(config.endpoint);
-  const url = baseUrl.includes('/cognitiveservices/v1')
-    ? baseUrl
-    : `${baseUrl}/cognitiveservices/v1`;
-
+  const base = normalizeEndpoint(config.endpoint);
   return {
-    url,
+    url: smartTTSUrl(base, 'azure'),
     headers: {
       'Content-Type': 'application/ssml+xml',
       'Ocp-Apim-Subscription-Key': config.apiKey,
