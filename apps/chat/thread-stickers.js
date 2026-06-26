@@ -63,7 +63,6 @@ async function renderPicker(isNew = false) {
   ensureStyle();
   allStickers = await loadStickers();
 
-  // 非首次只刷新网格和底栏，不重建整个sheet
   if (!isNew) {
     syncTabButtons();
     const area = document.querySelector('.ss-grid-area');
@@ -186,21 +185,17 @@ function renderGridContent(area) {
 
   const filtered = getFilteredStickers();
 
-  // 空状态
   if (!allStickers.length) {
     area.appendChild(createEmptyState());
     return;
   }
 
-  // 第一格永远是 +号
   area.appendChild(createAddCell());
 
-  // 贴入表情包卡片
   filtered.forEach((sticker) => {
     area.appendChild(createStickerCell(sticker));
   });
 
-  // 搜索无结果
   if (!filtered.length && allStickers.length) {
     const hint = el('div', 'ss-grid-hint', '没有找到匹配的表情包');
     area.appendChild(hint);
@@ -261,7 +256,6 @@ function createStickerCell(sticker) {
   });
   cell.appendChild(img);
 
-  // 删除模式
   if (deleteMode) {
     cell.classList.add('is-deletable');
     const isChecked = selectedIds.has(sticker.id);
@@ -283,7 +277,6 @@ function createStickerCell(sticker) {
       renderPicker(false);
     });
   } else {
-    // 正常模式：点击发送
     cell.addEventListener('click', async (event) => {
       event.stopPropagation();
       if (!activeState) return;
@@ -360,7 +353,6 @@ function renderDeleteBar() {
       await deleteDB('stickers', id).catch(() => {});
     }
 
-    // 清除最近记录里的已删id
     const recent = getRecentIds().filter((id) => !selectedIds.has(id));
     setData(RECENT_KEY, recent);
 
@@ -406,7 +398,6 @@ function openSinglePicker() {
 function showUploadSheet(base64) {
   const sheet = el('div', 'ss-upload-sheet');
 
-  // 标题行
   const head = el('div', 'ss-upload-head');
 
   const backBtn = el('button', 'ss-upload-back');
@@ -417,7 +408,6 @@ function showUploadSheet(base64) {
   head.append(backBtn, el('div', 'ss-upload-title', '添加表情包'));
   sheet.appendChild(head);
 
-  // 预览
   const preview = el('div', 'ss-upload-preview');
   const img = document.createElement('img');
   img.src = base64;
@@ -425,7 +415,6 @@ function showUploadSheet(base64) {
   preview.appendChild(img);
   sheet.appendChild(preview);
 
-  // 描述
   const desc = document.createElement('input');
   desc.type = 'text';
   desc.className = 'ss-upload-desc';
@@ -434,7 +423,6 @@ function showUploadSheet(base64) {
   desc.autocomplete = 'off';
   sheet.appendChild(desc);
 
-  // 保存
   const saveBtn = el('button', 'ss-upload-save', '保存');
   saveBtn.type = 'button';
   saveBtn.addEventListener('click', async () => {
@@ -548,14 +536,12 @@ function trackRecent(stickerId) {
 function getFilteredStickers() {
   let list = [...allStickers];
 
-  // 最近 tab：按使用记录排序
   if (currentTab === 'recent') {
     const recentIds = getRecentIds();
     const map = new Map(list.map((s) => [s.id, s]));
     list = recentIds.map((id) => map.get(id)).filter(Boolean);
   }
 
-  // 搜索过滤
   const input = document.querySelector('.ss-sheet .ss-search-input');
   const query = (input?.value || '').trim().toLowerCase();
 
@@ -658,7 +644,7 @@ function ensureStyle() {
       gap: 8px;
       height: 38px;
       padding: 0 12px;
-      border-radius: 12px;
+      border-radius: var(--radius-md);
       background: var(--surface-muted);
       color: var(--text-hint);
       flex-shrink: 0;
@@ -692,7 +678,7 @@ function ensureStyle() {
     .ss-tab-btn {
       height: 30px;
       padding: 0 12px;
-      border-radius: 10px;
+      border-radius: var(--radius-full);
       background: var(--surface-muted);
       color: var(--text-secondary);
       box-shadow: var(--shadow-sm);
@@ -737,8 +723,9 @@ function ensureStyle() {
       display: flex;
       align-items: center;
       justify-content: center;
-      border-radius: 10px;
-      background: var(--bg-card);
+      border-radius: var(--radius-md);
+      background: var(--bg-surface);
+      box-shadow: var(--shadow-sm);
       overflow: hidden;
       cursor: pointer;
       transition: all 160ms ease;
@@ -754,7 +741,7 @@ function ensureStyle() {
       width: 100%;
       height: 100%;
       object-fit: contain;
-      border-radius: 10px;
+      border-radius: var(--radius-md);
       pointer-events: none;
     }
 
@@ -768,22 +755,22 @@ function ensureStyle() {
       color: var(--text-hint);
     }
 
-    /* ── + 号添加格 ── */
+    /* ── + 号添加格（柔和实底） ── */
 
     .ss-cell-add {
-      background: transparent;
-      border: 1.5px dashed var(--text-hint);
-      opacity: 0.35;
+      background: var(--surface-muted);
+      box-shadow: none;
+      opacity: 0.6;
       transition: all 160ms ease;
     }
 
     .ss-cell-add:active {
-      opacity: 0.6;
+      opacity: 0.85;
       transform: scale(0.93);
     }
 
     .ss-cell-add svg {
-      color: var(--text-hint);
+      color: var(--text-secondary);
       pointer-events: none;
     }
 
@@ -796,7 +783,7 @@ function ensureStyle() {
     .ss-cell-overlay {
       position: absolute;
       inset: 0;
-      border-radius: 10px;
+      border-radius: var(--radius-md);
       background: transparent;
       pointer-events: none;
       transition: background 160ms ease;
@@ -817,7 +804,7 @@ function ensureStyle() {
       justify-content: center;
       border-radius: 999px;
       background: var(--bg-card);
-      box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+      box-shadow: var(--shadow-sm);
       color: var(--text-hint);
       z-index: 2;
       opacity: 0.55;
@@ -842,8 +829,8 @@ function ensureStyle() {
     .ss-delete-btn {
       min-height: 36px;
       padding: 0 24px;
-      border-radius: 10px;
-      background: #e8453c;
+      border-radius: var(--radius-full);
+      background: var(--danger, #e8453c);
       color: #fff;
       box-shadow: var(--shadow-sm);
       font: inherit;
@@ -890,7 +877,7 @@ function ensureStyle() {
       font-size: 13px;
     }
 
-    /* ── 上传页 ── */
+    /* ── 上传页（预览放大、不裁剪） ── */
 
     .ss-upload-sheet {
       display: flex;
@@ -911,7 +898,7 @@ function ensureStyle() {
       display: flex;
       align-items: center;
       justify-content: center;
-      border-radius: 10px;
+      border-radius: var(--radius-md);
       background: var(--surface-muted);
       color: var(--text-primary);
       padding: 0;
@@ -934,13 +921,14 @@ function ensureStyle() {
       display: flex;
       align-items: center;
       justify-content: center;
+      padding: 8px 0;
     }
 
     .ss-upload-preview img {
-      max-width: 100px;
-      max-height: 100px;
-      border-radius: 12px;
-      box-shadow: var(--shadow-sm);
+      max-width: 180px;
+      max-height: 180px;
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-card);
       object-fit: contain;
     }
 
@@ -948,7 +936,7 @@ function ensureStyle() {
       width: 100%;
       height: 40px;
       padding: 0 12px;
-      border-radius: 10px;
+      border-radius: var(--radius-md);
       background: var(--surface-muted);
       color: var(--text-primary);
       font: inherit;
@@ -963,7 +951,7 @@ function ensureStyle() {
 
     .ss-upload-save {
       min-height: 40px;
-      border-radius: 12px;
+      border-radius: var(--radius-lg);
       background: var(--accent);
       color: var(--bubble-user-text);
       box-shadow: var(--shadow-sm);
@@ -1002,9 +990,9 @@ function ensureStyle() {
     .ss-confirm-card {
       width: min(280px, calc(100vw - 48px));
       padding: 22px 20px 18px;
-      border-radius: 20px;
+      border-radius: var(--radius-xl);
       background: var(--bg-card);
-      box-shadow: var(--shadow-lg);
+      box-shadow: var(--shadow-float);
       transform: scale(0.95) translateY(8px);
       transition: transform 200ms ease;
     }
@@ -1030,7 +1018,7 @@ function ensureStyle() {
     .ss-confirm-cancel,
     .ss-confirm-ok {
       min-height: 38px;
-      border-radius: 12px;
+      border-radius: var(--radius-full);
       font: inherit;
       font-size: 14px;
       font-weight: 600;
@@ -1043,7 +1031,7 @@ function ensureStyle() {
     }
 
     .ss-confirm-ok {
-      background: #e8453c;
+      background: var(--danger, #e8453c);
       color: #fff;
     }
 
