@@ -1,194 +1,384 @@
 // apps/chat/thread-stickers.js
 // imports:
-//   from '../../core/storage.js': getDB, getAllDB, setDB, deleteDB, generateId, getNow
+//   from '../../core/storage.js': getData, setData, getAllDB, setDB, deleteDB, generateId, getNow
 //   from '../../core/ui.js': showToast, showBottomSheet, hideBottomSheet
 //   from './thread-actions.js': sendStickerMessage
 
-import { getAllDB, setDB, deleteDB, generateId, getNow } from '../../core/storage.js';
+import { getData, setData, getAllDB, setDB, deleteDB, generateId, getNow } from '../../core/storage.js';
 import { showToast, showBottomSheet, hideBottomSheet } from '../../core/ui.js';
 import { sendStickerMessage } from './thread-actions.js';
 
-const MAX_STICKER_SIZE = 280 * 1024; // 280KB 原始文件上限
+// ═══════════════════════════════════════
+// 【常量】
+// ═══════════════════════════════════════
+
+const MAX_FILE_SIZE = 280 * 1024;
+const RECENT_KEY = 'sticker_recent_ids';
+const MAX_RECENT = 30;
+const STYLE_ID = 'thread-stickers-style';
+
+// ═══════════════════════════════════════
+// 【内部状态】
+// ═══════════════════════════════════════
 
 let activeState = null;
 let activeOptions = null;
+let currentTab = 'all';
+let deleteMode = false;
+let selectedIds = new Set();
+let allStickers = [];
 
 // ═══════════════════════════════════════
-// 【公开接口】打开和关闭表情包抽屉
+// 【公开接口】打开和关闭
 // ═══════════════════════════════════════
 
 export function openStickerSheet(state, options = {}) {
   activeState = state;
   activeOptions = options;
-  showPickerSheet();
+  currentTab = 'all';
+  deleteMode = false;
+  selectedIds = new Set();
+  renderPicker(true);
 }
 
 export function closeStickerSheet() {
   hideBottomSheet();
+  resetState();
+}
+
+function resetState() {
   activeState = null;
   activeOptions = null;
+  currentTab = 'all';
+  deleteMode = false;
+  selectedIds = new Set();
+  allStickers = [];
 }
 
 // ═══════════════════════════════════════
-// 【选择抽屉】表情包网格 + 底部上传按钮
+// 【主渲染】构建整个抽屉
 // ═══════════════════════════════════════
 
-async function showPickerSheet() {
-  const state = activeState;
-  if (!state) return;
+async function renderPicker(isNew = false) {
+  ensureStyle();
+  allStickers = await loadStickers();
 
-  const stickers = await loadStickers();
-  const sheet = el('div', 'sticker-sheet');
-
-  // 标题栏
-  const head = el('div', 'sticker-sheet-head');
-  head.append(
-    el('div', 'sticker-sheet-title', '表情包'),
-    el('div', 'sticker-sheet-count', `${stickers.length} 个`)
-  );
-
-  // 网格区域
-  const grid = el('div', 'sticker-sheet-grid');
-
-  if (!stickers.length) {
-    grid.classList.add('is-empty');
-    grid.append(
-      el('div', 'sticker-empty-icon'),
-      el('div', 'sticker-empty-text', '还没有表情包'),
-      el('div', 'sticker-empty-hint', '点下面按钮上传一个吧')
-    );
-  } else {
-    stickers.forEach((sticker) => {
-      grid.appendChild(createStickerCard(sticker));
-    });
+  // 非首次只刷新网格和底栏，不重建整个sheet
+  if (!isNew) {
+    syncTabButtons();
+    const area = document.querySelector('.ss-grid-area');
+    if (area) renderGridContent(area);
+    renderDeleteBar();
+    return;
   }
 
-  // 底部上传按钮
-  const footer = el('div', 'sticker-sheet-footer');
-  const uploadBtn = el('button', 'sticker-upload-btn', '上传新表情包');
-  uploadBtn.type = 'button';
-  uploadBtn.addEventListener('click', () => showUploadSheet());
+  const sheet = el('div', 'ss-sheet');
 
-  footer.append(uploadBtn);
-  sheet.append(head, grid, footer);
+  sheet.appendChild(createSearchBar());
+  sheet.appendChild(createActionBar());
+  sheet.appendChild(createGridArea());
   showBottomSheet(sheet);
+
+  renderDeleteBar();
+}
+
+// ═══════════════════════════════════════
+// 【搜索栏】
+// ═══════════════════════════════════════
+
+function createSearchBar() {
+  const wrap = el('div', 'ss-search');
+  wrap.appendChild(createSearchIcon());
+
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'ss-search-input';
+  input.placeholder = '搜索表情包';
+  input.autocomplete = 'off';
+  input.spellcheck = false;
+
+  input.addEventListener('input', () => {
+    const area = document.querySelector('.ss-grid-area');
+    if (area) renderGridContent(area);
+  });
+
+  wrap.appendChild(input);
+  return wrap;
+}
+
+function createSearchIcon() {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('width', '15');
+  svg.setAttribute('height', '15');
+  svg.setAttribute('fill', 'none');
+  svg.setAttribute('stroke', 'currentColor');
+  svg.setAttribute('stroke-width', '1.5');
+  svg.setAttribute('stroke-linecap', 'round');
+  svg.setAttribute('stroke-linejoin', 'round');
+  svg.setAttribute('aria-hidden', 'true');
+
+  const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+  c.setAttribute('cx', '11');
+  c.setAttribute('cy', '11');
+  c.setAttribute('r', '6');
+
+  const p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  p.setAttribute('d', 'M15.5 15.5L20 20');
+
+  svg.append(c, p);
+  return svg;
+}
+
+// ═══════════════════════════════════════
+// 【操作栏】最近 / 删除 / 批量添加
+// ═══════════════════════════════════════
+
+function createActionBar() {
+  const bar = el('div', 'ss-action-bar');
+
+  const recentBtn = el('button', `ss-tab-btn ${currentTab === 'recent' ? 'is-active' : ''}`, '最近');
+  recentBtn.type = 'button';
+  recentBtn.addEventListener('click', () => {
+    currentTab = currentTab === 'recent' ? 'all' : 'recent';
+    deleteMode = false;
+    selectedIds = new Set();
+    renderPicker(false);
+  });
+
+  const deleteBtn = el('button', `ss-tab-btn ${deleteMode ? 'is-active' : ''}`, '删除');
+  deleteBtn.type = 'button';
+  deleteBtn.addEventListener('click', () => {
+    currentTab = 'all';
+    deleteMode = !deleteMode;
+    selectedIds = new Set();
+    renderPicker(false);
+  });
+
+  const bulkBtn = el('button', 'ss-tab-btn', '批量添加');
+  bulkBtn.type = 'button';
+  bulkBtn.addEventListener('click', () => openBulkPicker());
+
+  bar.append(recentBtn, deleteBtn, bulkBtn);
+  return bar;
+}
+
+function syncTabButtons() {
+  const btns = document.querySelectorAll('.ss-sheet .ss-tab-btn');
+  if (btns[0]) btns[0].classList.toggle('is-active', currentTab === 'recent');
+  if (btns[1]) btns[1].classList.toggle('is-active', deleteMode);
+}
+
+// ═══════════════════════════════════════
+// 【网格区域】5列 + 首格+号 + 上下滑动
+// ═══════════════════════════════════════
+
+function createGridArea() {
+  const area = el('div', 'ss-grid-area');
+  area.id = 'ss-grid-area';
+  renderGridContent(area);
+  return area;
+}
+
+function renderGridContent(area) {
+  if (!area) return;
+  area.replaceChildren();
+
+  const filtered = getFilteredStickers();
+
+  // 空状态
+  if (!allStickers.length) {
+    area.appendChild(createEmptyState());
+    return;
+  }
+
+  // 第一格永远是 +号
+  area.appendChild(createAddCell());
+
+  // 贴入表情包卡片
+  filtered.forEach((sticker) => {
+    area.appendChild(createStickerCell(sticker));
+  });
+
+  // 搜索无结果
+  if (!filtered.length && allStickers.length) {
+    const hint = el('div', 'ss-grid-hint', '没有找到匹配的表情包');
+    area.appendChild(hint);
+  }
 }
 
 // ───────────────────
-// 单个表情包卡片
+// +号添加格
 // ───────────────────
 
-function createStickerCard(sticker) {
-  const card = el('div', 'sticker-card');
+function createAddCell() {
+  const cell = el('button', 'ss-cell ss-cell-add');
+  cell.type = 'button';
+  cell.setAttribute('aria-label', '添加表情包');
+
+  const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  icon.setAttribute('viewBox', '0 0 24 24');
+  icon.setAttribute('width', '22');
+  icon.setAttribute('height', '22');
+  icon.setAttribute('fill', 'none');
+  icon.setAttribute('stroke', 'currentColor');
+  icon.setAttribute('stroke-width', '1.5');
+  icon.setAttribute('stroke-linecap', 'round');
+  icon.setAttribute('stroke-linejoin', 'round');
+  icon.setAttribute('aria-hidden', 'true');
+
+  const p1 = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  p1.setAttribute('d', 'M12 5v14');
+  const p2 = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  p2.setAttribute('d', 'M5 12h14');
+  icon.append(p1, p2);
+
+  cell.appendChild(icon);
+
+  cell.addEventListener('click', (event) => {
+    event.stopPropagation();
+    openSinglePicker();
+  });
+
+  return cell;
+}
+
+// ───────────────────
+// 单个表情包格
+// ───────────────────
+
+function createStickerCell(sticker) {
+  const cell = el('div', 'ss-cell');
 
   const img = document.createElement('img');
   img.src = sticker.imageBase64 || '';
   img.alt = sticker.description || '';
-  img.className = 'sticker-card-img';
+  img.className = 'ss-cell-img';
   img.loading = 'lazy';
-
   img.addEventListener('error', () => {
     img.style.display = 'none';
-    card.classList.add('is-broken');
+    cell.classList.add('is-broken');
   });
+  cell.appendChild(img);
 
-  // 点击发送
-  card.addEventListener('click', async () => {
-    if (!activeState) return;
-    hideBottomSheet();
-    await sendStickerMessage(activeState, sticker.id);
-    activeOptions?.onRefresh?.();
-  });
+  // 删除模式
+  if (deleteMode) {
+    cell.classList.add('is-deletable');
+    const isChecked = selectedIds.has(sticker.id);
+    if (isChecked) cell.classList.add('is-selected');
 
-  // 删除按钮
-  const delBtn = el('button', 'sticker-card-del');
-  delBtn.type = 'button';
-  delBtn.setAttribute('aria-label', '删除');
-  delBtn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12"/><path d="M18 6L6 18"/></svg>`;
+    const check = el('div', `ss-cell-check ${isChecked ? 'is-checked' : ''}`);
+    check.appendChild(createCheckIcon());
+    cell.appendChild(check);
 
-  delBtn.addEventListener('click', async (event) => {
-    event.stopPropagation();
-    await deleteDB('stickers', sticker.id);
-    showToast('表情包删掉啦');
-    await showPickerSheet();
-  });
+    cell.appendChild(el('div', 'ss-cell-overlay'));
 
-  card.append(img, delBtn);
-  return card;
+    cell.addEventListener('click', (event) => {
+      event.stopPropagation();
+      if (selectedIds.has(sticker.id)) {
+        selectedIds.delete(sticker.id);
+      } else {
+        selectedIds.add(sticker.id);
+      }
+      renderPicker(false);
+    });
+  } else {
+    // 正常模式：点击发送
+    cell.addEventListener('click', async (event) => {
+      event.stopPropagation();
+      if (!activeState) return;
+
+      trackRecent(sticker.id);
+      hideBottomSheet();
+      await sendStickerMessage(activeState, sticker.id);
+      activeOptions?.onRefresh?.();
+      resetState();
+    });
+  }
+
+  return cell;
+}
+
+function createCheckIcon() {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('width', '12');
+  svg.setAttribute('height', '12');
+  svg.setAttribute('fill', 'none');
+  svg.setAttribute('stroke', 'currentColor');
+  svg.setAttribute('stroke-width', '2.5');
+  svg.setAttribute('stroke-linecap', 'round');
+  svg.setAttribute('stroke-linejoin', 'round');
+  svg.setAttribute('aria-hidden', 'true');
+
+  const p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  p.setAttribute('d', 'M5 12.5l4 4L19 6.5');
+  svg.appendChild(p);
+  return svg;
+}
+
+// ───────────────────
+// 空状态
+// ───────────────────
+
+function createEmptyState() {
+  const wrap = el('div', 'ss-empty');
+  wrap.append(
+    el('div', 'ss-empty-title', '还没有表情包'),
+    el('div', 'ss-empty-hint', '点上面 + 号上传一个吧')
+  );
+  return wrap;
 }
 
 // ═══════════════════════════════════════
-// 【上传抽屉】选择图片 + 描述 + 保存
+// 【删除底栏】显示已选数量和删除按钮
 // ═══════════════════════════════════════
 
-function showUploadSheet() {
-  const sheet = el('div', 'sticker-upload-sheet');
+function renderDeleteBar() {
+  const sheet = document.querySelector('.ss-sheet');
+  if (!sheet) return;
 
-  const head = el('div', 'sticker-upload-head');
-  const backBtn = el('button', 'sticker-upload-back', '返回');
-  backBtn.type = 'button';
-  backBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="m15 18-6-6 6-6"/></svg> 返回`;
-  backBtn.addEventListener('click', () => showPickerSheet());
+  const old = sheet.querySelector('.ss-delete-bar');
+  if (old) old.remove();
 
-  head.append(backBtn, el('div', 'sticker-upload-title', '上传表情包'));
+  if (!deleteMode) return;
 
-  // 预览区
-  const preview = el('div', 'sticker-upload-preview');
-  const previewImg = document.createElement('img');
-  previewImg.alt = '';
-  previewImg.style.display = 'none';
-  preview.appendChild(previewImg);
+  const bar = el('div', 'ss-delete-bar');
+  const count = selectedIds.size;
 
-  const pickBtn = el('button', 'sticker-upload-pick', '选择图片');
-  pickBtn.type = 'button';
-  pickBtn.addEventListener('click', () => openFilePicker(previewImg));
+  const delBtn = el('button', `ss-delete-btn ${count ? '' : 'is-disabled'}`, `删除${count ? ` (${count})` : ''}`);
+  delBtn.type = 'button';
+  delBtn.disabled = !count;
 
-  // 描述输入
-  const descInput = document.createElement('input');
-  descInput.type = 'text';
-  descInput.className = 'sticker-upload-desc';
-  descInput.placeholder = '描述一下这个表情包，AI 会看懂它';
-  descInput.maxLength = 120;
-  descInput.autocomplete = 'off';
+  delBtn.addEventListener('click', async () => {
+    if (!selectedIds.size) return;
 
-  // 保存按钮
-  const saveBtn = el('button', 'sticker-upload-save', '保存');
-  saveBtn.type = 'button';
-  saveBtn.disabled = true;
+    const ok = await showConfirm(`确定删除 ${selectedIds.size} 个表情包？`);
+    if (!ok) return;
 
-  let pendingBase64 = '';
-
-  saveBtn.addEventListener('click', async () => {
-    if (!pendingBase64) {
-      showToast('先选一张图片');
-      return;
+    for (const id of selectedIds) {
+      await deleteDB('stickers', id).catch(() => {});
     }
 
-    const description = descInput.value.trim();
-    const now = getNow();
+    // 清除最近记录里的已删id
+    const recent = getRecentIds().filter((id) => !selectedIds.has(id));
+    setData(RECENT_KEY, recent);
 
-    await setDB('stickers', {
-      id: generateId('sticker'),
-      imageBase64: pendingBase64,
-      description: description || '',
-      name: description || '表情包',
-      createdAt: now,
-      updatedAt: now
-    });
-
-    showToast('表情包上传好啦');
-    await showPickerSheet();
+    showToast(`删掉 ${selectedIds.size} 个表情包`);
+    selectedIds = new Set();
+    allStickers = await loadStickers();
+    renderPicker(true);
   });
 
-  sheet.append(head, pickBtn, preview, descInput, saveBtn);
-  showBottomSheet(sheet);
+  bar.appendChild(delBtn);
+  sheet.appendChild(bar);
 }
 
-// ───────────────────
-// 文件选择器 → 读取 base64
-// ───────────────────
+// ═══════════════════════════════════════
+// 【单张上传】选图 → 描述 → 保存
+// ═══════════════════════════════════════
 
-function openFilePicker(previewImg) {
+function openSinglePicker() {
   const input = document.createElement('input');
   input.type = 'file';
   input.accept = 'image/png,image/jpeg,image/gif,image/webp';
@@ -197,82 +387,190 @@ function openFilePicker(previewImg) {
     const file = input.files?.[0];
     if (!file) return;
 
-    if (file.size > MAX_STICKER_SIZE) {
+    if (file.size > MAX_FILE_SIZE) {
       showToast('图片太大了，请换一张小一点的');
       return;
     }
 
-    const base64 = await fileToBase64(file);
-
-    previewImg.src = base64;
-    previewImg.style.display = 'block';
-
-    // 找到 sheet 里的保存按钮并启用
-    const sheet = previewImg.closest('.sticker-upload-sheet');
-    if (sheet) {
-      const saveBtn = sheet.querySelector('.sticker-upload-save');
-      if (saveBtn) saveBtn.disabled = false;
+    try {
+      const base64 = await readFileAsBase64(file);
+      showUploadSheet(base64);
+    } catch (_) {
+      showToast('图片读取失败，换一张试试');
     }
-
-    // 存到闭包外的变量供保存按钮读取
-    const pickBtn = sheet?.querySelector('.sticker-upload-pick');
-    if (pickBtn) {
-      pickBtn.textContent = '换一张';
-      pickBtn._pendingBase64 = base64;
-    }
-
-    // 把 base64 存到 sheet dataset 中
-    if (sheet) sheet.dataset.pendingBase64 = base64;
   });
-
-  // 重写保存按钮点击逻辑——从 sheet dataset 读取
-  const sheet = previewImg.closest('.sticker-upload-sheet');
-  if (sheet) {
-    const saveBtn = sheet.querySelector('.sticker-upload-save');
-    if (saveBtn) {
-      const origClick = saveBtn.onclick;
-      saveBtn.onclick = null;
-
-      saveBtn.addEventListener('click', async () => {
-        const base64 = sheet.dataset.pendingBase64 || '';
-        if (!base64) {
-          showToast('先选一张图片');
-          return;
-        }
-
-        const descInput = sheet.querySelector('.sticker-upload-desc');
-        const description = descInput?.value?.trim?.() || '';
-        const now = getNow();
-
-        await setDB('stickers', {
-          id: generateId('sticker'),
-          imageBase64: base64,
-          description: description || '',
-          name: description || '表情包',
-          createdAt: now,
-          updatedAt: now
-        });
-
-        showToast('表情包上传好啦');
-        await showPickerSheet();
-      }, { once: false });
-    }
-  }
 
   input.click();
 }
 
-function fileToBase64(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result || ''));
-    reader.onerror = () => reject(new Error('读取图片失败'));
-    reader.readAsDataURL(file);
+function showUploadSheet(base64) {
+  const sheet = el('div', 'ss-upload-sheet');
+
+  // 标题行
+  const head = el('div', 'ss-upload-head');
+
+  const backBtn = el('button', 'ss-upload-back');
+  backBtn.type = 'button';
+  backBtn.appendChild(createBackIcon());
+  backBtn.addEventListener('click', () => renderPicker(true));
+
+  head.append(backBtn, el('div', 'ss-upload-title', '添加表情包'));
+  sheet.appendChild(head);
+
+  // 预览
+  const preview = el('div', 'ss-upload-preview');
+  const img = document.createElement('img');
+  img.src = base64;
+  img.alt = '';
+  preview.appendChild(img);
+  sheet.appendChild(preview);
+
+  // 描述
+  const desc = document.createElement('input');
+  desc.type = 'text';
+  desc.className = 'ss-upload-desc';
+  desc.placeholder = '描述一下，AI 会看懂它';
+  desc.maxLength = 120;
+  desc.autocomplete = 'off';
+  sheet.appendChild(desc);
+
+  // 保存
+  const saveBtn = el('button', 'ss-upload-save', '保存');
+  saveBtn.type = 'button';
+  saveBtn.addEventListener('click', async () => {
+    const now = getNow();
+    await setDB('stickers', {
+      id: generateId('sticker'),
+      imageBase64: base64,
+      description: desc.value.trim() || '',
+      name: desc.value.trim() || '表情包',
+      createdAt: now,
+      updatedAt: now
+    });
+
+    showToast('表情包上传好啦');
+    allStickers = await loadStickers();
+    renderPicker(true);
   });
+
+  sheet.appendChild(saveBtn);
+  showBottomSheet(sheet);
+  requestAnimationFrame(() => desc.focus());
+}
+
+function createBackIcon() {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('width', '16');
+  svg.setAttribute('height', '16');
+  svg.setAttribute('fill', 'none');
+  svg.setAttribute('stroke', 'currentColor');
+  svg.setAttribute('stroke-width', '1.5');
+  svg.setAttribute('stroke-linecap', 'round');
+  svg.setAttribute('stroke-linejoin', 'round');
+  svg.setAttribute('aria-hidden', 'true');
+
+  const p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  p.setAttribute('d', 'm15 18-6-6 6-6');
+  svg.appendChild(p);
+  return svg;
 }
 
 // ═══════════════════════════════════════
-// 【数据加载】读取表情包列表
+// 【批量上传】多选图片一次性保存
+// ═══════════════════════════════════════
+
+function openBulkPicker() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'image/png,image/jpeg,image/gif,image/webp';
+  input.multiple = true;
+
+  input.addEventListener('change', async () => {
+    const files = Array.from(input.files || []);
+    if (!files.length) return;
+
+    const valid = files.filter((f) => f.size <= MAX_FILE_SIZE);
+    if (valid.length < files.length) {
+      showToast(`${files.length - valid.length} 张图片太大，已跳过`);
+    }
+    if (!valid.length) return;
+
+    showToast(`正在保存 ${valid.length} 张...`);
+
+    let saved = 0;
+    for (const file of valid) {
+      try {
+        const base64 = await readFileAsBase64(file);
+        const now = getNow();
+        await setDB('stickers', {
+          id: generateId('sticker'),
+          imageBase64: base64,
+          description: '',
+          name: file.name || '表情包',
+          createdAt: now,
+          updatedAt: now
+        });
+        saved++;
+      } catch (_) {
+        // 跳过失败的
+      }
+    }
+
+    showToast(`保存了 ${saved} 个表情包`);
+    allStickers = await loadStickers();
+    renderPicker(true);
+  });
+
+  input.click();
+}
+
+// ═══════════════════════════════════════
+// 【最近记录】
+// ═══════════════════════════════════════
+
+function getRecentIds() {
+  const raw = getData(RECENT_KEY);
+  return Array.isArray(raw) ? raw : [];
+}
+
+function trackRecent(stickerId) {
+  if (!stickerId) return;
+  const recent = getRecentIds().filter((id) => id !== stickerId);
+  recent.unshift(stickerId);
+  setData(RECENT_KEY, recent.slice(0, MAX_RECENT));
+}
+
+// ═══════════════════════════════════════
+// 【筛选】搜索词 + 最近tab
+// ═══════════════════════════════════════
+
+function getFilteredStickers() {
+  let list = [...allStickers];
+
+  // 最近 tab：按使用记录排序
+  if (currentTab === 'recent') {
+    const recentIds = getRecentIds();
+    const map = new Map(list.map((s) => [s.id, s]));
+    list = recentIds.map((id) => map.get(id)).filter(Boolean);
+  }
+
+  // 搜索过滤
+  const input = document.querySelector('.ss-sheet .ss-search-input');
+  const query = (input?.value || '').trim().toLowerCase();
+
+  if (query) {
+    list = list.filter((s) => {
+      const text = String(s.description || s.name || '').toLowerCase();
+      return text.includes(query);
+    });
+  }
+
+  return list;
+}
+
+// ═══════════════════════════════════════
+// 【数据】加载全部表情包
 // ═══════════════════════════════════════
 
 async function loadStickers() {
@@ -282,278 +580,503 @@ async function loadStickers() {
 }
 
 // ═══════════════════════════════════════
-// 【样式注入】首次调用自动注入
+// 【文件读取】File → base64
 // ═══════════════════════════════════════
 
-let styleInjected = false;
+function readFileAsBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(new Error('读取失败'));
+    reader.readAsDataURL(file);
+  });
+}
+
+// ═══════════════════════════════════════
+// 【确认弹窗】删除前二次确认
+// ═══════════════════════════════════════
+
+function showConfirm(message) {
+  return new Promise((resolve) => {
+    const backdrop = el('div', 'ss-confirm-backdrop');
+
+    const card = el('div', 'ss-confirm-card');
+    card.append(el('div', 'ss-confirm-text', message));
+
+    const actions = el('div', 'ss-confirm-actions');
+
+    const cancel = el('button', 'ss-confirm-cancel', '取消');
+    cancel.type = 'button';
+    cancel.addEventListener('click', () => {
+      backdrop.classList.remove('is-open');
+      setTimeout(() => backdrop.remove(), 200);
+      resolve(false);
+    });
+
+    const ok = el('button', 'ss-confirm-ok', '确定删除');
+    ok.type = 'button';
+    ok.addEventListener('click', () => {
+      backdrop.classList.remove('is-open');
+      setTimeout(() => backdrop.remove(), 200);
+      resolve(true);
+    });
+
+    actions.append(cancel, ok);
+    card.appendChild(actions);
+    backdrop.appendChild(card);
+    document.body.appendChild(backdrop);
+
+    requestAnimationFrame(() => backdrop.classList.add('is-open'));
+  });
+}
+
+// ═══════════════════════════════════════
+// 【样式】微信风格表情包抽屉
+// ═══════════════════════════════════════
 
 function ensureStyle() {
-  if (styleInjected) return;
-  styleInjected = true;
+  if (document.getElementById(STYLE_ID)) return;
 
   const style = document.createElement('style');
+  style.id = STYLE_ID;
   style.textContent = `
-    .sticker-sheet {
+    /* ── 主容器 ── */
+
+    .ss-sheet {
       display: flex;
       flex-direction: column;
       gap: 10px;
-      min-height: 260px;
+      height: min(56vh, 420px);
     }
 
-    .sticker-sheet-head {
-      display: flex;
-      align-items: baseline;
-      justify-content: space-between;
-      gap: 10px;
-    }
+    /* ── 搜索栏 ── */
 
-    .sticker-sheet-title {
-      color: var(--text-primary);
-      font-size: var(--font-size-title);
-      font-weight: 600;
-      line-height: 1.35;
-    }
-
-    .sticker-sheet-count {
-      color: var(--text-hint);
-      font-size: 12px;
-      line-height: 1.35;
-    }
-
-    .sticker-sheet-grid {
-      flex: 1;
-      min-height: 180px;
-      max-height: min(52vh, 380px);
-      overflow-y: auto;
+    .ss-search {
       display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 10px;
+      grid-template-columns: auto 1fr;
+      align-items: center;
+      gap: 8px;
+      height: 38px;
+      padding: 0 12px;
+      border-radius: 12px;
+      background: var(--surface-muted);
+      color: var(--text-hint);
+      flex-shrink: 0;
+    }
+
+    .ss-search-input {
+      width: 100%;
+      height: 100%;
+      border: none;
+      background: transparent;
+      color: var(--text-primary);
+      font: inherit;
+      font-size: 14px;
+      line-height: 1;
+      padding: 0;
+      outline: none;
+    }
+
+    .ss-search-input::placeholder {
+      color: var(--text-hint);
+    }
+
+    /* ── 操作栏 ── */
+
+    .ss-action-bar {
+      display: flex;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .ss-tab-btn {
+      height: 30px;
+      padding: 0 12px;
+      border-radius: 10px;
+      background: var(--surface-muted);
+      color: var(--text-secondary);
+      box-shadow: var(--shadow-sm);
+      font: inherit;
+      font-size: 12px;
+      font-weight: 500;
+      transition: all 180ms ease;
+      white-space: nowrap;
+      flex-shrink: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .ss-tab-btn:active {
+      transform: scale(0.96);
+    }
+
+    .ss-tab-btn.is-active {
+      background: var(--accent);
+      color: var(--bubble-user-text);
+    }
+
+    /* ── 网格区域（5列，上下滑动） ── */
+
+    .ss-grid-area {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      overflow-x: hidden;
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 6px;
       align-content: start;
       padding: 2px 0;
       -webkit-overflow-scrolling: touch;
+      overscroll-behavior: contain;
     }
 
-    .sticker-sheet-grid.is-empty {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-      min-height: 200px;
-      color: var(--text-hint);
-      text-align: center;
-    }
+    /* ── 单个格子 ── */
 
-    .sticker-empty-text {
-      font-size: var(--font-size-base);
-      font-weight: 500;
-      color: var(--text-secondary);
-    }
-
-    .sticker-empty-hint {
-      font-size: 13px;
-      color: var(--text-hint);
-    }
-
-    .sticker-card {
-      position: relative;
+    .ss-cell {
       aspect-ratio: 1 / 1;
       display: flex;
       align-items: center;
       justify-content: center;
-      border-radius: 18px;
+      border-radius: 10px;
       background: var(--bg-card);
-      box-shadow: var(--shadow-sm);
       overflow: hidden;
       cursor: pointer;
-      transition: all 200ms ease;
+      transition: all 160ms ease;
+      position: relative;
       -webkit-tap-highlight-color: transparent;
     }
 
-    .sticker-card:active {
-      transform: scale(0.95);
+    .ss-cell:active {
+      transform: scale(0.93);
     }
 
-    .sticker-card.is-broken {
-      background: var(--surface-muted);
-    }
-
-    .sticker-card.is-broken::after {
-      content: '坏掉了';
-      color: var(--text-hint);
-      font-size: 12px;
-    }
-
-    .sticker-card-img {
+    .ss-cell-img {
       width: 100%;
       height: 100%;
       object-fit: contain;
-      border-radius: 18px;
+      border-radius: 10px;
+      pointer-events: none;
     }
 
-    .sticker-card-del {
+    .ss-cell.is-broken {
+      background: var(--surface-muted);
+    }
+
+    .ss-cell.is-broken::after {
+      content: '损坏';
+      font-size: 10px;
+      color: var(--text-hint);
+    }
+
+    /* ── + 号添加格 ── */
+
+    .ss-cell-add {
+      background: transparent;
+      border: 1.5px dashed var(--text-hint);
+      opacity: 0.35;
+      transition: all 160ms ease;
+    }
+
+    .ss-cell-add:active {
+      opacity: 0.6;
+      transform: scale(0.93);
+    }
+
+    .ss-cell-add svg {
+      color: var(--text-hint);
+      pointer-events: none;
+    }
+
+    /* ── 删除模式 ── */
+
+    .ss-cell.is-deletable {
+      cursor: pointer;
+    }
+
+    .ss-cell-overlay {
       position: absolute;
-      top: 5px;
-      right: 5px;
-      width: 22px;
-      height: 22px;
+      inset: 0;
+      border-radius: 10px;
+      background: transparent;
+      pointer-events: none;
+      transition: background 160ms ease;
+    }
+
+    .ss-cell.is-selected .ss-cell-overlay {
+      background: color-mix(in srgb, var(--accent) 12%, transparent);
+    }
+
+    .ss-cell-check {
+      position: absolute;
+      top: 4px;
+      left: 4px;
+      width: 18px;
+      height: 18px;
       display: flex;
       align-items: center;
       justify-content: center;
       border-radius: 999px;
       background: var(--bg-card);
+      box-shadow: 0 1px 4px rgba(0,0,0,0.1);
       color: var(--text-hint);
-      box-shadow: var(--shadow-sm);
-      opacity: 0;
-      transition: all 200ms ease;
-      padding: 0;
+      z-index: 2;
+      opacity: 0.55;
+      transition: all 160ms ease;
     }
 
-    .sticker-card:hover .sticker-card-del,
-    .sticker-card:active .sticker-card-del {
+    .ss-cell-check.is-checked {
+      background: var(--accent);
+      color: var(--bubble-user-text);
       opacity: 1;
     }
 
-    .sticker-card-del:active {
-      transform: scale(0.9);
-      color: var(--accent);
-    }
+    /* ── 删除底栏 ── */
 
-    .sticker-sheet-footer {
+    .ss-delete-bar {
       display: flex;
       justify-content: center;
       padding-top: 2px;
+      flex-shrink: 0;
     }
 
-    .sticker-upload-btn {
-      min-height: 40px;
-      padding: 0 20px;
-      border-radius: 18px;
-      background: var(--accent);
-      color: var(--bubble-user-text);
+    .ss-delete-btn {
+      min-height: 36px;
+      padding: 0 24px;
+      border-radius: 10px;
+      background: #e8453c;
+      color: #fff;
       box-shadow: var(--shadow-sm);
       font: inherit;
-      font-size: 14px;
+      font-size: 13px;
       font-weight: 600;
-      transition: all 200ms ease;
+      transition: all 160ms ease;
     }
 
-    .sticker-upload-btn:active {
+    .ss-delete-btn:active {
       transform: scale(0.96);
     }
 
-    .sticker-upload-sheet {
+    .ss-delete-btn.is-disabled {
+      opacity: 0.35;
+    }
+
+    /* ── 空状态 ── */
+
+    .ss-empty {
+      grid-column: 1 / -1;
       display: flex;
       flex-direction: column;
-      gap: 12px;
+      align-items: center;
+      gap: 6px;
+      padding: 40px 0;
+    }
+
+    .ss-empty-title {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text-secondary);
+    }
+
+    .ss-empty-hint {
+      font-size: 12px;
+      color: var(--text-hint);
+    }
+
+    .ss-grid-hint {
+      grid-column: 1 / -1;
+      text-align: center;
+      padding: 32px 0;
+      color: var(--text-hint);
+      font-size: 13px;
+    }
+
+    /* ── 上传页 ── */
+
+    .ss-upload-sheet {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
       min-height: 200px;
     }
 
-    .sticker-upload-head {
+    .ss-upload-head {
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 8px;
     }
 
-    .sticker-upload-back {
-      display: inline-flex;
+    .ss-upload-back {
+      width: 32px;
+      height: 32px;
+      display: flex;
       align-items: center;
-      gap: 4px;
-      background: transparent;
-      color: var(--accent);
-      font: inherit;
-      font-size: 14px;
-      font-weight: 500;
+      justify-content: center;
+      border-radius: 10px;
+      background: var(--surface-muted);
+      color: var(--text-primary);
       padding: 0;
-      transition: all 200ms ease;
+      transition: all 160ms ease;
+      flex-shrink: 0;
     }
 
-    .sticker-upload-back:active {
-      opacity: 0.7;
+    .ss-upload-back:active {
+      transform: scale(0.92);
     }
 
-    .sticker-upload-title {
+    .ss-upload-title {
       color: var(--text-primary);
       font-size: var(--font-size-title);
       font-weight: 600;
       line-height: 1.35;
     }
 
-    .sticker-upload-pick {
-      min-height: 42px;
-      border-radius: 16px;
-      background: var(--surface-muted);
-      color: var(--text-primary);
-      box-shadow: var(--shadow-sm);
-      font: inherit;
-      font-size: 14px;
-      transition: all 200ms ease;
-    }
-
-    .sticker-upload-pick:active {
-      transform: scale(0.97);
-    }
-
-    .sticker-upload-preview {
+    .ss-upload-preview {
       display: flex;
       align-items: center;
       justify-content: center;
     }
 
-    .sticker-upload-preview img {
-      max-width: 120px;
-      max-height: 120px;
-      border-radius: 16px;
+    .ss-upload-preview img {
+      max-width: 100px;
+      max-height: 100px;
+      border-radius: 12px;
       box-shadow: var(--shadow-sm);
       object-fit: contain;
     }
 
-    .sticker-upload-desc {
+    .ss-upload-desc {
       width: 100%;
-      min-height: 40px;
-      padding: 8px 12px;
-      border-radius: 14px;
+      height: 40px;
+      padding: 0 12px;
+      border-radius: 10px;
       background: var(--surface-muted);
       color: var(--text-primary);
-      box-shadow: var(--shadow-sm);
       font: inherit;
       font-size: 14px;
-      line-height: 1.5;
+      line-height: 40px;
+      outline: none;
     }
 
-    .sticker-upload-desc::placeholder {
+    .ss-upload-desc::placeholder {
       color: var(--text-hint);
     }
 
-    .sticker-upload-save {
-      min-height: 42px;
-      border-radius: 16px;
+    .ss-upload-save {
+      min-height: 40px;
+      border-radius: 12px;
       background: var(--accent);
       color: var(--bubble-user-text);
       box-shadow: var(--shadow-sm);
       font: inherit;
       font-size: 14px;
       font-weight: 600;
-      transition: all 200ms ease;
+      transition: all 160ms ease;
     }
 
-    .sticker-upload-save:disabled {
-      opacity: 0.4;
-    }
-
-    .sticker-upload-save:active:not(:disabled) {
+    .ss-upload-save:active {
       transform: scale(0.96);
     }
 
-    @media (max-width: 520px) {
-      .sticker-sheet-grid {
-        max-height: min(44vh, 320px);
-        gap: 8px;
+    /* ── 确认弹窗 ── */
+
+    .ss-confirm-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 10030;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: color-mix(in srgb, var(--bg-primary) 60%, transparent);
+      backdrop-filter: blur(6px);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 200ms ease;
+      padding: 24px;
+    }
+
+    .ss-confirm-backdrop.is-open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .ss-confirm-card {
+      width: min(280px, calc(100vw - 48px));
+      padding: 22px 20px 18px;
+      border-radius: 20px;
+      background: var(--bg-card);
+      box-shadow: var(--shadow-lg);
+      transform: scale(0.95) translateY(8px);
+      transition: transform 200ms ease;
+    }
+
+    .ss-confirm-backdrop.is-open .ss-confirm-card {
+      transform: scale(1) translateY(0);
+    }
+
+    .ss-confirm-text {
+      color: var(--text-primary);
+      font-size: 15px;
+      line-height: 1.6;
+      text-align: center;
+      margin-bottom: 20px;
+    }
+
+    .ss-confirm-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .ss-confirm-cancel,
+    .ss-confirm-ok {
+      min-height: 38px;
+      border-radius: 12px;
+      font: inherit;
+      font-size: 14px;
+      font-weight: 600;
+      transition: all 160ms ease;
+    }
+
+    .ss-confirm-cancel {
+      background: var(--surface-muted);
+      color: var(--text-secondary);
+    }
+
+    .ss-confirm-ok {
+      background: #e8453c;
+      color: #fff;
+    }
+
+    .ss-confirm-cancel:active,
+    .ss-confirm-ok:active {
+      transform: scale(0.96);
+    }
+
+    /* ── 响应式 ── */
+
+    @media (max-width: 380px) {
+      .ss-grid-area {
+        gap: 5px;
       }
 
-      .sticker-upload-preview img {
-        max-width: 100px;
-        max-height: 100px;
+      .ss-tab-btn {
+        height: 28px;
+        padding: 0 10px;
+        font-size: 11px;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .ss-cell,
+      .ss-tab-btn,
+      .ss-delete-btn,
+      .ss-upload-back,
+      .ss-upload-save,
+      .ss-confirm-backdrop,
+      .ss-confirm-card,
+      .ss-confirm-cancel,
+      .ss-confirm-ok {
+        transition: none;
       }
     }
   `;
@@ -562,25 +1085,14 @@ function ensureStyle() {
 }
 
 // ═══════════════════════════════════════
-// 【DOM工具】简单元素创建
+// 【DOM工具】
 // ═══════════════════════════════════════
 
 function el(tag, className = '', text = '') {
   const node = document.createElement(tag);
   if (className) node.className = className;
   if (text !== '') node.textContent = text;
-
-  if (tag === 'button') {
-    node.type = 'button';
-    node.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });
-    node.addEventListener('touchmove', (e) => e.stopPropagation(), { passive: true });
-    node.addEventListener('click', (e) => e.stopPropagation());
-  }
-
   return node;
 }
 
-// 首次加载注入样式
-ensureStyle();
-
-// 依赖：../../core/storage.js(getAllDB,setDB,deleteDB,generateId,getNow)；../../core/ui.js(showToast,showBottomSheet,hideBottomSheet)；./thread-actions.js(sendStickerMessage)
+// 依赖：../../core/storage.js(getData,setData,getAllDB,setDB,deleteDB,generateId,getNow)；../../core/ui.js(showToast,showBottomSheet,hideBottomSheet)；./thread-actions.js(sendStickerMessage)
