@@ -102,6 +102,17 @@ export async function mount(containerEl, options = {}) {
   render();
   initAudioElement();
   startAnimationLoop();
+
+  // ─────────────────────────────────────
+  // 暴露播放器控制接口给桌面小组件
+  // ─────────────────────────────────────
+  window.musicPlayer = {
+    isPlaying: () => state.isPlaying,
+    getCurrentSong: () => getCurrentSong(),
+    togglePlay,
+    playNext,
+    playPrevious
+  };
 }
 
 export function unmount() {
@@ -232,10 +243,6 @@ function injectStyle() {
       opacity: 0;
       pointer-events: none;
     }
-
-    /* ─────────────────────────────────────
-       【播放页】全屏播放器
-    ───────────────────────────────────── */
 
     .player-page {
       display: flex;
@@ -453,10 +460,6 @@ function injectStyle() {
     .secondary-btn.active {
       color: var(--accent);
     }
-
-    /* ─────────────────────────────────────
-       【列表页】歌单列表
-    ───────────────────────────────────── */
 
     .list-page {
       display: flex;
@@ -721,10 +724,6 @@ function injectStyle() {
       color: var(--text-secondary);
     }
 
-    /* ─────────────────────────────────────
-       【设置抽屉】壁纸、双人模式、音量
-    ───────────────────────────────────── */
-
     .music-drawer-backdrop {
       position: fixed;
       inset: 0;
@@ -959,10 +958,6 @@ function injectStyle() {
       text-align: center;
     }
 
-    /* ─────────────────────────────────────
-       【歌词面板】全屏歌词显示
-    ───────────────────────────────────── */
-
     .music-lyrics-panel {
       position: fixed;
       inset: 0;
@@ -1063,10 +1058,6 @@ function injectStyle() {
       margin-bottom: 20px;
     }
 
-    /* ─────────────────────────────────────
-       【频谱可视化】Canvas
-    ───────────────────────────────────── */
-
     .music-spectrum {
       position: absolute;
       bottom: 0;
@@ -1077,10 +1068,6 @@ function injectStyle() {
       pointer-events: none;
       opacity: 0.3;
     }
-
-    /* ─────────────────────────────────────
-       【迷你播放条】离开APP时的底部条
-    ───────────────────────────────────── */
 
     .music-mini-player {
       position: fixed;
@@ -1250,10 +1237,6 @@ function createPageContainer() {
   container.append(playerPage, listPage);
   return container;
 }
-
-// ─────────────────────────────────────
-// 播放页渲染
-// ─────────────────────────────────────
 
 function createPlayerPage() {
   const page = document.createElement('div');
@@ -1450,10 +1433,6 @@ function createSecondaryControls() {
   return controls;
 }
 
-// ─────────────────────────────────────
-// 列表页渲染
-// ─────────────────────────────────────
-
 function createListPage() {
   const page = document.createElement('div');
   page.className = 'list-page';
@@ -1629,10 +1608,6 @@ function createSongItem(song) {
   item.append(cover, info, duration, actions);
   return item;
 }
-
-// ═══════════════════════════════════════
-// 【设置抽屉】壁纸、双人模式、音量
-// ═══════════════════════════════════════
 
 function openSettingsDrawer() {
   const backdrop = document.createElement('div');
@@ -1838,10 +1813,6 @@ function createVolumeSection() {
   return section;
 }
 
-// ═══════════════════════════════════════
-// 【歌词面板】全屏歌词显示
-// ═══════════════════════════════════════
-
 function toggleLyricsPanel() {
   state.isLyricsOpen = !state.isLyricsOpen;
 
@@ -1937,10 +1908,6 @@ function createLyricsEmpty() {
   return empty;
 }
 
-// ═══════════════════════════════════════
-// 【音频核心】AudioContext、播放控制
-// ═══════════════════════════════════════
-
 function initAudioElement() {
   if (state.audioElement) return;
 
@@ -1978,10 +1945,6 @@ function initAudioElement() {
   initAudioContext();
 }
 
-// ─────────────────────────────────────
-// AudioContext 初始化：只创建一次 MediaElementSource
-// ─────────────────────────────────────
-
 function initAudioContext() {
   if (state.audioContext) return;
 
@@ -2001,10 +1964,6 @@ function initAudioContext() {
     console.warn('Web Audio API init failed:', e);
   }
 }
-
-// ─────────────────────────────────────
-// 播放歌曲：play() 带 catch，始终更新迷你播放条
-// ─────────────────────────────────────
 
 async function playSong(songId) {
   const song = state.songs.find(s => s.id === songId);
@@ -2083,10 +2042,6 @@ function playAll() {
     playSong(state.songs[0].id);
   }
 }
-
-// ═══════════════════════════════════════
-// 【歌曲管理】导入、删除、保存
-// ═══════════════════════════════════════
 
 async function importSongs() {
   const input = document.createElement('input');
@@ -2214,10 +2169,6 @@ function saveCurrentSong() {
   });
 }
 
-// ═══════════════════════════════════════
-// 【ID3标签解析】读取歌曲元数据
-// ═══════════════════════════════════════
-
 async function readID3Tags(file) {
   try {
     const buffer = await file.arrayBuffer();
@@ -2287,10 +2238,6 @@ function readTextFrame(view, offset, size) {
   return new TextDecoder(encoding === 0 ? 'latin1' : 'utf-8').decode(bytes).replace(/\0/g, '');
 }
 
-// ─────────────────────────────────────
-// 封面图片解析：转为 data URL，刷新后不丢失
-// ─────────────────────────────────────
-
 function readPictureFrame(buffer, offset, size) {
   try {
     const view = new DataView(buffer);
@@ -2329,10 +2276,6 @@ function readFileAsDataURL(file) {
     reader.readAsDataURL(file);
   });
 }
-
-// ═══════════════════════════════════════
-// 【歌词获取】lrclib.net API
-// ═══════════════════════════════════════
 
 async function fetchLyrics(title, artist) {
   if (!title) return [];
@@ -2393,10 +2336,6 @@ function parseLRC(lrc) {
   return result.sort((a, b) => a.time - b.time);
 }
 
-// ─────────────────────────────────────
-// 歌词上传/输入
-// ─────────────────────────────────────
-
 function uploadLyrics() {
   const input = document.createElement('input');
   input.type = 'file';
@@ -2441,10 +2380,6 @@ function inputLyrics() {
   toggleLyricsPanel();
 }
 
-// ═══════════════════════════════════════
-// 【壁纸上传】自定义播放页壁纸
-// ═══════════════════════════════════════
-
 async function uploadWallpaper() {
   const input = document.createElement('input');
   input.type = 'file';
@@ -2470,10 +2405,6 @@ async function uploadWallpaper() {
 
   input.click();
 }
-
-// ═══════════════════════════════════════
-// 【频谱动画】Canvas绘制
-// ═══════════════════════════════════════
 
 function startAnimationLoop() {
   function animate() {
@@ -2531,10 +2462,6 @@ function drawSpectrum() {
   }
 }
 
-// ═══════════════════════════════════════
-// 【UI更新】进度、播放按钮、歌词滚动
-// ═══════════════════════════════════════
-
 function updateProgressUI() {
   const fill = document.querySelector('.progress-fill');
   const thumb = document.querySelector('.progress-thumb');
@@ -2587,10 +2514,6 @@ function updateLyricsIndex() {
   }
 }
 
-// ═══════════════════════════════════════
-// 【页面切换】播放页/列表页
-// ═══════════════════════════════════════
-
 function switchPage(page) {
   state.currentPage = page;
 
@@ -2619,10 +2542,6 @@ function switchPage(page) {
     tab.classList.toggle('active', (i === 0 && page === 'player') || (i === 1 && page === 'list'));
   });
 }
-
-// ═══════════════════════════════════════
-// 【设置读写】localStorage — useCustomWallpaper 标记壁纸模式
-// ═══════════════════════════════════════
 
 async function loadSettings() {
   const saved = getData(MUSIC_SETTINGS_KEY) || {};
@@ -2659,10 +2578,6 @@ function saveSettings() {
   setData(MUSIC_SETTINGS_KEY, state.settings);
 }
 
-// ═══════════════════════════════════════
-// 【角色加载】读取已有AI角色
-// ═══════════════════════════════════════
-
 async function loadCharacters() {
   try {
     const chars = await getAllDB(CHARACTER_STORE);
@@ -2671,10 +2586,6 @@ async function loadCharacters() {
     state.characters = [];
   }
 }
-
-// ═══════════════════════════════════════
-// 【辅助工具】格式化、获取当前歌曲、头像占位
-// ═══════════════════════════════════════
 
 function getCurrentSong() {
   return state.songs.find(s => s.id === state.currentSongId) || null;
@@ -2730,10 +2641,6 @@ function createListAvatarPlaceholder() {
   div.appendChild(createIcon('music', 28));
   return div;
 }
-
-// ─────────────────────────────────────
-// 迷你播放条：退出APP后底部悬浮条
-// ─────────────────────────────────────
 
 function updateMiniPlayer() {
   let miniPlayer = document.querySelector('.music-mini-player');
