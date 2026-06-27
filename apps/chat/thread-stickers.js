@@ -12,7 +12,7 @@ import { sendStickerMessage } from './thread-actions.js';
 // 【常量】
 // ═══════════════════════════════════════
 
-const MAX_FILE_SIZE = 280 * 1024;
+const MAX_FILE_SIZE = 500 * 1024;
 const RECENT_KEY = 'sticker_recent_ids';
 const MAX_RECENT = 30;
 const STYLE_ID = 'thread-stickers-style';
@@ -64,19 +64,25 @@ async function renderPicker(isNew = false) {
   allStickers = await loadStickers();
 
   if (!isNew) {
-    syncTabButtons();
-    const area = document.querySelector('.ss-grid-area');
-    if (area) renderGridContent(area);
-    renderDeleteBar();
+    refreshUI();
     return;
   }
 
   const sheet = el('div', 'ss-sheet');
 
   sheet.appendChild(createSearchBar());
-  sheet.appendChild(createActionBar());
+  sheet.appendChild(createTabBar());
   sheet.appendChild(createGridArea());
+
   showBottomSheet(sheet);
+  renderDeleteBar();
+}
+
+function refreshUI() {
+  syncTabButtons();
+
+  const area = document.querySelector('.ss-grid-area');
+  if (area) renderGridContent(area);
 
   renderDeleteBar();
 }
@@ -87,7 +93,11 @@ async function renderPicker(isNew = false) {
 
 function createSearchBar() {
   const wrap = el('div', 'ss-search');
-  wrap.appendChild(createSearchIcon());
+
+  const icon = createSvgIcon([
+    ['circle', { cx: '11', cy: '11', r: '6' }],
+    ['path', { d: 'M15.5 15.5L20 20' }]
+  ]);
 
   const input = document.createElement('input');
   input.type = 'text';
@@ -101,43 +111,18 @@ function createSearchBar() {
     if (area) renderGridContent(area);
   });
 
-  wrap.appendChild(input);
+  wrap.append(icon, input);
   return wrap;
 }
 
-function createSearchIcon() {
-  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  svg.setAttribute('viewBox', '0 0 24 24');
-  svg.setAttribute('width', '15');
-  svg.setAttribute('height', '15');
-  svg.setAttribute('fill', 'none');
-  svg.setAttribute('stroke', 'currentColor');
-  svg.setAttribute('stroke-width', '1.5');
-  svg.setAttribute('stroke-linecap', 'round');
-  svg.setAttribute('stroke-linejoin', 'round');
-  svg.setAttribute('aria-hidden', 'true');
-
-  const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-  c.setAttribute('cx', '11');
-  c.setAttribute('cy', '11');
-  c.setAttribute('r', '6');
-
-  const p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-  p.setAttribute('d', 'M15.5 15.5L20 20');
-
-  svg.append(c, p);
-  return svg;
-}
-
 // ═══════════════════════════════════════
-// 【操作栏】最近 / 删除 / 批量添加
+// 【标签栏】最近 / 删除 / 批量添加
 // ═══════════════════════════════════════
 
-function createActionBar() {
-  const bar = el('div', 'ss-action-bar');
+function createTabBar() {
+  const bar = el('div', 'ss-tab-bar');
 
-  const recentBtn = el('button', `ss-tab-btn ${currentTab === 'recent' ? 'is-active' : ''}`, '最近');
-  recentBtn.type = 'button';
+  const recentBtn = createTabButton('最近', currentTab === 'recent');
   recentBtn.addEventListener('click', () => {
     currentTab = currentTab === 'recent' ? 'all' : 'recent';
     deleteMode = false;
@@ -145,8 +130,7 @@ function createActionBar() {
     renderPicker(false);
   });
 
-  const deleteBtn = el('button', `ss-tab-btn ${deleteMode ? 'is-active' : ''}`, '删除');
-  deleteBtn.type = 'button';
+  const deleteBtn = createTabButton('删除', deleteMode);
   deleteBtn.addEventListener('click', () => {
     currentTab = 'all';
     deleteMode = !deleteMode;
@@ -154,12 +138,17 @@ function createActionBar() {
     renderPicker(false);
   });
 
-  const bulkBtn = el('button', 'ss-tab-btn', '批量添加');
-  bulkBtn.type = 'button';
+  const bulkBtn = createTabButton('批量添加', false);
   bulkBtn.addEventListener('click', () => openBulkPicker());
 
   bar.append(recentBtn, deleteBtn, bulkBtn);
   return bar;
+}
+
+function createTabButton(text, isActive) {
+  const btn = el('button', `ss-tab-btn${isActive ? ' is-active' : ''}`, text);
+  btn.type = 'button';
+  return btn;
 }
 
 function syncTabButtons() {
@@ -169,12 +158,11 @@ function syncTabButtons() {
 }
 
 // ═══════════════════════════════════════
-// 【网格区域】5列 + 首格+号 + 上下滑动
+// 【网格区域】5列 + 首格+号
 // ═══════════════════════════════════════
 
 function createGridArea() {
   const area = el('div', 'ss-grid-area');
-  area.id = 'ss-grid-area';
   renderGridContent(area);
   return area;
 }
@@ -185,11 +173,7 @@ function renderGridContent(area) {
 
   const filtered = getFilteredStickers();
 
-  if (!allStickers.length) {
-    area.appendChild(createEmptyState());
-    return;
-  }
-
+  // +号始终在第一格
   area.appendChild(createAddCell());
 
   filtered.forEach((sticker) => {
@@ -197,8 +181,11 @@ function renderGridContent(area) {
   });
 
   if (!filtered.length && allStickers.length) {
-    const hint = el('div', 'ss-grid-hint', '没有找到匹配的表情包');
-    area.appendChild(hint);
+    area.appendChild(el('div', 'ss-grid-hint', '没有找到匹配的表情包'));
+  }
+
+  if (!allStickers.length) {
+    area.appendChild(el('div', 'ss-grid-hint', '还没有表情包，点 + 上传吧'));
   }
 }
 
@@ -211,25 +198,12 @@ function createAddCell() {
   cell.type = 'button';
   cell.setAttribute('aria-label', '添加表情包');
 
-  const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  icon.setAttribute('viewBox', '0 0 24 24');
-  icon.setAttribute('width', '22');
-  icon.setAttribute('height', '22');
-  icon.setAttribute('fill', 'none');
-  icon.setAttribute('stroke', 'currentColor');
-  icon.setAttribute('stroke-width', '1.5');
-  icon.setAttribute('stroke-linecap', 'round');
-  icon.setAttribute('stroke-linejoin', 'round');
-  icon.setAttribute('aria-hidden', 'true');
-
-  const p1 = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-  p1.setAttribute('d', 'M12 5v14');
-  const p2 = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-  p2.setAttribute('d', 'M5 12h14');
-  icon.append(p1, p2);
+  const icon = createSvgIcon([
+    ['path', { d: 'M12 5v14' }],
+    ['path', { d: 'M5 12h14' }]
+  ], 20);
 
   cell.appendChild(icon);
-
   cell.addEventListener('click', (event) => {
     event.stopPropagation();
     openSinglePicker();
@@ -247,8 +221,7 @@ function createStickerCell(sticker) {
 
   const img = document.createElement('img');
   img.src = sticker.imageBase64 || '';
-  img.alt = sticker.description || '';
-  img.className = 'ss-cell-img';
+  img.alt = sticker.description || sticker.name || '';
   img.loading = 'lazy';
   img.addEventListener('error', () => {
     img.style.display = 'none';
@@ -261,8 +234,10 @@ function createStickerCell(sticker) {
     const isChecked = selectedIds.has(sticker.id);
     if (isChecked) cell.classList.add('is-selected');
 
-    const check = el('div', `ss-cell-check ${isChecked ? 'is-checked' : ''}`);
-    check.appendChild(createCheckIcon());
+    const check = el('div', `ss-cell-check${isChecked ? ' is-checked' : ''}`);
+    check.appendChild(createSvgIcon([
+      ['path', { d: 'M5 12.5l4 4L19 6.5' }]
+    ], 11, '2.5'));
     cell.appendChild(check);
 
     cell.appendChild(el('div', 'ss-cell-overlay'));
@@ -283,44 +258,19 @@ function createStickerCell(sticker) {
 
       trackRecent(sticker.id);
       hideBottomSheet();
-      await sendStickerMessage(activeState, sticker.id);
+
+      try {
+        await sendStickerMessage(activeState, sticker.id);
+      } catch (_) {
+        showToast('发送失败');
+      }
+
       activeOptions?.onRefresh?.();
       resetState();
     });
   }
 
   return cell;
-}
-
-function createCheckIcon() {
-  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  svg.setAttribute('viewBox', '0 0 24 24');
-  svg.setAttribute('width', '12');
-  svg.setAttribute('height', '12');
-  svg.setAttribute('fill', 'none');
-  svg.setAttribute('stroke', 'currentColor');
-  svg.setAttribute('stroke-width', '2.5');
-  svg.setAttribute('stroke-linecap', 'round');
-  svg.setAttribute('stroke-linejoin', 'round');
-  svg.setAttribute('aria-hidden', 'true');
-
-  const p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-  p.setAttribute('d', 'M5 12.5l4 4L19 6.5');
-  svg.appendChild(p);
-  return svg;
-}
-
-// ───────────────────
-// 空状态
-// ───────────────────
-
-function createEmptyState() {
-  const wrap = el('div', 'ss-empty');
-  wrap.append(
-    el('div', 'ss-empty-title', '还没有表情包'),
-    el('div', 'ss-empty-hint', '点上面 + 号上传一个吧')
-  );
-  return wrap;
 }
 
 // ═══════════════════════════════════════
@@ -339,24 +289,26 @@ function renderDeleteBar() {
   const bar = el('div', 'ss-delete-bar');
   const count = selectedIds.size;
 
-  const delBtn = el('button', `ss-delete-btn ${count ? '' : 'is-disabled'}`, `删除${count ? ` (${count})` : ''}`);
+  const delBtn = el('button', `ss-delete-btn${count ? '' : ' is-disabled'}`, count ? `删除 (${count})` : '删除');
   delBtn.type = 'button';
   delBtn.disabled = !count;
 
   delBtn.addEventListener('click', async () => {
     if (!selectedIds.size) return;
 
-    const ok = await showConfirm(`确定删除 ${selectedIds.size} 个表情包？`);
+    const ok = await showLocalConfirm(`确定删除 ${selectedIds.size} 个表情包？`);
     if (!ok) return;
 
+    let deleted = 0;
     for (const id of selectedIds) {
       await deleteDB('stickers', id).catch(() => {});
+      deleted++;
     }
 
     const recent = getRecentIds().filter((id) => !selectedIds.has(id));
     setData(RECENT_KEY, recent);
 
-    showToast(`删掉 ${selectedIds.size} 个表情包`);
+    showToast(`删掉了 ${deleted} 个`);
     selectedIds = new Set();
     allStickers = await loadStickers();
     renderPicker(true);
@@ -380,7 +332,7 @@ function openSinglePicker() {
     if (!file) return;
 
     if (file.size > MAX_FILE_SIZE) {
-      showToast('图片太大了，请换一张小一点的');
+      showToast('图片太大了，换张小一点的');
       return;
     }
 
@@ -388,7 +340,7 @@ function openSinglePicker() {
       const base64 = await readFileAsBase64(file);
       showUploadSheet(base64);
     } catch (_) {
-      showToast('图片读取失败，换一张试试');
+      showToast('图片读取失败');
     }
   });
 
@@ -402,7 +354,7 @@ function showUploadSheet(base64) {
 
   const backBtn = el('button', 'ss-upload-back');
   backBtn.type = 'button';
-  backBtn.appendChild(createBackIcon());
+  backBtn.appendChild(createSvgIcon([['path', { d: 'm15 18-6-6 6-6' }]]));
   backBtn.addEventListener('click', () => renderPicker(true));
 
   head.append(backBtn, el('div', 'ss-upload-title', '添加表情包'));
@@ -436,7 +388,7 @@ function showUploadSheet(base64) {
       updatedAt: now
     });
 
-    showToast('表情包上传好啦');
+    showToast('上传好啦');
     allStickers = await loadStickers();
     renderPicker(true);
   });
@@ -444,24 +396,6 @@ function showUploadSheet(base64) {
   sheet.appendChild(saveBtn);
   showBottomSheet(sheet);
   requestAnimationFrame(() => desc.focus());
-}
-
-function createBackIcon() {
-  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  svg.setAttribute('viewBox', '0 0 24 24');
-  svg.setAttribute('width', '16');
-  svg.setAttribute('height', '16');
-  svg.setAttribute('fill', 'none');
-  svg.setAttribute('stroke', 'currentColor');
-  svg.setAttribute('stroke-width', '1.5');
-  svg.setAttribute('stroke-linecap', 'round');
-  svg.setAttribute('stroke-linejoin', 'round');
-  svg.setAttribute('aria-hidden', 'true');
-
-  const p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-  p.setAttribute('d', 'm15 18-6-6 6-6');
-  svg.appendChild(p);
-  return svg;
 }
 
 // ═══════════════════════════════════════
@@ -480,7 +414,7 @@ function openBulkPicker() {
 
     const valid = files.filter((f) => f.size <= MAX_FILE_SIZE);
     if (valid.length < files.length) {
-      showToast(`${files.length - valid.length} 张图片太大，已跳过`);
+      showToast(`${files.length - valid.length} 张太大，已跳过`);
     }
     if (!valid.length) return;
 
@@ -501,32 +435,16 @@ function openBulkPicker() {
         });
         saved++;
       } catch (_) {
-        // 跳过失败的
+        // 跳过
       }
     }
 
-    showToast(`保存了 ${saved} 个表情包`);
+    showToast(`保存了 ${saved} 个`);
     allStickers = await loadStickers();
     renderPicker(true);
   });
 
   input.click();
-}
-
-// ═══════════════════════════════════════
-// 【最近记录】
-// ═══════════════════════════════════════
-
-function getRecentIds() {
-  const raw = getData(RECENT_KEY);
-  return Array.isArray(raw) ? raw : [];
-}
-
-function trackRecent(stickerId) {
-  if (!stickerId) return;
-  const recent = getRecentIds().filter((id) => id !== stickerId);
-  recent.unshift(stickerId);
-  setData(RECENT_KEY, recent.slice(0, MAX_RECENT));
 }
 
 // ═══════════════════════════════════════
@@ -556,6 +474,22 @@ function getFilteredStickers() {
 }
 
 // ═══════════════════════════════════════
+// 【最近记录】
+// ═══════════════════════════════════════
+
+function getRecentIds() {
+  const raw = getData(RECENT_KEY);
+  return Array.isArray(raw) ? raw : [];
+}
+
+function trackRecent(stickerId) {
+  if (!stickerId) return;
+  const recent = getRecentIds().filter((id) => id !== stickerId);
+  recent.unshift(stickerId);
+  setData(RECENT_KEY, recent.slice(0, MAX_RECENT));
+}
+
+// ═══════════════════════════════════════
 // 【数据】加载全部表情包
 // ═══════════════════════════════════════
 
@@ -582,7 +516,7 @@ function readFileAsBase64(file) {
 // 【确认弹窗】删除前二次确认
 // ═══════════════════════════════════════
 
-function showConfirm(message) {
+function showLocalConfirm(message) {
   return new Promise((resolve) => {
     const backdrop = el('div', 'ss-confirm-backdrop');
 
@@ -595,7 +529,7 @@ function showConfirm(message) {
     cancel.type = 'button';
     cancel.addEventListener('click', () => {
       backdrop.classList.remove('is-open');
-      setTimeout(() => backdrop.remove(), 200);
+      window.setTimeout(() => backdrop.remove(), 220);
       resolve(false);
     });
 
@@ -603,7 +537,7 @@ function showConfirm(message) {
     ok.type = 'button';
     ok.addEventListener('click', () => {
       backdrop.classList.remove('is-open');
-      setTimeout(() => backdrop.remove(), 200);
+      window.setTimeout(() => backdrop.remove(), 220);
       resolve(true);
     });
 
@@ -617,11 +551,48 @@ function showConfirm(message) {
 }
 
 // ═══════════════════════════════════════
+// 【SVG图标工具】统一创建SVG图标
+// ═══════════════════════════════════════
+
+function createSvgIcon(paths, size = 15, strokeWidth = '1.5') {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('width', String(size));
+  svg.setAttribute('height', String(size));
+  svg.setAttribute('fill', 'none');
+  svg.setAttribute('stroke', 'currentColor');
+  svg.setAttribute('stroke-width', strokeWidth);
+  svg.setAttribute('stroke-linecap', 'round');
+  svg.setAttribute('stroke-linejoin', 'round');
+  svg.setAttribute('aria-hidden', 'true');
+
+  paths.forEach(([tag, attrs]) => {
+    const node = document.createElementNS('http://www.w3.org/2000/svg', tag);
+    Object.entries(attrs).forEach(([k, v]) => node.setAttribute(k, String(v)));
+    svg.appendChild(node);
+  });
+
+  return svg;
+}
+
+// ═══════════════════════════════════════
+// 【DOM工具】
+// ═══════════════════════════════════════
+
+function el(tag, className = '', text = '') {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== '') node.textContent = text;
+  return node;
+}
+
+// ═══════════════════════════════════════
 // 【样式】微信风格表情包抽屉
 // ═══════════════════════════════════════
 
 function ensureStyle() {
-  if (document.getElementById(STYLE_ID)) return;
+  const old = document.getElementById(STYLE_ID);
+  if (old) old.remove();
 
   const style = document.createElement('style');
   style.id = STYLE_ID;
@@ -632,7 +603,7 @@ function ensureStyle() {
       display: flex;
       flex-direction: column;
       gap: 10px;
-      height: min(56vh, 420px);
+      height: min(52vh, 400px);
     }
 
     /* ── 搜索栏 ── */
@@ -642,9 +613,9 @@ function ensureStyle() {
       grid-template-columns: auto 1fr;
       align-items: center;
       gap: 8px;
-      height: 38px;
+      height: 36px;
       padding: 0 12px;
-      border-radius: var(--radius-md);
+      border-radius: 14px;
       background: var(--surface-muted);
       color: var(--text-hint);
       flex-shrink: 0;
@@ -653,7 +624,6 @@ function ensureStyle() {
     .ss-search-input {
       width: 100%;
       height: 100%;
-      border: none;
       background: transparent;
       color: var(--text-primary);
       font: inherit;
@@ -667,9 +637,9 @@ function ensureStyle() {
       color: var(--text-hint);
     }
 
-    /* ── 操作栏 ── */
+    /* ── 标签栏 ── */
 
-    .ss-action-bar {
+    .ss-tab-bar {
       display: flex;
       gap: 8px;
       flex-shrink: 0;
@@ -677,8 +647,8 @@ function ensureStyle() {
 
     .ss-tab-btn {
       height: 30px;
-      padding: 0 12px;
-      border-radius: var(--radius-full);
+      padding: 0 14px;
+      border-radius: 999px;
       background: var(--surface-muted);
       color: var(--text-secondary);
       box-shadow: var(--shadow-sm);
@@ -692,7 +662,7 @@ function ensureStyle() {
     }
 
     .ss-tab-btn:active {
-      transform: scale(0.96);
+      transform: scale(0.95);
     }
 
     .ss-tab-btn.is-active {
@@ -709,22 +679,22 @@ function ensureStyle() {
       overflow-x: hidden;
       display: grid;
       grid-template-columns: repeat(5, minmax(0, 1fr));
-      gap: 6px;
+      gap: 8px;
       align-content: start;
-      padding: 2px 0;
+      padding: 2px 0 4px;
       -webkit-overflow-scrolling: touch;
       overscroll-behavior: contain;
     }
 
-    /* ── 单个格子 ── */
+    /* ── 单个格子（正方形，圆角，柔和阴影） ── */
 
     .ss-cell {
       aspect-ratio: 1 / 1;
       display: flex;
       align-items: center;
       justify-content: center;
-      border-radius: var(--radius-md);
-      background: var(--bg-surface);
+      border-radius: 16px;
+      background: var(--bg-card);
       box-shadow: var(--shadow-sm);
       overflow: hidden;
       cursor: pointer;
@@ -734,14 +704,13 @@ function ensureStyle() {
     }
 
     .ss-cell:active {
-      transform: scale(0.93);
+      transform: scale(0.92);
     }
 
-    .ss-cell-img {
-      width: 100%;
-      height: 100%;
+    .ss-cell img {
+      width: 78%;
+      height: 78%;
       object-fit: contain;
-      border-radius: var(--radius-md);
       pointer-events: none;
     }
 
@@ -750,27 +719,28 @@ function ensureStyle() {
     }
 
     .ss-cell.is-broken::after {
-      content: '损坏';
-      font-size: 10px;
+      content: 'x';
+      font-size: 14px;
       color: var(--text-hint);
+      opacity: 0.4;
     }
 
-    /* ── + 号添加格（柔和实底） ── */
+    /* ── + 号添加格 ── */
 
     .ss-cell-add {
       background: var(--surface-muted);
       box-shadow: none;
-      opacity: 0.6;
+      color: var(--text-secondary);
+      opacity: 0.5;
       transition: all 160ms ease;
     }
 
     .ss-cell-add:active {
-      opacity: 0.85;
-      transform: scale(0.93);
+      opacity: 0.8;
+      transform: scale(0.92);
     }
 
     .ss-cell-add svg {
-      color: var(--text-secondary);
       pointer-events: none;
     }
 
@@ -783,14 +753,14 @@ function ensureStyle() {
     .ss-cell-overlay {
       position: absolute;
       inset: 0;
-      border-radius: var(--radius-md);
+      border-radius: 16px;
       background: transparent;
       pointer-events: none;
       transition: background 160ms ease;
     }
 
     .ss-cell.is-selected .ss-cell-overlay {
-      background: color-mix(in srgb, var(--accent) 12%, transparent);
+      background: color-mix(in srgb, var(--accent) 14%, transparent);
     }
 
     .ss-cell-check {
@@ -807,7 +777,7 @@ function ensureStyle() {
       box-shadow: var(--shadow-sm);
       color: var(--text-hint);
       z-index: 2;
-      opacity: 0.55;
+      opacity: 0.5;
       transition: all 160ms ease;
     }
 
@@ -822,16 +792,16 @@ function ensureStyle() {
     .ss-delete-bar {
       display: flex;
       justify-content: center;
-      padding-top: 2px;
+      padding-top: 4px;
       flex-shrink: 0;
     }
 
     .ss-delete-btn {
       min-height: 36px;
-      padding: 0 24px;
-      border-radius: var(--radius-full);
-      background: var(--danger, #e8453c);
-      color: #fff;
+      padding: 0 28px;
+      border-radius: 999px;
+      background: var(--accent);
+      color: var(--bubble-user-text);
       box-shadow: var(--shadow-sm);
       font: inherit;
       font-size: 13px;
@@ -845,39 +815,20 @@ function ensureStyle() {
 
     .ss-delete-btn.is-disabled {
       opacity: 0.35;
+      pointer-events: none;
     }
 
-    /* ── 空状态 ── */
-
-    .ss-empty {
-      grid-column: 1 / -1;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 6px;
-      padding: 40px 0;
-    }
-
-    .ss-empty-title {
-      font-size: 14px;
-      font-weight: 500;
-      color: var(--text-secondary);
-    }
-
-    .ss-empty-hint {
-      font-size: 12px;
-      color: var(--text-hint);
-    }
+    /* ── 提示文字 ── */
 
     .ss-grid-hint {
       grid-column: 1 / -1;
       text-align: center;
-      padding: 32px 0;
+      padding: 40px 0;
       color: var(--text-hint);
       font-size: 13px;
     }
 
-    /* ── 上传页（预览放大、不裁剪） ── */
+    /* ── 上传页 ── */
 
     .ss-upload-sheet {
       display: flex;
@@ -889,16 +840,16 @@ function ensureStyle() {
     .ss-upload-head {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 10px;
     }
 
     .ss-upload-back {
-      width: 32px;
-      height: 32px;
+      width: 34px;
+      height: 34px;
       display: flex;
       align-items: center;
       justify-content: center;
-      border-radius: var(--radius-md);
+      border-radius: 12px;
       background: var(--surface-muted);
       color: var(--text-primary);
       padding: 0;
@@ -912,7 +863,7 @@ function ensureStyle() {
 
     .ss-upload-title {
       color: var(--text-primary);
-      font-size: var(--font-size-title);
+      font-size: 17px;
       font-weight: 600;
       line-height: 1.35;
     }
@@ -921,27 +872,27 @@ function ensureStyle() {
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 8px 0;
+      padding: 12px 0;
     }
 
     .ss-upload-preview img {
-      max-width: 180px;
-      max-height: 180px;
-      border-radius: var(--radius-lg);
+      max-width: 160px;
+      max-height: 160px;
+      border-radius: 18px;
       box-shadow: var(--shadow-card);
       object-fit: contain;
     }
 
     .ss-upload-desc {
       width: 100%;
-      height: 40px;
-      padding: 0 12px;
-      border-radius: var(--radius-md);
+      height: 42px;
+      padding: 0 14px;
+      border-radius: 14px;
       background: var(--surface-muted);
       color: var(--text-primary);
       font: inherit;
       font-size: 14px;
-      line-height: 40px;
+      line-height: 42px;
       outline: none;
     }
 
@@ -950,8 +901,8 @@ function ensureStyle() {
     }
 
     .ss-upload-save {
-      min-height: 40px;
-      border-radius: var(--radius-lg);
+      min-height: 42px;
+      border-radius: 16px;
       background: var(--accent);
       color: var(--bubble-user-text);
       box-shadow: var(--shadow-sm);
@@ -990,7 +941,7 @@ function ensureStyle() {
     .ss-confirm-card {
       width: min(280px, calc(100vw - 48px));
       padding: 22px 20px 18px;
-      border-radius: var(--radius-xl);
+      border-radius: 24px;
       background: var(--bg-card);
       box-shadow: var(--shadow-float);
       transform: scale(0.95) translateY(8px);
@@ -1018,7 +969,7 @@ function ensureStyle() {
     .ss-confirm-cancel,
     .ss-confirm-ok {
       min-height: 38px;
-      border-radius: var(--radius-full);
+      border-radius: 999px;
       font: inherit;
       font-size: 14px;
       font-weight: 600;
@@ -1031,8 +982,8 @@ function ensureStyle() {
     }
 
     .ss-confirm-ok {
-      background: var(--danger, #e8453c);
-      color: #fff;
+      background: var(--accent);
+      color: var(--bubble-user-text);
     }
 
     .ss-confirm-cancel:active,
@@ -1044,7 +995,7 @@ function ensureStyle() {
 
     @media (max-width: 380px) {
       .ss-grid-area {
-        gap: 5px;
+        gap: 6px;
       }
 
       .ss-tab-btn {
@@ -1070,17 +1021,6 @@ function ensureStyle() {
   `;
 
   document.head.appendChild(style);
-}
-
-// ═══════════════════════════════════════
-// 【DOM工具】
-// ═══════════════════════════════════════
-
-function el(tag, className = '', text = '') {
-  const node = document.createElement(tag);
-  if (className) node.className = className;
-  if (text !== '') node.textContent = text;
-  return node;
 }
 
 // 依赖：../../core/storage.js(getData,setData,getAllDB,setDB,deleteDB,generateId,getNow)；../../core/ui.js(showToast,showBottomSheet,hideBottomSheet)；./thread-actions.js(sendStickerMessage)
