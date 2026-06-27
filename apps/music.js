@@ -463,10 +463,6 @@ function injectStyle() {
       color: var(--accent);
     }
 
-    /* ─────────────────────────────────────
-       【列表页】歌单列表
-    ───────────────────────────────────── */
-
     .list-page {
       display: flex;
       flex-direction: column;
@@ -773,10 +769,6 @@ function injectStyle() {
       font-size: 13px;
       color: var(--text-secondary);
     }
-
-    /* ─────────────────────────────────────
-       【设置抽屉】壁纸、双人模式、音量
-    ───────────────────────────────────── */
 
     .music-drawer-backdrop {
       position: fixed;
@@ -1207,10 +1199,6 @@ function injectStyle() {
       transform: scale(0.9);
     }
 
-    /* ─────────────────────────────────────
-       【歌单管理抽屉】新建/编辑/删除歌单
-    ───────────────────────────────────── */
-
     .playlist-drawer {
       position: fixed;
       left: 0;
@@ -1382,10 +1370,6 @@ function createPageContainer() {
   container.append(playerPage, listPage);
   return container;
 }
-
-// ─────────────────────────────────────
-// 播放页渲染
-// ─────────────────────────────────────
 
 function createPlayerPage() {
   const page = document.createElement('div');
@@ -1592,10 +1576,6 @@ function createSecondaryControls() {
   return controls;
 }
 
-// ─────────────────────────────────────
-// 列表页渲染
-// ─────────────────────────────────────
-
 function createListPage() {
   const page = document.createElement('div');
   page.className = 'list-page';
@@ -1666,15 +1646,10 @@ function createListHero() {
   return hero;
 }
 
-// ─────────────────────────────────────
-// 歌单切换条
-// ─────────────────────────────────────
-
 function createPlaylistBar() {
   const bar = document.createElement('div');
   bar.className = 'list-playlist-bar';
 
-  // 全部歌曲
   const allChip = document.createElement('button');
   allChip.className = `list-playlist-chip ${state.activePlaylistId === 'all' ? 'active' : ''}`;
   allChip.textContent = '全部';
@@ -1684,7 +1659,6 @@ function createPlaylistBar() {
   });
   bar.appendChild(allChip);
 
-  // 各歌单
   state.playlists.forEach((pl) => {
     const chip = document.createElement('button');
     chip.className = `list-playlist-chip ${state.activePlaylistId === pl.id ? 'active' : ''}`;
@@ -1696,7 +1670,6 @@ function createPlaylistBar() {
     bar.appendChild(chip);
   });
 
-  // 管理歌单按钮
   const manageBtn = document.createElement('button');
   manageBtn.className = 'list-playlist-chip';
   manageBtn.appendChild(createIcon('settings', 14));
@@ -1829,10 +1802,6 @@ function createSongItem(song) {
   return item;
 }
 
-// ═══════════════════════════════════════
-// 【设置抽屉】壁纸、双人模式、音量、列表背景
-// ═══════════════════════════════════════
-
 function openSettingsDrawer() {
   const backdrop = document.createElement('div');
   backdrop.className = 'music-drawer-backdrop';
@@ -1927,10 +1896,6 @@ function createWallpaperSection() {
   return section;
 }
 
-// ─────────────────────────────────────
-// 列表页壁纸上传
-// ─────────────────────────────────────
-
 function createListWallpaperSection() {
   const section = document.createElement('div');
   section.className = 'music-setting-group';
@@ -1942,10 +1907,9 @@ function createListWallpaperSection() {
   const grid = document.createElement('div');
   grid.className = 'music-wallpaper-grid';
 
-  // 自定义上传
   const customItem = document.createElement('div');
   customItem.className = `music-wallpaper-item ${state.listBg ? 'active' : ''}`;
-  customItem.style.background = state.listBg ? 'var(--bg-card)' : 'var(--bg-card)';
+  customItem.style.background = 'var(--bg-card)';
   if (state.listBg) {
     customItem.style.backgroundImage = `url(${state.listBg})`;
     customItem.style.backgroundSize = 'cover';
@@ -1960,7 +1924,6 @@ function createListWallpaperSection() {
   customItem.addEventListener('click', uploadListBg);
   grid.appendChild(customItem);
 
-  // 清除按钮
   if (state.listBg) {
     const clearItem = document.createElement('div');
     clearItem.className = 'music-wallpaper-item';
@@ -2094,10 +2057,6 @@ function createVolumeSection() {
   return section;
 }
 
-// ═══════════════════════════════════════
-// 【歌单管理抽屉】新建/编辑/删除歌单
-// ═══════════════════════════════════════
-
 function openPlaylistDrawer() {
   const backdrop = document.createElement('div');
   backdrop.className = 'music-drawer-backdrop';
@@ -2223,22 +2182,24 @@ function editPlaylist(playlistId) {
   render();
 }
 
-function deletePlaylist(playlistId) {
+// ─────────────────────────────────────
+// 删除歌单：同时删 IndexedDB 记录
+// ─────────────────────────────────────
+
+async function deletePlaylist(playlistId) {
   if (!confirm('确定要删除这个歌单吗？')) return;
 
   state.playlists = state.playlists.filter(p => p.id !== playlistId);
   if (state.activePlaylistId === playlistId) {
     state.activePlaylistId = 'all';
   }
-  savePlaylists();
+
+  await deleteDB(PLAYLIST_STORE, playlistId);
+
   closePlaylistDrawer();
   showToast('歌单已删除');
   render();
 }
-
-// ─────────────────────────────────────
-// 添加歌曲到歌单
-// ─────────────────────────────────────
 
 function openAddToPlaylistDrawer(songId) {
   if (!state.playlists.length) {
@@ -2341,10 +2302,6 @@ function toggleSongInPlaylist(songId, playlistId) {
   render();
 }
 
-// ═══════════════════════════════════════
-// 【歌词面板】全屏歌词显示
-// ═══════════════════════════════════════
-
 function toggleLyricsPanel() {
   state.isLyricsOpen = !state.isLyricsOpen;
 
@@ -2440,10 +2397,6 @@ function createLyricsEmpty() {
   return empty;
 }
 
-// ═══════════════════════════════════════
-// 【音频核心】AudioContext、播放控制
-// ═══════════════════════════════════════
-
 function initAudioElement() {
   if (state.audioElement) return;
 
@@ -2501,13 +2454,8 @@ function initAudioContext() {
   }
 }
 
-// ─────────────────────────────────────
-// 歌曲结束处理：根据播放模式决定下一首
-// ─────────────────────────────────────
-
 function handleSongEnded() {
   if (state.playMode === 'loop') {
-    // 单曲循环：重新播放当前歌曲
     if (state.audioElement) {
       state.audioElement.currentTime = 0;
       state.audioElement.play();
@@ -2605,10 +2553,6 @@ function playAll() {
   }
 }
 
-// ─────────────────────────────────────
-// 获取当前播放队列（根据当前歌单筛选）
-// ─────────────────────────────────────
-
 function getPlayQueue() {
   return getDisplaySongs();
 }
@@ -2626,10 +2570,6 @@ function getActivePlaylist() {
   if (state.activePlaylistId === 'all') return { name: '全部歌曲' };
   return state.playlists.find(p => p.id === state.activePlaylistId) || { name: '全部歌曲' };
 }
-
-// ═══════════════════════════════════════
-// 【歌曲管理】导入、删除、保存
-// ═══════════════════════════════════════
 
 async function importSongs() {
   const input = document.createElement('input');
@@ -2714,7 +2654,6 @@ async function deleteSong(songId) {
 
   state.songs = state.songs.filter(s => s.id !== songId);
 
-  // 从所有歌单中移除
   state.playlists.forEach(pl => {
     if (Array.isArray(pl.songIds)) {
       pl.songIds = pl.songIds.filter(id => id !== songId);
@@ -2775,10 +2714,6 @@ function saveCurrentSong() {
     updatedAt: getNow()
   });
 }
-
-// ═══════════════════════════════════════
-// 【ID3标签解析】读取歌曲元数据
-// ═══════════════════════════════════════
 
 async function readID3Tags(file) {
   try {
@@ -2888,10 +2823,6 @@ function readFileAsDataURL(file) {
   });
 }
 
-// ═══════════════════════════════════════
-// 【歌词获取】lrclib.net API
-// ═══════════════════════════════════════
-
 async function fetchLyrics(title, artist) {
   if (!title) return [];
 
@@ -2951,10 +2882,6 @@ function parseLRC(lrc) {
   return result.sort((a, b) => a.time - b.time);
 }
 
-// ─────────────────────────────────────
-// 歌词上传/输入
-// ─────────────────────────────────────
-
 function uploadLyrics() {
   const input = document.createElement('input');
   input.type = 'file';
@@ -2999,10 +2926,6 @@ function inputLyrics() {
   toggleLyricsPanel();
 }
 
-// ═══════════════════════════════════════
-// 【壁纸上传】自定义播放页壁纸
-// ═══════════════════════════════════════
-
 async function uploadWallpaper() {
   const input = document.createElement('input');
   input.type = 'file';
@@ -3029,10 +2952,6 @@ async function uploadWallpaper() {
   input.click();
 }
 
-// ─────────────────────────────────────
-// 列表页背景上传
-// ─────────────────────────────────────
-
 async function uploadListBg() {
   const input = document.createElement('input');
   input.type = 'file';
@@ -3058,10 +2977,6 @@ async function uploadListBg() {
 
   input.click();
 }
-
-// ═══════════════════════════════════════
-// 【频谱动画】Canvas绘制
-// ═══════════════════════════════════════
 
 function startAnimationLoop() {
   function animate() {
@@ -3119,10 +3034,6 @@ function drawSpectrum() {
   }
 }
 
-// ═══════════════════════════════════════
-// 【UI更新】进度、播放按钮、歌词滚动
-// ═══════════════════════════════════════
-
 function updateProgressUI() {
   const fill = document.querySelector('.progress-fill');
   const thumb = document.querySelector('.progress-thumb');
@@ -3175,10 +3086,6 @@ function updateLyricsIndex() {
   }
 }
 
-// ═══════════════════════════════════════
-// 【页面切换】播放页/列表页
-// ═══════════════════════════════════════
-
 function switchPage(page) {
   state.currentPage = page;
 
@@ -3208,10 +3115,6 @@ function switchPage(page) {
   });
 }
 
-// ═══════════════════════════════════════
-// 【设置读写】localStorage
-// ═══════════════════════════════════════
-
 async function loadSettings() {
   const saved = getData(MUSIC_SETTINGS_KEY) || {};
   state.settings = { ...state.settings, ...saved };
@@ -3235,7 +3138,6 @@ async function loadSettings() {
     state.customWallpaper = '';
   }
 
-  // 列表页背景
   try {
     const listBgRecord = await getDB(BLOB_STORE, 'app_bg_music_list');
     state.listBg = listBgRecord?.value || '';
@@ -3257,10 +3159,6 @@ function saveSettings() {
   setData(MUSIC_SETTINGS_KEY, state.settings);
 }
 
-// ═══════════════════════════════════════
-// 【角色加载】读取已有AI角色
-// ═══════════════════════════════════════
-
 async function loadCharacters() {
   try {
     const chars = await getAllDB(CHARACTER_STORE);
@@ -3269,10 +3167,6 @@ async function loadCharacters() {
     state.characters = [];
   }
 }
-
-// ═══════════════════════════════════════
-// 【辅助工具】格式化、获取当前歌曲、头像占位
-// ═══════════════════════════════════════
 
 function getCurrentSong() {
   return state.songs.find(s => s.id === state.currentSongId) || null;
@@ -3328,10 +3222,6 @@ function createListAvatarPlaceholder() {
   div.appendChild(createIcon('music', 28));
   return div;
 }
-
-// ─────────────────────────────────────
-// 迷你播放条：退出APP后底部悬浮条
-// ─────────────────────────────────────
 
 function updateMiniPlayer() {
   let miniPlayer = document.querySelector('.music-mini-player');
