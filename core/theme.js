@@ -7,31 +7,37 @@ const THEME_KEY = 'app_theme';
 const PRESET_KEY = 'app_theme_preset';
 const MODE_KEY = 'app_theme_mode';
 
-const DEFAULT_PRESET = 'blue';
+const DEFAULT_PRESET = 'coconut-spring';
 const DEFAULT_MODE = 'light';
 
 const FONT_FALLBACK = "'PingFang SC', 'Microsoft YaHei', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 
 // ═══════════════════════════════════════
-// 【基础变量】默认值（对应汽水蓝主题）
+// 【基础变量】默认值
 // ═══════════════════════════════════════
 
 const BASE_VARIABLES = {
-  'bg-primary': '#E5F3FA',
-  'bg-secondary': '#DED4E6',
-  'bg-card': '#FAFAF6',
+  // 新变量名
+  'bg-main': '#FBF8EA',
+  'bg-light': '#FFE7E8',
+  'bg-card': '#FFF2F5',
+  'color-accent': '#ECC7D6',
+  'color-text': '#8B736C',
+  // 旧变量名（兼容）
+  'bg-primary': '#FBF8EA',
+  'bg-secondary': '#FFE7E8',
   'bg-overlay': 'rgba(0, 0, 0, 0.28)',
-  'surface': '#FAFAF6',
-  'accent': '#FAC7DA',
-  'accent-light': '#FDEEF3',
-  'accent-dark': '#E8A0BC',
-  'text-primary': '#4A4038',
-  'text-secondary': '#908880',
-  'text-hint': '#B8B0A8',
-  'bubble-user-bg': '#FAC7DA',
-  'bubble-user-text': '#4A4038',
-  'bubble-ai-bg': '#FAFAF6',
-  'bubble-ai-text': '#4A4038',
+  'surface': '#FFF2F5',
+  'accent': '#ECC7D6',
+  'accent-light': '#F5E0E8',
+  'accent-dark': '#D4A0B8',
+  'text-primary': '#8B736C',
+  'text-secondary': '#A89890',
+  'text-hint': '#C0B8B0',
+  'bubble-user-bg': '#ECC7D6',
+  'bubble-user-text': '#8B736C',
+  'bubble-ai-bg': '#FFF2F5',
+  'bubble-ai-text': '#8B736C',
   'bubble-radius': '18px',
   'bubble-radius-tail': '4px',
   'font-main': FONT_FALLBACK,
@@ -77,163 +83,187 @@ const DARK_SHADOWS = {
 
 const PRESETS = {
   // ────────────────────────────────────────────
-  // 汽水蓝 — 蓝底 + 粉气泡
+  // 椰乳四季春 — 奶白底 + 粉紫气泡
   // ────────────────────────────────────────────
-  blue: {
-    id: 'blue',
-    name: '汽水蓝',
+  'coconut-spring': {
+    id: 'coconut-spring',
+    name: '椰乳四季春',
     mode: 'light',
     variables: {
-      'bg-primary': '#E5F3FA',
-      'bg-secondary': '#DED4E6',
-      'bg-card': '#FAFAF6',
+      'bg-main': '#FBF8EA',
+      'bg-light': '#FFE7E8',
+      'bg-card': '#FFF2F5',
+      'color-accent': '#ECC7D6',
+      'color-text': '#8B736C',
+      'bg-primary': '#FBF8EA',
+      'bg-secondary': '#FFE7E8',
       'bg-overlay': 'rgba(0, 0, 0, 0.28)',
-      'surface': '#FAFAF6',
-      'accent': '#FAC7DA',
-      'accent-light': '#FDEEF3',
-      'accent-dark': '#E8A0BC',
-      'text-primary': '#4A4038',
-      'text-secondary': '#908880',
-      'text-hint': '#B8B0A8',
-      'bubble-user-bg': '#FAC7DA',
-      'bubble-user-text': '#4A4038',
-      'bubble-ai-bg': '#FAFAF6',
-      'bubble-ai-text': '#4A4038',
+      'surface': '#FFF2F5',
+      'accent': '#ECC7D6',
+      'accent-light': '#F5E0E8',
+      'accent-dark': '#D4A0B8',
+      'text-primary': '#8B736C',
+      'text-secondary': '#A89890',
+      'text-hint': '#C0B8B0',
+      'bubble-user-bg': '#ECC7D6',
+      'bubble-user-text': '#8B736C',
+      'bubble-ai-bg': '#FFF2F5',
+      'bubble-ai-text': '#8B736C',
       ...LIGHT_SHADOWS
     }
   },
 
   // ────────────────────────────────────────────
-  // 珊瑚糖 — 蓝底 + 粉底 + 米色卡片
+  // 椰青冰美式 — 蓝灰底 + 棕色气泡
   // ────────────────────────────────────────────
-  coral: {
-    id: 'coral',
-    name: '珊瑚糖',
+  'coconut-iced': {
+    id: 'coconut-iced',
+    name: '椰青冰美式',
     mode: 'light',
     variables: {
-      'bg-primary': '#DDE8F6',
-      'bg-secondary': '#F5D7D6',
-      'bg-card': '#FDF4ED',
+      'bg-main': '#E1EFF4',
+      'bg-light': '#EDDFD4',
+      'bg-card': '#F5EDE6',
+      'color-accent': '#9D7C6D',
+      'color-text': '#512128',
+      'bg-primary': '#E1EFF4',
+      'bg-secondary': '#EDDFD4',
       'bg-overlay': 'rgba(0, 0, 0, 0.28)',
-      'surface': '#FDF4ED',
-      'accent': '#9F8F82',
-      'accent-light': '#E7E3DF',
-      'accent-dark': '#786E64',
-      'text-primary': '#4A4038',
-      'text-secondary': '#908880',
-      'text-hint': '#B8B0A8',
-      'bubble-user-bg': '#9F8F82',
-      'bubble-user-text': '#F4F0EC',
-      'bubble-ai-bg': '#FDF4ED',
-      'bubble-ai-text': '#4A4038',
+      'surface': '#F5EDE6',
+      'accent': '#9D7C6D',
+      'accent-light': '#C8B8A8',
+      'accent-dark': '#7A5C4D',
+      'text-primary': '#512128',
+      'text-secondary': '#7A6058',
+      'text-hint': '#A89890',
+      'bubble-user-bg': '#9D7C6D',
+      'bubble-user-text': '#FFF8F0',
+      'bubble-ai-bg': '#F5EDE6',
+      'bubble-ai-text': '#512128',
       ...LIGHT_SHADOWS
     }
   },
 
   // ────────────────────────────────────────────
-  // 香芋泥 — 淡紫底 + 紫气泡
+  // 草莓牛乳 — 粉底 + 绿气泡
   // ────────────────────────────────────────────
-  purple: {
-    id: 'purple',
-    name: '香芋泥',
+  'strawberry-milk': {
+    id: 'strawberry-milk',
+    name: '草莓牛乳',
     mode: 'light',
     variables: {
-      'bg-primary': '#EDECFA',
-      'bg-secondary': '#D5CFEC',
-      'bg-card': '#FAF8FC',
+      'bg-main': '#FDE8EC',
+      'bg-light': '#FFF5F7',
+      'bg-card': '#FFFFFF',
+      'color-accent': '#A8D8A8',
+      'color-text': '#8B5A64',
+      'bg-primary': '#FDE8EC',
+      'bg-secondary': '#FFF5F7',
       'bg-overlay': 'rgba(0, 0, 0, 0.28)',
-      'surface': '#FAF8FC',
-      'accent': '#CAB7E3',
-      'accent-light': '#F0ECF6',
-      'accent-dark': '#A08EC0',
-      'text-primary': '#4A4038',
-      'text-secondary': '#908880',
-      'text-hint': '#B8B0A8',
-      'bubble-user-bg': '#CAB7E3',
-      'bubble-user-text': '#4A4038',
-      'bubble-ai-bg': '#FAF8FC',
-      'bubble-ai-text': '#4A4038',
+      'surface': '#FFFFFF',
+      'accent': '#A8D8A8',
+      'accent-light': '#D0ECD0',
+      'accent-dark': '#80B880',
+      'text-primary': '#8B5A64',
+      'text-secondary': '#A88088',
+      'text-hint': '#C8B0B8',
+      'bubble-user-bg': '#A8D8A8',
+      'bubble-user-text': '#3A5A3A',
+      'bubble-ai-bg': '#FFFFFF',
+      'bubble-ai-text': '#8B5A64',
       ...LIGHT_SHADOWS
     }
   },
 
   // ────────────────────────────────────────────
-  // 黑粉夜 — 暗夜 + 粉强调
+  // 黑巧夜语 — 深巧底 + 金强调
   // ────────────────────────────────────────────
-  'rose-noir': {
-    id: 'rose-noir',
-    name: '黑粉夜',
+  'dark-chocolate': {
+    id: 'dark-chocolate',
+    name: '黑巧夜语',
     mode: 'dark',
     variables: {
-      'bg-primary': '#1E1A1C',
-      'bg-secondary': '#282226',
-      'bg-card': '#30282C',
+      'bg-main': '#1E1410',
+      'bg-light': '#2A1C15',
+      'bg-card': '#2F1F18',
+      'color-accent': '#D4A853',
+      'color-text': '#E8D5C0',
+      'bg-primary': '#1E1410',
+      'bg-secondary': '#2A1C15',
       'bg-overlay': 'rgba(0, 0, 0, 0.52)',
-      'surface': '#30282C',
-      'accent': '#C48A9A',
-      'accent-light': '#483840',
-      'accent-dark': '#D8A0AE',
-      'text-primary': '#EAE4E8',
-      'text-secondary': '#A89098',
-      'text-hint': '#706068',
-      'bubble-user-bg': '#C48A9A',
-      'bubble-user-text': '#3A2830',
-      'bubble-ai-bg': '#30282C',
-      'bubble-ai-text': '#EAE4E8',
-      ...DARK_SHADOWS
-    }
-  },
-
-  // ────────────────────────────────────────────
-  // 焦糖夜 — 暖棕底 + 焦糖强调
-  // ────────────────────────────────────────────
-  caramel: {
-    id: 'caramel',
-    name: '焦糖夜',
-    mode: 'dark',
-    variables: {
-      'bg-primary': '#22201C',
-      'bg-secondary': '#2C2822',
-      'bg-card': '#342E26',
-      'bg-overlay': 'rgba(0, 0, 0, 0.52)',
-      'surface': '#342E26',
-      'accent': '#C8A882',
-      'accent-light': '#443C30',
-      'accent-dark': '#DCC098',
-      'text-primary': '#EAE4DC',
-      'text-secondary': '#A89888',
+      'surface': '#2F1F18',
+      'accent': '#D4A853',
+      'accent-light': '#4A3C28',
+      'accent-dark': '#E8C070',
+      'text-primary': '#E8D5C0',
+      'text-secondary': '#B8A090',
       'text-hint': '#786858',
-      'bubble-user-bg': '#C8A882',
-      'bubble-user-text': '#3A3028',
-      'bubble-ai-bg': '#342E26',
-      'bubble-ai-text': '#EAE4DC',
+      'bubble-user-bg': '#D4A853',
+      'bubble-user-text': '#2A1C15',
+      'bubble-ai-bg': '#2F1F18',
+      'bubble-ai-text': '#E8D5C0',
       ...DARK_SHADOWS
     }
   },
 
   // ────────────────────────────────────────────
-  // 铅灰夜 — 冷灰底 + 灰强调
+  // 泰迪暖窝 — 暖棕底 + 奶茶气泡
   // ────────────────────────────────────────────
-  gray: {
-    id: 'gray',
-    name: '铅灰夜',
+  'teddy-nest': {
+    id: 'teddy-nest',
+    name: '泰迪暖窝',
     mode: 'dark',
     variables: {
-      'bg-primary': '#1E1E22',
-      'bg-secondary': '#26262A',
-      'bg-card': '#2E2E32',
+      'bg-main': '#2A1F1A',
+      'bg-light': '#332520',
+      'bg-card': '#3A2820',
+      'color-accent': '#E8C4A0',
+      'color-text': '#F5E6D3',
+      'bg-primary': '#2A1F1A',
+      'bg-secondary': '#332520',
       'bg-overlay': 'rgba(0, 0, 0, 0.52)',
-      'surface': '#2E2E32',
-      'accent': '#989898',
-      'accent-light': '#404044',
-      'accent-dark': '#B0B0B0',
-      'text-primary': '#E4E2E6',
-      'text-secondary': '#949098',
-      'text-hint': '#646068',
-      'bubble-user-bg': '#989898',
-      'bubble-user-text': '#2E2E32',
-      'bubble-ai-bg': '#2E2E32',
-      'bubble-ai-text': '#E4E2E6',
+      'surface': '#3A2820',
+      'accent': '#E8C4A0',
+      'accent-light': '#4A3830',
+      'accent-dark': '#F0D8B8',
+      'text-primary': '#F5E6D3',
+      'text-secondary': '#C0A890',
+      'text-hint': '#807060',
+      'bubble-user-bg': '#E8C4A0',
+      'bubble-user-text': '#3A2820',
+      'bubble-ai-bg': '#3A2820',
+      'bubble-ai-text': '#F5E6D3',
+      ...DARK_SHADOWS
+    }
+  },
+
+  // ────────────────────────────────────────────
+  // 香草米布丁 — 深米底 + 灰粉气泡
+  // ────────────────────────────────────────────
+  'vanilla-pudding': {
+    id: 'vanilla-pudding',
+    name: '香草米布丁',
+    mode: 'dark',
+    variables: {
+      'bg-main': '#2A1F18',
+      'bg-light': '#2F231A',
+      'bg-card': '#352820',
+      'color-accent': '#C3AB99',
+      'color-text': '#F3EEE9',
+      'bg-primary': '#2A1F18',
+      'bg-secondary': '#2F231A',
+      'bg-overlay': 'rgba(0, 0, 0, 0.52)',
+      'surface': '#352820',
+      'accent': '#C3AB99',
+      'accent-light': '#4A3C32',
+      'accent-dark': '#D8C0B0',
+      'text-primary': '#F3EEE9',
+      'text-secondary': '#B8A898',
+      'text-hint': '#786858',
+      'bubble-user-bg': '#C3AB99',
+      'bubble-user-text': '#2A1F18',
+      'bubble-ai-bg': '#352820',
+      'bubble-ai-text': '#F3EEE9',
       ...DARK_SHADOWS
     }
   }
@@ -244,27 +274,34 @@ const PRESETS = {
 // ═══════════════════════════════════════
 
 const LEGACY_PRESET_ALIAS = {
-  default: 'blue',
-  light: 'blue',
-  warm: 'coral',
-  sky: 'blue',
-  paper: 'blue',
-  peach: 'coral',
-  berry: 'coral',
-  strawberry: 'coral',
-  pink: 'coral',
-  cream: 'coral',
-  blush: 'coral',
-  lavender: 'purple',
-  dark: 'rose-noir',
-  night: 'rose-noir',
-  dusk: 'rose-noir',
-  candle: 'caramel',
-  milk: 'caramel',
-  cocoa: 'caramel',
-  'warm-gray': 'gray',
-  'milk-cafe': 'caramel',
-  purple: 'purple'
+  // 旧日间主题 → 新日间
+  default: 'coconut-spring',
+  light: 'coconut-spring',
+  blue: 'coconut-spring',
+  pink: 'strawberry-milk',
+  cream: 'coconut-spring',
+  sky: 'coconut-iced',
+  paper: 'coconut-spring',
+  peach: 'coconut-spring',
+  coral: 'coconut-iced',
+  berry: 'strawberry-milk',
+  strawberry: 'strawberry-milk',
+  blush: 'coconut-spring',
+  lavender: 'coconut-iced',
+  purple: 'coconut-iced',
+  warm: 'coconut-spring',
+  // 旧夜间主题 → 新夜间
+  dark: 'dark-chocolate',
+  night: 'dark-chocolate',
+  dusk: 'dark-chocolate',
+  'rose-noir': 'dark-chocolate',
+  candle: 'teddy-nest',
+  milk: 'vanilla-pudding',
+  cocoa: 'vanilla-pudding',
+  'warm-gray': 'vanilla-pudding',
+  'milk-cafe': 'teddy-nest',
+  caramel: 'teddy-nest',
+  gray: 'vanilla-pudding'
 };
 
 let currentTheme = null;
@@ -297,7 +334,7 @@ export function applyTheme(variables = {}) {
     customVariables: mergedCustom
   });
 
-  setMetaColor(currentTheme.variables['bg-primary']);
+  setMetaColor(currentTheme.variables['bg-main'] || currentTheme.variables['bg-primary']);
   return currentTheme;
 }
 
@@ -342,7 +379,7 @@ export function importTheme(json) {
   currentTheme = next;
   writeTheme(next);
   applyVariablesToDOM(next.variables);
-  setMetaColor(next.variables['bg-primary']);
+  setMetaColor(next.variables['bg-main'] || next.variables['bg-primary']);
   return next;
 }
 
@@ -369,17 +406,17 @@ export function setPreset(name) {
   currentTheme = next;
   writeTheme(next);
   applyVariablesToDOM(next.variables);
-  setMetaColor(next.variables['bg-primary']);
+  setMetaColor(next.variables['bg-main'] || next.variables['bg-primary']);
   return next;
 }
 
 // ═══════════════════════════════════════
-// 【模式切换】浅色 → 汽水蓝 / 夜间 → 黑粉夜
+// 【模式切换】浅色 → 椰乳四季春 / 夜间 → 黑巧夜语
 // ═══════════════════════════════════════
 
 export function setThemeMode(mode) {
   const safeMode = normalizeMode(mode);
-  const presetId = safeMode === 'dark' ? 'rose-noir' : 'blue';
+  const presetId = safeMode === 'dark' ? 'dark-chocolate' : 'coconut-spring';
   const presetTheme = getPresetById(presetId);
 
   document.documentElement.setAttribute('data-theme', presetId);
@@ -397,7 +434,7 @@ export function setThemeMode(mode) {
   currentTheme = next;
   writeTheme(next);
   applyVariablesToDOM(next.variables);
-  setMetaColor(next.variables['bg-primary']);
+  setMetaColor(next.variables['bg-main'] || next.variables['bg-primary']);
   return next;
 }
 
@@ -436,7 +473,7 @@ export function loadTheme() {
 
   currentTheme = next;
   applyVariablesToDOM(next.variables);
-  setMetaColor(next.variables['bg-primary']);
+  setMetaColor(next.variables['bg-main'] || next.variables['bg-primary']);
   return next;
 }
 
