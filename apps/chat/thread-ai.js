@@ -4,6 +4,7 @@
 //   from '../../core/api.js': silentRequest
 //   from '../../core/memory.js': buildMemoryPrompt, checkImportantInfo, checkAndSummarize
 //   from './identity-core.js': getIdentityCore
+//   from './thread-ai-local.js': tryLocalOrSiliconFlowReply
 
 import {
   getData,
@@ -26,6 +27,8 @@ import {
 } from '../../core/memory.js';
 
 import { getIdentityCore } from './identity-core.js';
+
+import { tryLocalOrSiliconFlowReply } from './thread-ai-local.js';
 
 // ═══════════════════════════════════════
 // 【基础配置】聊天 AI 常量和运行状态
@@ -276,10 +279,40 @@ async function requestPrivateReply(state, options = {}) {
       }
     });
 
-    const result = await requestAIText(promptMessages, {
-      signal: job.controller.signal,
-      job
-    });
+    let result = null;
+
+    try {
+      result = await requestAIText(promptMessages, {
+        signal: job.controller.signal,
+        job
+      });
+
+      if (!result && character?.useLocalChat) {
+        result = await tryLocalOrSiliconFlowReply(state, {
+          messages,
+          userName,
+          signal: job.controller.signal
+        });
+      }
+    } catch (apiError) {
+      if (isAbortError(apiError) || isJobStopped(job)) {
+        await markMessageStopped(PRIVATE_STORE, placeholder.id, '我先停在这里了。');
+        await syncPrivateState(state, characterId);
+        return null;
+      }
+
+      result = await tryLocalOrSiliconFlowReply(state, {
+        messages,
+        userName,
+        signal: job.controller.signal
+      });
+
+      if (!result) {
+        await markMessageStopped(PRIVATE_STORE, placeholder.id, '我刚刚有点卡住了，再说一遍试试？');
+        await syncPrivateState(state, characterId);
+        return null;
+      }
+    }
 
     if (isJobStopped(job)) {
       await markMessageStopped(PRIVATE_STORE, placeholder.id, '我先停在这里了。');
@@ -428,10 +461,34 @@ async function requestGroupReply(state, options = {}) {
           options
         });
 
-        const result = await requestAIText(promptMessages, {
-          signal: job.controller.signal,
-          job
-        });
+        let result = null;
+
+        try {
+          result = await requestAIText(promptMessages, {
+            signal: job.controller.signal,
+            job
+          });
+
+          if (!result && character?.useLocalChat) {
+            result = await tryLocalOrSiliconFlowReply(state, {
+              messages: groupMessages,
+              userName,
+              signal: job.controller.signal
+            });
+          }
+        } catch (apiError) {
+          if (isAbortError(apiError) || isJobStopped(job)) {
+            await markMessageStopped(GROUP_STORE, placeholder.id, '我先停在这里了。');
+            await syncGroupState(state, groupId);
+            break;
+          }
+
+          result = await tryLocalOrSiliconFlowReply(state, {
+            messages: groupMessages,
+            userName,
+            signal: job.controller.signal
+          });
+        }
 
         if (isJobStopped(job)) {
           await markMessageStopped(GROUP_STORE, placeholder.id, '我先停在这里了。');
@@ -1665,4 +1722,4 @@ function randomBetween(min, max) {
   return Math.floor(left + Math.random() * (right - left + 1));
 }
 
-// 依赖：../../core/storage.js(getData,setData,generateId,getNow,setDB,deleteDB,getByIndexDB,getAllDB,getDB)；../../core/api.js(silentRequest)；../../core/memory.js(buildMemoryPrompt,checkImportantInfo,checkAndSummarize)；./identity-core.js(getIdentityCore)
+// 依赖：../../core/storage.js(getData,setData,generateId,getNow,setDB,deleteDB,getByIndexDB,getAllDB,getDB)；../../core/api.js(silentRequest)；../../core/memory.js(buildMemoryPrompt,checkImportantInfo,checkAndSummarize)；./identity-core.js(getIdentityCore)；./thread-ai-local.js(tryLocalOrSiliconFlowReply)
