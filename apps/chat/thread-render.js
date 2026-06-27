@@ -1999,7 +1999,7 @@ function injectStyle() {
       color: var(--text-secondary);
     }
 
-    /* ── 代码块卡片（扁长方形，宽80%，矮折叠） ── */
+    /* ── 代码块卡片 ── */
 
     .chat-message-code {
       width: min(80vw, 520px);
@@ -2055,6 +2055,8 @@ function injectStyle() {
       align-items: center;
       gap: 3px;
       padding: 0 8px;
+      border: none;
+      outline: none;
       border-radius: 999px;
       background: var(--bg-card);
       color: var(--text-secondary);
@@ -2092,6 +2094,8 @@ function injectStyle() {
       width: calc(100% - 32px);
       margin: 0 16px 12px;
       min-height: 30px;
+      border: none;
+      outline: none;
       border-radius: 12px;
       background: var(--bg-card);
       color: var(--text-secondary);
@@ -2333,6 +2337,8 @@ function injectStyle() {
       align-items: center;
       justify-content: center;
       gap: 3px;
+      border: none;
+      outline: none;
       border-radius: 12px;
       padding: 0 7px;
       background: var(--bg-card);
@@ -2410,6 +2416,8 @@ function injectStyle() {
       align-items: center;
       justify-content: center;
       gap: 6px;
+      border: none;
+      outline: none;
       border-radius: 16px;
       padding: 0 14px;
       background: var(--surface-muted);
@@ -2432,6 +2440,8 @@ function injectStyle() {
       min-height: 130px;
       padding: 12px 14px;
       border-radius: 16px;
+      border: none;
+      outline: none;
       background: var(--surface-muted);
       color: var(--text-primary);
       font-size: 16px;
@@ -2452,6 +2462,8 @@ function injectStyle() {
       align-items: center;
       justify-content: center;
       gap: 6px;
+      border: none;
+      outline: none;
       border-radius: 16px;
       padding: 0 14px;
       font: inherit;
@@ -2509,6 +2521,8 @@ function injectStyle() {
       display: inline-flex;
       align-items: center;
       justify-content: center;
+      border: none;
+      outline: none;
       border-radius: 999px;
       color: var(--text-hint);
       background: var(--surface-muted);
@@ -2557,6 +2571,8 @@ function injectStyle() {
       display: inline-flex;
       align-items: center;
       justify-content: center;
+      border: none;
+      outline: none;
       border-radius: 14px;
       background: var(--bg-card);
       color: var(--text-primary);
