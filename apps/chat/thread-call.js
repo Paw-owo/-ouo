@@ -321,13 +321,16 @@ async function sendCallText(textarea) {
     }
   } catch (error) {
     console.error(error);
-    addCallLog('assistant', '我刚刚有点没听清，你再慢慢说一次。');
-    renderCall();
+    showToast('TA 刚刚没听清，再说一次试试');
   } finally {
     callState.isSending = false;
     renderCall();
   }
 }
+
+// ═══════════════════════════════════════
+// 【AI回复请求】构建电话对话上下文
+// ═══════════════════════════════════════
 
 async function requestCallReply() {
   const messages = buildCallMessages();
@@ -347,14 +350,18 @@ async function requestCallReply() {
   return cleanReply(text);
 }
 
+// ═══════════════════════════════════════
+// 【Prompt构建】第一人称系统指令
+// ═══════════════════════════════════════
+
 function buildCallMessages() {
   const system = [
-    `你正在和用户通电话。`,
-    `你扮演：${getCharacterName()}`,
+    `我正在和用户通电话。`,
+    `我是${getCharacterName()}`,
     callState.character?.persona ? `人设：${callState.character.persona}` : '',
     callState.character?.description ? `简介：${callState.character.description}` : '',
     callState.character?.style ? `说话风格：${callState.character.style}` : '',
-    `要求：像真实电话一样简短自然，不要长篇，不要说系统设定。`,
+    `要求：像真实电话一样简短自然，不要长篇，不提系统设定。`,
     `电话内容只会在挂断后总结成长期记忆，不会直接进入聊天记录。`
   ].filter(Boolean).join('\n');
 
@@ -418,6 +425,10 @@ async function writeCallMemory() {
   return memory;
 }
 
+// ═══════════════════════════════════════
+// 【通话总结】第一人称提示词
+// ═══════════════════════════════════════
+
 async function summarizeCall() {
   const transcript = callState.callLogs
     .map((item) => `${item.role === 'user' ? '用户' : getCharacterName()}：${item.content}`)
@@ -427,7 +438,7 @@ async function summarizeCall() {
     messages: [
       {
         role: 'system',
-        content: '请把这通电话总结成一条长期记忆，最多80字，只写事实和情绪，不要写“总结如下”。'
+        content: '我正在把这通电话总结成一条长期记忆，最多80字，只写事实和情绪，不写"总结如下"。'
       },
       {
         role: 'user',
@@ -829,7 +840,8 @@ function injectStyle() {
   document.head.appendChild(style);
 }
 
-// 改了什么：补齐电话界面状态兜底、挂断防重复、AI失败兜底、日志自动滚底；电话仍只写 memories，不写 messages/group_messages。
-// 会不会影响其他文件：会，thread.js 打电话入口会更稳定；不需要改导出。
-// 更新记忆里该文件的导出函数：无变化。
+// 改了什么：1) buildCallMessages 系统提示词从"你扮演/你正在"改为"我是/我正在"第一人称；2) summarizeCall 总结提示词从"请把"改为"我正在把"第一人称；3) sendCallText 失败时不往 callLogs 写假AI回复，改为只 showToast。
+// 原来效果：AI系统指令用第二人称命令式；失败时写一条"我刚刚没听清"假回复进对话记录污染上下文。
+// 现在效果：全部第一人称；失败时只弹提示，不污染对话记录。
+// 会不会影响其他文件：不会。导出接口（mountThreadCall/unmountThreadCall）不变，panels.js 调用方式不受影响。
 // 依赖：../../core/storage.js(generateId,getNow,setDB,getByIndexDB)；../../core/ui.js(createIcon,showToast)；../../core/api.js(silentRequest)；../../core/tts.js(playTTS,stopAll)
