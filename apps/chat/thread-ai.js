@@ -580,6 +580,8 @@ async function buildPrompt({
     query: buildMemoryQueryText(messages, userName)
   });
 
+  const dreamPrompt = await buildDreamPrompt(activeCharacter?.id || '', userName);
+
   const system = [
     buildIdentityPrompt(activeCharacter, userName, userProfile),
     buildCharacterPrompt(activeCharacter, userName),
@@ -587,6 +589,7 @@ async function buildPrompt({
     buildWorldbookPrompt(worldbook),
     buildInventoryPrompt(inventory),
     memoryPrompt,
+    dreamPrompt,
     buildAnniversaryPrompt(anniversary),
     buildGrudgePrompt(grudgeContext, options?.activeLock, userName),
     `当前时间：${currentTime}`,
@@ -777,6 +780,64 @@ function buildGrudgePrompt(context, activeLock, userName) {
   }
 
   return lines.join('\n');
+}
+
+// ═══════════════════════════════════════
+// 【梦境注入】把最近梦境注入 prompt
+// ═══════════════════════════════════════
+
+async function buildDreamPrompt(characterId, userName) {
+  if (!characterId) return '';
+
+  const settings = getData('app_settings') || {};
+  if (!settings.dreamEnabled) return '';
+
+  try {
+    const allDreams = await getByIndexDB('dreams', 'characterId', characterId);
+    const recent = normalizeList(allDreams)
+      .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')))
+      .slice(0, 3);
+
+    if (!recent.length) return '';
+
+    const lines = [
+      '我最近做的梦：',
+      '以下是我最近的梦境片段。我不会主动每次都提，但如果聊天内容恰好相关、或者对方问起，我会自然地提起，像突然想到一样。我不会说"系统记录了我的梦"，也不会说"数据库里有我的梦"。'
+    ];
+
+    recent.forEach((dream) => {
+      const clarity = getDreamClarityPercent(dream.createdAt);
+      const summary = dream.summary || dream.content?.slice(0, 60) || '';
+      const mood = getDreamMoodLabel(dream.mood);
+      const keywords = normalizeList(dream.keywords).join('、');
+
+      if (clarity < 20) {
+        lines.push(`- （很模糊，几乎忘了）${mood}的梦，只记得和${keywords || '一些事情'}有关`);
+      } else if (clarity < 50) {
+        lines.push(`- （有点模糊）${mood}的梦：${summary}${keywords ? `（关键词：${keywords}）` : ''}`);
+      } else {
+        lines.push(`- ${mood}的梦：${dream.content?.slice(0, 150) || summary}${keywords ? `（关键词：${keywords}）` : ''}`);
+      }
+    });
+
+    return lines.join('\n');
+  } catch (_) {
+    return '';
+  }
+}
+
+function getDreamClarityPercent(createdAt) {
+  if (!createdAt) return 10;
+  const days = (Date.now() - new Date(createdAt).getTime()) / 86400000;
+  if (days < 3) return 100;
+  if (days < 7) return 60;
+  if (days < 30) return 30;
+  return 10;
+}
+
+function getDreamMoodLabel(moodId) {
+  const moods = { sweet: '甜甜', weird: '奇怪', funny: '搞笑', sad: '忧伤', adventure: '冒险', chaos: '混乱' };
+  return moods[moodId] || '奇怪';
 }
 
 // ═══════════════════════════════════════
@@ -1032,6 +1093,7 @@ function buildMemoryQueryText(messages, userName) {
     .map((message) => formatMessageForPrompt(message, 'private', userName))
     .join('\n');
 }
+
 // ═══════════════════════════════════════
 // 【占位消息】AI回复前先插一条空消息
 // ═══════════════════════════════════════
@@ -1725,8 +1787,8 @@ function randomBetween(min, max) {
   return Math.floor(left + Math.random() * (right - left + 1));
 }
 
-// 改了什么：1) requestGroupReply 里角色AI报错时从 throw error 改成 continue，跳过出错角色继续下一个；2) cleanPerspectiveText 删掉 .replace(/TA/g, userName) 那行硬替换。
-// 原来效果：群聊一个角色报错 → throw → 后面排队角色全部不回复 → 用户看到残缺结果；AI内心想法里的"TA好像不开心"会被替换成"小明好像不开心"。
-// 现在效果：群聊一个角色报错 → 跳过它 → 继续下一个角色回复；"TA"不再被硬替换，AI视角保持自然。
-// 会不会影响其他文件：不会。导出接口（requestThreadAIReply/stopThreadAIReply/checkThreadProactiveMessages/requestProactiveThreadMessage）完全不变。
-// 依赖：../../core/storage.js(getData,setData,generateId,getNow,setDB,deleteDB,getByIndexDB,getAllDB,getDB)；../../core/api.js(silentRequest)；../../core/memory.js(buildMemoryPrompt,checkImportantInfo,checkAndSummarize)；./identity-core.js(getIdentityCore)；./thread-ai-local.js(tryLocalOrSiliconFlowReply)
+// 改了什么：1) buildPrompt 里新增 dreamPrompt，读取该角色最近3条梦境注入系统提示；2) 新增 buildDreamPrompt 函数，按清晰度衰减显示梦境内容；3) 梦境开启时才注入，关闭时不读取不消耗性能。
+// 原来效果：AI聊天时完全不知道自己做过梦，用户问也答不上来。
+// 现在效果：AI在聊天时能自然提起最近的梦，像"我昨天梦到..."，用户问也能搜到。
+// 会不会影响其他文件：不会。导出接口完全不变。
+// depends: ../../core/storage.js(getData,setData,generateId,getNow,setDB,deleteDB,getByIndexDB,getAllDB,getDB)；../../core/api.js(silentRequest)；../../core/memory.js(buildMemoryPrompt,checkImportantInfo,checkAndSummarize)；./identity-core.js(getIdentityCore)；./thread-ai-local.js(tryLocalOrSiliconFlowReply)
