@@ -46,9 +46,12 @@ let state = {
   rootEl: null,
   currentPage: 'player',
   songs: [],
+  playlists: [],
+  activePlaylistId: 'all',
   queue: [],
   currentSongId: '',
   isPlaying: false,
+  playMode: 'list',
   currentTime: 0,
   duration: 0,
   volume: 1,
@@ -79,7 +82,8 @@ let state = {
     playerBgKey: 'app_bg_music_player',
     listBgKey: 'app_bg_music_list',
     dualMode: false,
-    selectedCharacterId: ''
+    selectedCharacterId: '',
+    playMode: 'list'
   }
 };
 
@@ -96,6 +100,7 @@ export async function mount(containerEl, options = {}) {
   await loadSettings();
   await loadCharacters();
   await loadSongs();
+  await loadPlaylists();
   await loadCurrentSong();
 
   injectStyle();
@@ -103,9 +108,6 @@ export async function mount(containerEl, options = {}) {
   initAudioElement();
   startAnimationLoop();
 
-  // ─────────────────────────────────────
-  // 暴露播放器控制接口给桌面小组件
-  // ─────────────────────────────────────
   window.musicPlayer = {
     isPlaying: () => state.isPlaying,
     getCurrentSong: () => getCurrentSong(),
@@ -461,6 +463,10 @@ function injectStyle() {
       color: var(--accent);
     }
 
+    /* ─────────────────────────────────────
+       【列表页】歌单列表
+    ───────────────────────────────────── */
+
     .list-page {
       display: flex;
       flex-direction: column;
@@ -548,6 +554,50 @@ function injectStyle() {
     .list-hero-count {
       font-size: 13px;
       color: var(--text-secondary);
+    }
+
+    .list-playlist-bar {
+      display: flex;
+      gap: 8px;
+      padding: 0 20px 12px;
+      overflow-x: auto;
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+    }
+
+    .list-playlist-bar::-webkit-scrollbar {
+      display: none;
+    }
+
+    .list-playlist-chip {
+      flex-shrink: 0;
+      height: 32px;
+      padding: 0 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 999px;
+      background: var(--bg-card);
+      color: var(--text-secondary);
+      font-size: 13px;
+      font-weight: 500;
+      box-shadow: var(--shadow-sm);
+      transition: all 200ms ease;
+      gap: 6px;
+    }
+
+    .list-playlist-chip.active {
+      background: var(--accent);
+      color: var(--bubble-user-text);
+    }
+
+    .list-playlist-chip:active {
+      transform: scale(0.96);
+    }
+
+    .list-playlist-chip svg {
+      width: 14px;
+      height: 14px;
     }
 
     .list-actions {
@@ -723,6 +773,10 @@ function injectStyle() {
       font-size: 13px;
       color: var(--text-secondary);
     }
+
+    /* ─────────────────────────────────────
+       【设置抽屉】壁纸、双人模式、音量
+    ───────────────────────────────────── */
 
     .music-drawer-backdrop {
       position: fixed;
@@ -1152,6 +1206,97 @@ function injectStyle() {
     .music-mini-btn:active {
       transform: scale(0.9);
     }
+
+    /* ─────────────────────────────────────
+       【歌单管理抽屉】新建/编辑/删除歌单
+    ───────────────────────────────────── */
+
+    .playlist-drawer {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 53;
+      background: var(--bg-primary);
+      border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+      box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.1);
+      transform: translateY(100%);
+      transition: transform 300ms cubic-bezier(0.34, 1.56, 0.64, 1);
+      max-height: 70vh;
+      overflow-y: auto;
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+
+    .playlist-drawer.open {
+      transform: translateY(0);
+    }
+
+    .playlist-item-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 20px;
+      border-bottom: 1px solid color-mix(in srgb, var(--text-hint) 10%, transparent);
+    }
+
+    .playlist-item-name {
+      font-size: 15px;
+      color: var(--text-primary);
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .playlist-item-count {
+      font-size: 12px;
+      color: var(--text-hint);
+      margin-left: 8px;
+    }
+
+    .playlist-item-btns {
+      display: flex;
+      gap: 4px;
+      flex-shrink: 0;
+      margin-left: 12px;
+    }
+
+    .playlist-item-btn {
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-hint);
+      transition: all 200ms ease;
+    }
+
+    .playlist-item-btn:active {
+      transform: scale(0.9);
+      color: var(--accent);
+    }
+
+    .playlist-item-btn.danger:active {
+      color: #e74c3c;
+    }
+
+    .add-to-playlist-btn {
+      width: 100%;
+      padding: 14px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      color: var(--accent);
+      font-size: 14px;
+      font-weight: 500;
+      transition: all 200ms ease;
+    }
+
+    .add-to-playlist-btn:active {
+      opacity: 0.7;
+    }
   `;
 
   document.head.appendChild(style);
@@ -1237,6 +1382,10 @@ function createPageContainer() {
   container.append(playerPage, listPage);
   return container;
 }
+
+// ─────────────────────────────────────
+// 播放页渲染
+// ─────────────────────────────────────
 
 function createPlayerPage() {
   const page = document.createElement('div');
@@ -1422,16 +1571,30 @@ function createSecondaryControls() {
   });
 
   const loopBtn = document.createElement('button');
-  loopBtn.className = 'secondary-btn';
+  loopBtn.className = `secondary-btn ${state.playMode === 'loop' ? 'active' : ''}`;
   loopBtn.appendChild(createIcon('refresh', 20));
+  loopBtn.addEventListener('click', () => {
+    state.playMode = state.playMode === 'loop' ? 'list' : 'loop';
+    saveSettings();
+    render();
+  });
 
   const shuffleBtn = document.createElement('button');
-  shuffleBtn.className = 'secondary-btn';
+  shuffleBtn.className = `secondary-btn ${state.playMode === 'shuffle' ? 'active' : ''}`;
   shuffleBtn.appendChild(createIcon('star', 20));
+  shuffleBtn.addEventListener('click', () => {
+    state.playMode = state.playMode === 'shuffle' ? 'list' : 'shuffle';
+    saveSettings();
+    render();
+  });
 
   controls.append(lyricsBtn, dualBtn, loopBtn, shuffleBtn);
   return controls;
 }
+
+// ─────────────────────────────────────
+// 列表页渲染
+// ─────────────────────────────────────
 
 function createListPage() {
   const page = document.createElement('div');
@@ -1451,6 +1614,7 @@ function createListPage() {
   content.className = 'list-content';
 
   content.appendChild(createListHero());
+  content.appendChild(createPlaylistBar());
   content.appendChild(createListActions());
   content.appendChild(createSongList());
 
@@ -1486,17 +1650,63 @@ function createListHero() {
   const info = document.createElement('div');
   info.className = 'list-hero-info';
 
+  const activePlaylist = getActivePlaylist();
+  const displaySongs = getDisplaySongs();
+
   const title = document.createElement('div');
   title.className = 'list-hero-title';
-  title.textContent = '我的歌单';
+  title.textContent = activePlaylist?.name || '全部歌曲';
 
   const count = document.createElement('div');
   count.className = 'list-hero-count';
-  count.textContent = `${state.songs.length} 首歌曲`;
+  count.textContent = `${displaySongs.length} 首歌曲`;
 
   info.append(title, count);
   hero.append(avatar, info);
   return hero;
+}
+
+// ─────────────────────────────────────
+// 歌单切换条
+// ─────────────────────────────────────
+
+function createPlaylistBar() {
+  const bar = document.createElement('div');
+  bar.className = 'list-playlist-bar';
+
+  // 全部歌曲
+  const allChip = document.createElement('button');
+  allChip.className = `list-playlist-chip ${state.activePlaylistId === 'all' ? 'active' : ''}`;
+  allChip.textContent = '全部';
+  allChip.addEventListener('click', () => {
+    state.activePlaylistId = 'all';
+    render();
+  });
+  bar.appendChild(allChip);
+
+  // 各歌单
+  state.playlists.forEach((pl) => {
+    const chip = document.createElement('button');
+    chip.className = `list-playlist-chip ${state.activePlaylistId === pl.id ? 'active' : ''}`;
+    chip.textContent = pl.name || '未命名歌单';
+    chip.addEventListener('click', () => {
+      state.activePlaylistId = pl.id;
+      render();
+    });
+    bar.appendChild(chip);
+  });
+
+  // 管理歌单按钮
+  const manageBtn = document.createElement('button');
+  manageBtn.className = 'list-playlist-chip';
+  manageBtn.appendChild(createIcon('settings', 14));
+  const manageText = document.createElement('span');
+  manageText.textContent = '管理';
+  manageBtn.appendChild(manageText);
+  manageBtn.addEventListener('click', openPlaylistDrawer);
+  bar.appendChild(manageBtn);
+
+  return bar;
 }
 
 function createListActions() {
@@ -1527,12 +1737,14 @@ function createSongList() {
   const list = document.createElement('div');
   list.className = 'song-list';
 
-  if (state.songs.length === 0) {
+  const displaySongs = getDisplaySongs();
+
+  if (displaySongs.length === 0) {
     list.appendChild(createSongEmpty());
     return list;
   }
 
-  state.songs.forEach((song) => {
+  displaySongs.forEach((song) => {
     list.appendChild(createSongItem(song));
   });
 
@@ -1549,11 +1761,11 @@ function createSongEmpty() {
 
   const title = document.createElement('div');
   title.className = 'song-empty-title';
-  title.textContent = '还没有歌曲';
+  title.textContent = state.activePlaylistId === 'all' ? '还没有歌曲' : '歌单里还没有歌曲';
 
   const desc = document.createElement('div');
   desc.className = 'song-empty-desc';
-  desc.textContent = '点击上方"导入歌曲"添加音乐';
+  desc.textContent = state.activePlaylistId === 'all' ? '点击上方"导入歌曲"添加音乐' : '去全部歌曲里添加吧';
 
   empty.append(icon, title, desc);
   return empty;
@@ -1595,6 +1807,14 @@ function createSongItem(song) {
   const actions = document.createElement('div');
   actions.className = 'song-item-actions';
 
+  const addBtn = document.createElement('button');
+  addBtn.className = 'song-item-action-btn';
+  addBtn.appendChild(createIcon('star', 16));
+  addBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    openAddToPlaylistDrawer(song.id);
+  });
+
   const deleteBtn = document.createElement('button');
   deleteBtn.className = 'song-item-action-btn';
   deleteBtn.appendChild(createIcon('close', 16));
@@ -1603,11 +1823,15 @@ function createSongItem(song) {
     deleteSong(song.id);
   });
 
-  actions.appendChild(deleteBtn);
+  actions.append(addBtn, deleteBtn);
 
   item.append(cover, info, duration, actions);
   return item;
 }
+
+// ═══════════════════════════════════════
+// 【设置抽屉】壁纸、双人模式、音量、列表背景
+// ═══════════════════════════════════════
 
 function openSettingsDrawer() {
   const backdrop = document.createElement('div');
@@ -1633,6 +1857,7 @@ function openSettingsDrawer() {
 
   const content = document.createElement('div');
   content.appendChild(createWallpaperSection());
+  content.appendChild(createListWallpaperSection());
   content.appendChild(createDualModeSection());
   content.appendChild(createVolumeSection());
 
@@ -1697,6 +1922,62 @@ function createWallpaperSection() {
   customItem.appendChild(createIcon('star', 20));
   customItem.addEventListener('click', uploadWallpaper);
   grid.appendChild(customItem);
+
+  section.append(title, grid);
+  return section;
+}
+
+// ─────────────────────────────────────
+// 列表页壁纸上传
+// ─────────────────────────────────────
+
+function createListWallpaperSection() {
+  const section = document.createElement('div');
+  section.className = 'music-setting-group';
+
+  const title = document.createElement('div');
+  title.className = 'music-setting-group-title';
+  title.textContent = '列表页背景';
+
+  const grid = document.createElement('div');
+  grid.className = 'music-wallpaper-grid';
+
+  // 自定义上传
+  const customItem = document.createElement('div');
+  customItem.className = `music-wallpaper-item ${state.listBg ? 'active' : ''}`;
+  customItem.style.background = state.listBg ? 'var(--bg-card)' : 'var(--bg-card)';
+  if (state.listBg) {
+    customItem.style.backgroundImage = `url(${state.listBg})`;
+    customItem.style.backgroundSize = 'cover';
+    customItem.style.backgroundPosition = 'center';
+  } else {
+    customItem.style.display = 'flex';
+    customItem.style.alignItems = 'center';
+    customItem.style.justifyContent = 'center';
+    customItem.style.color = 'var(--accent)';
+    customItem.appendChild(createIcon('star', 20));
+  }
+  customItem.addEventListener('click', uploadListBg);
+  grid.appendChild(customItem);
+
+  // 清除按钮
+  if (state.listBg) {
+    const clearItem = document.createElement('div');
+    clearItem.className = 'music-wallpaper-item';
+    clearItem.style.background = 'var(--bg-card)';
+    clearItem.style.display = 'flex';
+    clearItem.style.alignItems = 'center';
+    clearItem.style.justifyContent = 'center';
+    clearItem.style.color = 'var(--text-hint)';
+    clearItem.appendChild(createIcon('close', 20));
+    clearItem.addEventListener('click', async () => {
+      state.listBg = '';
+      await deleteDB(BLOB_STORE, 'app_bg_music_list');
+      saveSettings();
+      render();
+    });
+    grid.appendChild(clearItem);
+  }
 
   section.append(title, grid);
   return section;
@@ -1813,6 +2094,257 @@ function createVolumeSection() {
   return section;
 }
 
+// ═══════════════════════════════════════
+// 【歌单管理抽屉】新建/编辑/删除歌单
+// ═══════════════════════════════════════
+
+function openPlaylistDrawer() {
+  const backdrop = document.createElement('div');
+  backdrop.className = 'music-drawer-backdrop';
+  backdrop.style.zIndex = '52';
+  backdrop.addEventListener('click', () => closePlaylistDrawer());
+
+  const drawer = document.createElement('div');
+  drawer.className = 'playlist-drawer';
+  drawer.id = 'playlist-drawer';
+
+  const header = document.createElement('div');
+  header.className = 'music-drawer-header';
+
+  const title = document.createElement('div');
+  title.className = 'music-drawer-title';
+  title.textContent = '管理歌单';
+
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'music-drawer-close';
+  closeBtn.appendChild(createIcon('close', 16));
+  closeBtn.addEventListener('click', () => closePlaylistDrawer());
+
+  header.append(title, closeBtn);
+
+  const list = document.createElement('div');
+
+  state.playlists.forEach((pl) => {
+    const row = document.createElement('div');
+    row.className = 'playlist-item-row';
+
+    const name = document.createElement('div');
+    name.className = 'playlist-item-name';
+    name.textContent = pl.name || '未命名歌单';
+
+    const count = document.createElement('div');
+    count.className = 'playlist-item-count';
+    count.textContent = `${(pl.songIds || []).length}首`;
+
+    const btns = document.createElement('div');
+    btns.className = 'playlist-item-btns';
+
+    const editBtn = document.createElement('button');
+    editBtn.className = 'playlist-item-btn';
+    editBtn.appendChild(createIcon('edit', 16));
+    editBtn.addEventListener('click', () => editPlaylist(pl.id));
+
+    const delBtn = document.createElement('button');
+    delBtn.className = 'playlist-item-btn danger';
+    delBtn.appendChild(createIcon('close', 16));
+    delBtn.addEventListener('click', () => deletePlaylist(pl.id));
+
+    btns.append(editBtn, delBtn);
+    row.append(name, count, btns);
+    list.appendChild(row);
+  });
+
+  const addBtn = document.createElement('button');
+  addBtn.className = 'add-to-playlist-btn';
+  addBtn.appendChild(createIcon('star', 16));
+  const addText = document.createElement('span');
+  addText.textContent = '新建歌单';
+  addBtn.appendChild(addText);
+  addBtn.addEventListener('click', createPlaylist);
+
+  drawer.append(header, list, addBtn);
+
+  document.body.appendChild(backdrop);
+  document.body.appendChild(drawer);
+
+  requestAnimationFrame(() => {
+    backdrop.classList.add('open');
+    drawer.classList.add('open');
+  });
+
+  state.playlistDrawer = { backdrop, drawer };
+}
+
+function closePlaylistDrawer() {
+  if (!state.playlistDrawer) return;
+
+  const { backdrop, drawer } = state.playlistDrawer;
+  backdrop.classList.remove('open');
+  drawer.classList.remove('open');
+
+  setTimeout(() => {
+    backdrop.remove();
+    drawer.remove();
+    state.playlistDrawer = null;
+  }, 300);
+}
+
+function createPlaylist() {
+  const name = prompt('歌单名称：');
+  if (!name || !name.trim()) return;
+
+  const pl = {
+    id: generateId('playlist'),
+    name: name.trim(),
+    songIds: [],
+    createdAt: getNow(),
+    updatedAt: getNow()
+  };
+
+  state.playlists.push(pl);
+  savePlaylists();
+  closePlaylistDrawer();
+  showToast('歌单已创建');
+  render();
+}
+
+function editPlaylist(playlistId) {
+  const pl = state.playlists.find(p => p.id === playlistId);
+  if (!pl) return;
+
+  const name = prompt('修改歌单名称：', pl.name);
+  if (!name || !name.trim()) return;
+
+  pl.name = name.trim();
+  pl.updatedAt = getNow();
+  savePlaylists();
+  closePlaylistDrawer();
+  showToast('歌单已更新');
+  render();
+}
+
+function deletePlaylist(playlistId) {
+  if (!confirm('确定要删除这个歌单吗？')) return;
+
+  state.playlists = state.playlists.filter(p => p.id !== playlistId);
+  if (state.activePlaylistId === playlistId) {
+    state.activePlaylistId = 'all';
+  }
+  savePlaylists();
+  closePlaylistDrawer();
+  showToast('歌单已删除');
+  render();
+}
+
+// ─────────────────────────────────────
+// 添加歌曲到歌单
+// ─────────────────────────────────────
+
+function openAddToPlaylistDrawer(songId) {
+  if (!state.playlists.length) {
+    showToast('还没有歌单，请先创建');
+    return;
+  }
+
+  const backdrop = document.createElement('div');
+  backdrop.className = 'music-drawer-backdrop';
+  backdrop.style.zIndex = '52';
+  backdrop.addEventListener('click', () => closeAddToPlaylistDrawer());
+
+  const drawer = document.createElement('div');
+  drawer.className = 'playlist-drawer';
+  drawer.id = 'add-to-playlist-drawer';
+
+  const header = document.createElement('div');
+  header.className = 'music-drawer-header';
+
+  const title = document.createElement('div');
+  title.className = 'music-drawer-title';
+  title.textContent = '添加到歌单';
+
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'music-drawer-close';
+  closeBtn.appendChild(createIcon('close', 16));
+  closeBtn.addEventListener('click', () => closeAddToPlaylistDrawer());
+
+  header.append(title, closeBtn);
+
+  const list = document.createElement('div');
+
+  state.playlists.forEach((pl) => {
+    const hasSong = (pl.songIds || []).includes(songId);
+
+    const row = document.createElement('div');
+    row.className = 'playlist-item-row';
+    row.style.cursor = 'pointer';
+    row.addEventListener('click', () => {
+      toggleSongInPlaylist(songId, pl.id);
+      closeAddToPlaylistDrawer();
+    });
+
+    const name = document.createElement('div');
+    name.className = 'playlist-item-name';
+    name.textContent = pl.name || '未命名歌单';
+
+    const count = document.createElement('div');
+    count.className = 'playlist-item-count';
+    count.textContent = hasSong ? '已添加' : `${(pl.songIds || []).length}首`;
+
+    row.append(name, count);
+    list.appendChild(row);
+  });
+
+  drawer.append(header, list);
+
+  document.body.appendChild(backdrop);
+  document.body.appendChild(drawer);
+
+  requestAnimationFrame(() => {
+    backdrop.classList.add('open');
+    drawer.classList.add('open');
+  });
+
+  state.addToPlaylistDrawer = { backdrop, drawer };
+}
+
+function closeAddToPlaylistDrawer() {
+  if (!state.addToPlaylistDrawer) return;
+
+  const { backdrop, drawer } = state.addToPlaylistDrawer;
+  backdrop.classList.remove('open');
+  drawer.classList.remove('open');
+
+  setTimeout(() => {
+    backdrop.remove();
+    drawer.remove();
+    state.addToPlaylistDrawer = null;
+  }, 300);
+}
+
+function toggleSongInPlaylist(songId, playlistId) {
+  const pl = state.playlists.find(p => p.id === playlistId);
+  if (!pl) return;
+
+  if (!Array.isArray(pl.songIds)) pl.songIds = [];
+
+  const index = pl.songIds.indexOf(songId);
+  if (index >= 0) {
+    pl.songIds.splice(index, 1);
+    showToast('已从歌单移除');
+  } else {
+    pl.songIds.push(songId);
+    showToast('已添加到歌单');
+  }
+
+  pl.updatedAt = getNow();
+  savePlaylists();
+  render();
+}
+
+// ═══════════════════════════════════════
+// 【歌词面板】全屏歌词显示
+// ═══════════════════════════════════════
+
 function toggleLyricsPanel() {
   state.isLyricsOpen = !state.isLyricsOpen;
 
@@ -1908,6 +2440,10 @@ function createLyricsEmpty() {
   return empty;
 }
 
+// ═══════════════════════════════════════
+// 【音频核心】AudioContext、播放控制
+// ═══════════════════════════════════════
+
 function initAudioElement() {
   if (state.audioElement) return;
 
@@ -1927,7 +2463,7 @@ function initAudioElement() {
 
   state.audioElement.addEventListener('ended', () => {
     state.isPlaying = false;
-    playNext();
+    handleSongEnded();
   });
 
   state.audioElement.addEventListener('play', () => {
@@ -1963,6 +2499,23 @@ function initAudioContext() {
   } catch (e) {
     console.warn('Web Audio API init failed:', e);
   }
+}
+
+// ─────────────────────────────────────
+// 歌曲结束处理：根据播放模式决定下一首
+// ─────────────────────────────────────
+
+function handleSongEnded() {
+  if (state.playMode === 'loop') {
+    // 单曲循环：重新播放当前歌曲
+    if (state.audioElement) {
+      state.audioElement.currentTime = 0;
+      state.audioElement.play();
+    }
+    return;
+  }
+
+  playNext();
 }
 
 async function playSong(songId) {
@@ -2022,26 +2575,61 @@ function togglePlay() {
 }
 
 function playPrevious() {
-  if (!state.songs.length) return;
+  const queue = getPlayQueue();
+  if (!queue.length) return;
 
-  const currentIndex = state.songs.findIndex(s => s.id === state.currentSongId);
-  const prevIndex = currentIndex > 0 ? currentIndex - 1 : state.songs.length - 1;
-  playSong(state.songs[prevIndex].id);
+  const currentIndex = queue.findIndex(s => s.id === state.currentSongId);
+  const prevIndex = currentIndex > 0 ? currentIndex - 1 : queue.length - 1;
+  playSong(queue[prevIndex].id);
 }
 
 function playNext() {
-  if (!state.songs.length) return;
+  const queue = getPlayQueue();
+  if (!queue.length) return;
 
-  const currentIndex = state.songs.findIndex(s => s.id === state.currentSongId);
-  const nextIndex = currentIndex < state.songs.length - 1 ? currentIndex + 1 : 0;
-  playSong(state.songs[nextIndex].id);
+  if (state.playMode === 'shuffle') {
+    const randomIndex = Math.floor(Math.random() * queue.length);
+    playSong(queue[randomIndex].id);
+    return;
+  }
+
+  const currentIndex = queue.findIndex(s => s.id === state.currentSongId);
+  const nextIndex = currentIndex < queue.length - 1 ? currentIndex + 1 : 0;
+  playSong(queue[nextIndex].id);
 }
 
 function playAll() {
-  if (state.songs.length) {
-    playSong(state.songs[0].id);
+  const queue = getPlayQueue();
+  if (queue.length) {
+    playSong(queue[0].id);
   }
 }
+
+// ─────────────────────────────────────
+// 获取当前播放队列（根据当前歌单筛选）
+// ─────────────────────────────────────
+
+function getPlayQueue() {
+  return getDisplaySongs();
+}
+
+function getDisplaySongs() {
+  if (state.activePlaylistId === 'all') return state.songs;
+
+  const pl = state.playlists.find(p => p.id === state.activePlaylistId);
+  if (!pl) return state.songs;
+
+  return state.songs.filter(s => (pl.songIds || []).includes(s.id));
+}
+
+function getActivePlaylist() {
+  if (state.activePlaylistId === 'all') return { name: '全部歌曲' };
+  return state.playlists.find(p => p.id === state.activePlaylistId) || { name: '全部歌曲' };
+}
+
+// ═══════════════════════════════════════
+// 【歌曲管理】导入、删除、保存
+// ═══════════════════════════════════════
 
 async function importSongs() {
   const input = document.createElement('input');
@@ -2126,6 +2714,13 @@ async function deleteSong(songId) {
 
   state.songs = state.songs.filter(s => s.id !== songId);
 
+  // 从所有歌单中移除
+  state.playlists.forEach(pl => {
+    if (Array.isArray(pl.songIds)) {
+      pl.songIds = pl.songIds.filter(id => id !== songId);
+    }
+  });
+
   await deleteDB(SONG_STORE, songId);
   await deleteDB(BLOB_STORE, `audio_${songId}`);
 
@@ -2138,6 +2733,7 @@ async function deleteSong(songId) {
     }
   }
 
+  savePlaylists();
   showToast('已删除');
   render();
 }
@@ -2149,6 +2745,17 @@ async function saveSong(song) {
 async function loadSongs() {
   const songs = await getAllDB(SONG_STORE);
   state.songs = Array.isArray(songs) ? songs : [];
+}
+
+async function loadPlaylists() {
+  const playlists = await getAllDB(PLAYLIST_STORE);
+  state.playlists = Array.isArray(playlists) ? playlists : [];
+}
+
+async function savePlaylists() {
+  for (const pl of state.playlists) {
+    await setDB(PLAYLIST_STORE, pl);
+  }
 }
 
 async function loadCurrentSong() {
@@ -2168,6 +2775,10 @@ function saveCurrentSong() {
     updatedAt: getNow()
   });
 }
+
+// ═══════════════════════════════════════
+// 【ID3标签解析】读取歌曲元数据
+// ═══════════════════════════════════════
 
 async function readID3Tags(file) {
   try {
@@ -2277,6 +2888,10 @@ function readFileAsDataURL(file) {
   });
 }
 
+// ═══════════════════════════════════════
+// 【歌词获取】lrclib.net API
+// ═══════════════════════════════════════
+
 async function fetchLyrics(title, artist) {
   if (!title) return [];
 
@@ -2336,6 +2951,10 @@ function parseLRC(lrc) {
   return result.sort((a, b) => a.time - b.time);
 }
 
+// ─────────────────────────────────────
+// 歌词上传/输入
+// ─────────────────────────────────────
+
 function uploadLyrics() {
   const input = document.createElement('input');
   input.type = 'file';
@@ -2380,6 +2999,10 @@ function inputLyrics() {
   toggleLyricsPanel();
 }
 
+// ═══════════════════════════════════════
+// 【壁纸上传】自定义播放页壁纸
+// ═══════════════════════════════════════
+
 async function uploadWallpaper() {
   const input = document.createElement('input');
   input.type = 'file';
@@ -2405,6 +3028,40 @@ async function uploadWallpaper() {
 
   input.click();
 }
+
+// ─────────────────────────────────────
+// 列表页背景上传
+// ─────────────────────────────────────
+
+async function uploadListBg() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'image/*';
+
+  input.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const dataUrl = await readFileAsDataURL(file);
+    state.listBg = dataUrl;
+
+    await setDB(BLOB_STORE, {
+      key: 'app_bg_music_list',
+      value: dataUrl,
+      type: file.type
+    });
+
+    saveSettings();
+    render();
+    showToast('列表页背景已更换');
+  });
+
+  input.click();
+}
+
+// ═══════════════════════════════════════
+// 【频谱动画】Canvas绘制
+// ═══════════════════════════════════════
 
 function startAnimationLoop() {
   function animate() {
@@ -2462,6 +3119,10 @@ function drawSpectrum() {
   }
 }
 
+// ═══════════════════════════════════════
+// 【UI更新】进度、播放按钮、歌词滚动
+// ═══════════════════════════════════════
+
 function updateProgressUI() {
   const fill = document.querySelector('.progress-fill');
   const thumb = document.querySelector('.progress-thumb');
@@ -2514,6 +3175,10 @@ function updateLyricsIndex() {
   }
 }
 
+// ═══════════════════════════════════════
+// 【页面切换】播放页/列表页
+// ═══════════════════════════════════════
+
 function switchPage(page) {
   state.currentPage = page;
 
@@ -2543,12 +3208,17 @@ function switchPage(page) {
   });
 }
 
+// ═══════════════════════════════════════
+// 【设置读写】localStorage
+// ═══════════════════════════════════════
+
 async function loadSettings() {
   const saved = getData(MUSIC_SETTINGS_KEY) || {};
   state.settings = { ...state.settings, ...saved };
   state.dualMode = state.settings.dualMode;
   state.selectedCharacterId = state.settings.selectedCharacterId;
   state.volume = state.settings.volume ?? 1;
+  state.playMode = state.settings.playMode || 'list';
 
   if (state.settings.filmWallpaperId) {
     state.filmWallpaper = PRESET_FILM_WALLPAPERS.find(w => w.id === state.settings.filmWallpaperId) || PRESET_FILM_WALLPAPERS[0];
@@ -2564,6 +3234,14 @@ async function loadSettings() {
   } else {
     state.customWallpaper = '';
   }
+
+  // 列表页背景
+  try {
+    const listBgRecord = await getDB(BLOB_STORE, 'app_bg_music_list');
+    state.listBg = listBgRecord?.value || '';
+  } catch {
+    state.listBg = '';
+  }
 }
 
 function saveSettings() {
@@ -2573,10 +3251,15 @@ function saveSettings() {
     selectedCharacterId: state.selectedCharacterId,
     filmWallpaperId: state.filmWallpaper?.id || 'film_1',
     useCustomWallpaper: Boolean(state.customWallpaper),
-    volume: state.volume
+    volume: state.volume,
+    playMode: state.playMode
   };
   setData(MUSIC_SETTINGS_KEY, state.settings);
 }
+
+// ═══════════════════════════════════════
+// 【角色加载】读取已有AI角色
+// ═══════════════════════════════════════
 
 async function loadCharacters() {
   try {
@@ -2586,6 +3269,10 @@ async function loadCharacters() {
     state.characters = [];
   }
 }
+
+// ═══════════════════════════════════════
+// 【辅助工具】格式化、获取当前歌曲、头像占位
+// ═══════════════════════════════════════
 
 function getCurrentSong() {
   return state.songs.find(s => s.id === state.currentSongId) || null;
@@ -2641,6 +3328,10 @@ function createListAvatarPlaceholder() {
   div.appendChild(createIcon('music', 28));
   return div;
 }
+
+// ─────────────────────────────────────
+// 迷你播放条：退出APP后底部悬浮条
+// ─────────────────────────────────────
 
 function updateMiniPlayer() {
   let miniPlayer = document.querySelector('.music-mini-player');
