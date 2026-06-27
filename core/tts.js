@@ -67,23 +67,31 @@ function urlHasPathKeyword(url, keyword) {
   }
 }
 
-function smartTTSUrl(base, provider, voiceId) {
-  const lower = base.toLowerCase();
+function urlHasV1(url) {
+  try {
+    const pathname = new URL(url).pathname.toLowerCase();
+    return pathname.includes('/v1');
+  } catch {
+    return url.toLowerCase().includes('/v1');
+  }
+}
 
+function smartTTSUrl(base, provider, voiceId) {
   if (provider === 'elevenlabs') {
-    const suffix = '/v1/text-to-speech/';
     if (urlHasPathKeyword(base, '/text-to-speech/')) return base;
-    return `${base}/v1/text-to-speech/${encodeURIComponent(voiceId || 'default')}`;
+    if (urlHasV1(base)) return base + '/text-to-speech/' + encodeURIComponent(voiceId || 'default');
+    return base + '/v1/text-to-speech/' + encodeURIComponent(voiceId || 'default');
   }
 
   if (provider === 'azure') {
     if (urlHasPathKeyword(base, '/cognitiveservices/v1')) return base;
-    return `${base}/cognitiveservices/v1`;
+    return base + '/cognitiveservices/v1';
   }
 
-  // openai / custom：路径里有 /audio/speech 就不追加
+  // openai / custom
   if (urlHasPathKeyword(base, '/audio/speech')) return base;
-  return `${base}/v1/audio/speech`;
+  if (urlHasV1(base)) return base + '/audio/speech';
+  return base + '/v1/audio/speech';
 }
 
 // ═══════════════════════════════════════
