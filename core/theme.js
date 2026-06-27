@@ -13,31 +13,30 @@ const DEFAULT_MODE = 'light';
 const FONT_FALLBACK = "'PingFang SC', 'Microsoft YaHei', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 
 // ═══════════════════════════════════════
-// 【基础变量】默认值
+// 【基础变量】默认值（椰乳四季春）
 // ═══════════════════════════════════════
 
 const BASE_VARIABLES = {
-  // 新变量名
-  'bg-main': '#FBF8EA',
-  'bg-light': '#FFE7E8',
-  'bg-card': '#FFF2F5',
-  'color-accent': '#ECC7D6',
-  'color-text': '#8B736C',
-  // 旧变量名（兼容）
-  'bg-primary': '#FBF8EA',
-  'bg-secondary': '#FFE7E8',
+  'bg-main': '#F8F2E8',
+  'bg-light': '#FFF5E6',
+  'bg-card': '#FFFCF5',
+  'color-accent': '#C8A87A',
+  'color-text': '#6B5B4E',
+  'bg-primary': '#F8F2E8',
+  'bg-secondary': '#FFF5E6',
   'bg-overlay': 'rgba(0, 0, 0, 0.28)',
-  'surface': '#FFF2F5',
-  'accent': '#ECC7D6',
-  'accent-light': '#F5E0E8',
-  'accent-dark': '#D4A0B8',
-  'text-primary': '#8B736C',
-  'text-secondary': '#A89890',
-  'text-hint': '#C0B8B0',
-  'bubble-user-bg': '#ECC7D6',
-  'bubble-user-text': '#8B736C',
-  'bubble-ai-bg': '#FFF2F5',
-  'bubble-ai-text': '#8B736C',
+  'surface': '#FFFCF5',
+  'surface-muted': 'color-mix(in srgb, var(--bg-card) 90%, var(--text-hint) 10%)',
+  'accent': '#C8A87A',
+  'accent-light': '#E8D8C0',
+  'accent-dark': '#A88A5A',
+  'text-primary': '#6B5B4E',
+  'text-secondary': '#8A7A6C',
+  'text-hint': '#B0A498',
+  'bubble-user-bg': '#C8A87A',
+  'bubble-user-text': '#FFFCF5',
+  'bubble-ai-bg': '#EDE5D8',
+  'bubble-ai-text': '#6B5B4E',
   'bubble-radius': '18px',
   'bubble-radius-tail': '4px',
   'font-main': FONT_FALLBACK,
@@ -54,9 +53,14 @@ const BASE_VARIABLES = {
   'shadow-sm': '0 1px 4px rgba(0, 0, 0, 0.05)',
   'shadow-md': '0 2px 12px rgba(0, 0, 0, 0.08)',
   'shadow-lg': '0 8px 32px rgba(0, 0, 0, 0.12)',
-  'shadow': '0 2px 12px rgba(0, 0, 0, 0.08)',
+  'shadow-card': '0 2px 12px rgba(0, 0, 0, 0.06)',
+  'shadow-float': '0 8px 32px rgba(0, 0, 0, 0.10)',
+  'shadow-neu-out': '2px 2px 6px rgba(0,0,0,0.06), -2px -2px 6px rgba(255,255,255,0.8)',
+  'shadow-neu-in': 'inset 2px 2px 6px rgba(0,0,0,0.06), inset -2px -2px 6px rgba(255,255,255,0.8)',
   'motion': 'all 200ms ease',
-  'press-scale': '0.96'
+  'press-scale': '0.96',
+  'radius-xl': '28px',
+  'radius-full': '999px'
 };
 
 // ═══════════════════════════════════════
@@ -67,14 +71,16 @@ const LIGHT_SHADOWS = {
   'shadow-sm': '0 1px 4px rgba(0, 0, 0, 0.05)',
   'shadow-md': '0 2px 12px rgba(0, 0, 0, 0.08)',
   'shadow-lg': '0 8px 32px rgba(0, 0, 0, 0.12)',
-  'shadow': '0 2px 12px rgba(0, 0, 0, 0.08)'
+  'shadow-card': '0 2px 12px rgba(0, 0, 0, 0.06)',
+  'shadow-float': '0 8px 32px rgba(0, 0, 0, 0.10)'
 };
 
 const DARK_SHADOWS = {
   'shadow-sm': '0 1px 4px rgba(0, 0, 0, 0.18)',
   'shadow-md': '0 2px 12px rgba(0, 0, 0, 0.24)',
   'shadow-lg': '0 8px 32px rgba(0, 0, 0, 0.36)',
-  'shadow': '0 2px 12px rgba(0, 0, 0, 0.24)'
+  'shadow-card': '0 2px 12px rgba(0, 0, 0, 0.20)',
+  'shadow-float': '0 8px 32px rgba(0, 0, 0, 0.28)'
 };
 
 // ═══════════════════════════════════════
@@ -83,32 +89,33 @@ const DARK_SHADOWS = {
 
 const PRESETS = {
   // ────────────────────────────────────────────
-  // 椰乳四季春 — 奶白底 + 粉紫气泡
+  // 椰乳四季春 — 米黄暖色系
   // ────────────────────────────────────────────
   'coconut-spring': {
     id: 'coconut-spring',
     name: '椰乳四季春',
     mode: 'light',
     variables: {
-      'bg-main': '#FBF8EA',
-      'bg-light': '#FFE7E8',
-      'bg-card': '#FFF2F5',
-      'color-accent': '#ECC7D6',
-      'color-text': '#8B736C',
-      'bg-primary': '#FBF8EA',
-      'bg-secondary': '#FFE7E8',
+      'bg-main': '#F8F2E8',
+      'bg-light': '#FFF5E6',
+      'bg-card': '#FFFCF5',
+      'color-accent': '#C8A87A',
+      'color-text': '#6B5B4E',
+      'bg-primary': '#F8F2E8',
+      'bg-secondary': '#FFF5E6',
       'bg-overlay': 'rgba(0, 0, 0, 0.28)',
-      'surface': '#FFF2F5',
-      'accent': '#ECC7D6',
-      'accent-light': '#F5E0E8',
-      'accent-dark': '#D4A0B8',
-      'text-primary': '#8B736C',
-      'text-secondary': '#A89890',
-      'text-hint': '#C0B8B0',
-      'bubble-user-bg': '#ECC7D6',
-      'bubble-user-text': '#8B736C',
-      'bubble-ai-bg': '#FFF2F5',
-      'bubble-ai-text': '#8B736C',
+      'surface': '#FFFCF5',
+      'surface-muted': 'color-mix(in srgb, #FFFCF5 90%, #B0A498 10%)',
+      'accent': '#C8A87A',
+      'accent-light': '#E8D8C0',
+      'accent-dark': '#A88A5A',
+      'text-primary': '#6B5B4E',
+      'text-secondary': '#8A7A6C',
+      'text-hint': '#B0A498',
+      'bubble-user-bg': '#C8A87A',
+      'bubble-user-text': '#FFFCF5',
+      'bubble-ai-bg': '#EDE5D8',
+      'bubble-ai-text': '#6B5B4E',
       ...LIGHT_SHADOWS
     }
   },
@@ -130,6 +137,7 @@ const PRESETS = {
       'bg-secondary': '#EDDFD4',
       'bg-overlay': 'rgba(0, 0, 0, 0.28)',
       'surface': '#F5EDE6',
+      'surface-muted': 'color-mix(in srgb, #F5EDE6 90%, #A89890 10%)',
       'accent': '#9D7C6D',
       'accent-light': '#C8B8A8',
       'accent-dark': '#7A5C4D',
@@ -138,39 +146,40 @@ const PRESETS = {
       'text-hint': '#A89890',
       'bubble-user-bg': '#9D7C6D',
       'bubble-user-text': '#FFF8F0',
-      'bubble-ai-bg': '#F5EDE6',
+      'bubble-ai-bg': '#E8DDD4',
       'bubble-ai-text': '#512128',
       ...LIGHT_SHADOWS
     }
   },
 
   // ────────────────────────────────────────────
-  // 草莓牛乳 — 粉底 + 绿气泡
+  // 葡萄气泡 — 紫色系撞色
   // ────────────────────────────────────────────
   'strawberry-milk': {
     id: 'strawberry-milk',
-    name: '草莓牛乳',
+    name: '葡萄气泡',
     mode: 'light',
     variables: {
-      'bg-main': '#FDE8EC',
-      'bg-light': '#FFF5F7',
-      'bg-card': '#FFFFFF',
-      'color-accent': '#A8D8A8',
-      'color-text': '#8B5A64',
-      'bg-primary': '#FDE8EC',
-      'bg-secondary': '#FFF5F7',
+      'bg-main': '#F4F0F8',
+      'bg-light': '#EDE6F5',
+      'bg-card': '#FCFAFF',
+      'color-accent': '#9B7EC8',
+      'color-text': '#4A3A5C',
+      'bg-primary': '#F4F0F8',
+      'bg-secondary': '#EDE6F5',
       'bg-overlay': 'rgba(0, 0, 0, 0.28)',
-      'surface': '#FFFFFF',
-      'accent': '#A8D8A8',
-      'accent-light': '#D0ECD0',
-      'accent-dark': '#80B880',
-      'text-primary': '#8B5A64',
-      'text-secondary': '#A88088',
-      'text-hint': '#C8B0B8',
-      'bubble-user-bg': '#A8D8A8',
-      'bubble-user-text': '#3A5A3A',
-      'bubble-ai-bg': '#FFFFFF',
-      'bubble-ai-text': '#8B5A64',
+      'surface': '#FCFAFF',
+      'surface-muted': 'color-mix(in srgb, #FCFAFF 90%, #A898B8 10%)',
+      'accent': '#9B7EC8',
+      'accent-light': '#D4C8E8',
+      'accent-dark': '#7A5CAE',
+      'text-primary': '#4A3A5C',
+      'text-secondary': '#7A6890',
+      'text-hint': '#B0A4C0',
+      'bubble-user-bg': '#9B7EC8',
+      'bubble-user-text': '#FCFAFF',
+      'bubble-ai-bg': '#E8E0F0',
+      'bubble-ai-text': '#4A3A5C',
       ...LIGHT_SHADOWS
     }
   },
@@ -192,6 +201,7 @@ const PRESETS = {
       'bg-secondary': '#2A1C15',
       'bg-overlay': 'rgba(0, 0, 0, 0.52)',
       'surface': '#2F1F18',
+      'surface-muted': 'color-mix(in srgb, #2F1F18 90%, #786858 10%)',
       'accent': '#D4A853',
       'accent-light': '#4A3C28',
       'accent-dark': '#E8C070',
@@ -200,7 +210,7 @@ const PRESETS = {
       'text-hint': '#786858',
       'bubble-user-bg': '#D4A853',
       'bubble-user-text': '#2A1C15',
-      'bubble-ai-bg': '#2F1F18',
+      'bubble-ai-bg': '#3A2C22',
       'bubble-ai-text': '#E8D5C0',
       ...DARK_SHADOWS
     }
@@ -223,6 +233,7 @@ const PRESETS = {
       'bg-secondary': '#332520',
       'bg-overlay': 'rgba(0, 0, 0, 0.52)',
       'surface': '#3A2820',
+      'surface-muted': 'color-mix(in srgb, #3A2820 90%, #807060 10%)',
       'accent': '#E8C4A0',
       'accent-light': '#4A3830',
       'accent-dark': '#F0D8B8',
@@ -231,7 +242,7 @@ const PRESETS = {
       'text-hint': '#807060',
       'bubble-user-bg': '#E8C4A0',
       'bubble-user-text': '#3A2820',
-      'bubble-ai-bg': '#3A2820',
+      'bubble-ai-bg': '#443428',
       'bubble-ai-text': '#F5E6D3',
       ...DARK_SHADOWS
     }
@@ -254,6 +265,7 @@ const PRESETS = {
       'bg-secondary': '#2F231A',
       'bg-overlay': 'rgba(0, 0, 0, 0.52)',
       'surface': '#352820',
+      'surface-muted': 'color-mix(in srgb, #352820 90%, #786858 10%)',
       'accent': '#C3AB99',
       'accent-light': '#4A3C32',
       'accent-dark': '#D8C0B0',
@@ -262,7 +274,7 @@ const PRESETS = {
       'text-hint': '#786858',
       'bubble-user-bg': '#C3AB99',
       'bubble-user-text': '#2A1F18',
-      'bubble-ai-bg': '#352820',
+      'bubble-ai-bg': '#3E3028',
       'bubble-ai-text': '#F3EEE9',
       ...DARK_SHADOWS
     }
@@ -274,7 +286,6 @@ const PRESETS = {
 // ═══════════════════════════════════════
 
 const LEGACY_PRESET_ALIAS = {
-  // 旧日间主题 → 新日间
   default: 'coconut-spring',
   light: 'coconut-spring',
   blue: 'coconut-spring',
@@ -287,10 +298,9 @@ const LEGACY_PRESET_ALIAS = {
   berry: 'strawberry-milk',
   strawberry: 'strawberry-milk',
   blush: 'coconut-spring',
-  lavender: 'coconut-iced',
-  purple: 'coconut-iced',
+  lavender: 'strawberry-milk',
+  purple: 'strawberry-milk',
   warm: 'coconut-spring',
-  // 旧夜间主题 → 新夜间
   dark: 'dark-chocolate',
   night: 'dark-chocolate',
   dusk: 'dark-chocolate',
@@ -498,10 +508,6 @@ export function getCurrentTheme() {
 // 【内部工具】读写、归一化、DOM操作
 // ═══════════════════════════════════════
 
-// ───────────────────
-// 读取当前主题
-// ───────────────────
-
 function readCurrentTheme() {
   if (currentTheme) return { ...currentTheme };
 
@@ -523,10 +529,6 @@ function readCurrentTheme() {
   });
 }
 
-// ───────────────────
-// 写入 localStorage
-// ───────────────────
-
 function writeTheme(theme) {
   setData(THEME_KEY, {
     preset: theme.preset,
@@ -539,10 +541,6 @@ function writeTheme(theme) {
   setData(MODE_KEY, theme.mode);
 }
 
-// ───────────────────
-// 变量写入 :root
-// ───────────────────
-
 function applyVariablesToDOM(variables) {
   const root = document.documentElement;
 
@@ -552,18 +550,10 @@ function applyVariablesToDOM(variables) {
   });
 }
 
-// ───────────────────
-// meta theme-color
-// ───────────────────
-
 function setMetaColor(color) {
   const meta = document.querySelector('meta[name="theme-color"]');
   if (meta && color) meta.setAttribute('content', String(color));
 }
-
-// ───────────────────
-// 归一化主题对象
-// ───────────────────
 
 function normalizeTheme(raw) {
   const obj = raw && typeof raw === 'object' ? raw : {};
@@ -578,10 +568,6 @@ function normalizeTheme(raw) {
     customVariables: normalizeVariables(obj.customVariables || {})
   };
 }
-
-// ───────────────────
-// 归一化变量字典
-// ───────────────────
 
 function normalizeVariables(vars) {
   if (!vars || typeof vars !== 'object') return {};
@@ -598,10 +584,6 @@ function normalizeVariables(vars) {
   return result;
 }
 
-// ───────────────────
-// 预设 ID 归一化（兼容旧别名）
-// ───────────────────
-
 function normalizePresetId(id) {
   const cleanId = String(id || '').trim().toLowerCase();
   if (PRESETS[cleanId]) return cleanId;
@@ -609,26 +591,14 @@ function normalizePresetId(id) {
   return DEFAULT_PRESET;
 }
 
-// ───────────────────
-// 模式归一化
-// ───────────────────
-
 function normalizeMode(mode) {
   const clean = String(mode || '').trim().toLowerCase();
   return clean === 'dark' ? 'dark' : 'light';
 }
 
-// ───────────────────
-// 获取预设
-// ───────────────────
-
 function getPresetById(id) {
   return PRESETS[normalizePresetId(id)] || PRESETS[DEFAULT_PRESET];
 }
-
-// ───────────────────
-// 判断是否夜间
-// ───────────────────
 
 function isPresetDark(id) {
   const preset = PRESETS[normalizePresetId(id)];
