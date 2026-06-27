@@ -591,8 +591,7 @@ function el(tag, className = '', text = '') {
 // ═══════════════════════════════════════
 
 function ensureStyle() {
-  const old = document.getElementById(STYLE_ID);
-  if (old) old.remove();
+  if (document.getElementById(STYLE_ID)) return;
 
   const style = document.createElement('style');
   style.id = STYLE_ID;
