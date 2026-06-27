@@ -36,29 +36,35 @@ function normalizeEndpointUrl(endpoint) {
 }
 
 // ───────────────────
-// 检测 URL 的路径部分是否已包含某个关键词
-// 只取 URL 的 pathname 段去匹配，不影响域名判断
+// 检测 URL 路径部分是否包含关键词
 // ───────────────────
 
 function urlHasPathKeyword(url, keyword) {
   try {
-    const pathname = new URL(url).pathname.toLowerCase();
-    return pathname.includes(keyword.toLowerCase());
+    return new URL(url).pathname.toLowerCase().includes(keyword.toLowerCase());
   } catch {
     return url.toLowerCase().includes(keyword.toLowerCase());
   }
 }
 
+function urlHasV1(url) {
+  try {
+    const pathname = new URL(url).pathname.toLowerCase();
+    return pathname.includes('/v1');
+  } catch {
+    return url.toLowerCase().includes('/v1');
+  }
+}
+
 // ───────────────────
 // 智能拼接聊天 URL
-// 路径里已经有 /chat/completions /messages /api/chat 就不重复追加
+// 三层检测：完整路径 → 有 /v1 → 啥都没有
 // ───────────────────
 
 function smartChatUrl(base, provider) {
-  const lower = base.toLowerCase();
-
   if (provider === 'anthropic') {
     if (urlHasPathKeyword(base, '/messages')) return base;
+    if (urlHasV1(base)) return base + '/messages';
     return base + '/v1/messages';
   }
 
@@ -67,8 +73,9 @@ function smartChatUrl(base, provider) {
     return base + '/api/chat';
   }
 
-  // openai 兼容（默认）：只要路径里已经有 /chat/completions 就不追加
+  // openai 兼容
   if (urlHasPathKeyword(base, '/chat/completions')) return base;
+  if (urlHasV1(base)) return base + '/chat/completions';
   return base + '/v1/chat/completions';
 }
 
@@ -82,7 +89,8 @@ function smartModelsUrl(base, provider) {
     return base + '/api/tags';
   }
 
-  if (urlHasPathKeyword(base, '/v1/models')) return base;
+  if (urlHasPathKeyword(base, '/models')) return base;
+  if (urlHasV1(base)) return base + '/models';
   return base + '/v1/models';
 }
 
@@ -98,7 +106,7 @@ function smartGeminiUrl(base, model, apiKey) {
 
   let origin = base.replace(/\/+$/, '');
 
-  // 已经包含完整路径（含 :generateContent）→ 直接用
+  // 已经包含完整路径 → 直接用
   if (/\/v1beta\/models\/[^/]+:generateContent/i.test(origin)) {
     return origin;
   }
@@ -823,3 +831,5 @@ export async function fetchModels(endpointId, timeout = DEFAULT_TIMEOUT) {
     clearTimeout(timer);
   }
 }
+
+// 依赖：./storage.js(getData)
