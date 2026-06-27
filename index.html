@@ -904,6 +904,179 @@
       50% { transform: scale(1); opacity: 1; }
       100% { transform: scale(.92); opacity: .55; }
     }
+
+    /* ═══════════════════════════════════════
+       【黑胶唱片小组件】桌面音乐播放器
+    ═══════════════════════════════════════ */
+
+    .vinyl-widget {
+      width: min(calc(306px * var(--desktop-widget-scale)), calc(100vw - 40px));
+      height: calc(114px * var(--desktop-widget-scale));
+      display: flex;
+      align-items: center;
+      gap: calc(12px * var(--desktop-widget-scale));
+      padding: calc(12px * var(--desktop-widget-scale));
+      overflow: hidden;
+    }
+
+    .vinyl-record-wrap {
+      position: relative;
+      flex-shrink: 0;
+      width: calc(80px * var(--desktop-widget-scale));
+      height: calc(80px * var(--desktop-widget-scale));
+    }
+
+    .vinyl-record {
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      background: color-mix(in srgb, var(--text-primary) 90%, transparent);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      animation: vinyl-spin 4s linear infinite;
+      animation-play-state: paused;
+      box-shadow: 0 0 0 calc(2px * var(--desktop-widget-scale)) color-mix(in srgb, var(--text-primary) 20%, transparent);
+    }
+
+    .vinyl-record.spinning {
+      animation-play-state: running;
+    }
+
+    .vinyl-groove {
+      position: absolute;
+      border-radius: 50%;
+      border: 1px solid color-mix(in srgb, var(--text-primary) 15%, transparent);
+      pointer-events: none;
+    }
+
+    .vinyl-groove-1 {
+      width: 88%;
+      height: 88%;
+      top: 6%;
+      left: 6%;
+    }
+
+    .vinyl-groove-2 {
+      width: 72%;
+      height: 72%;
+      top: 14%;
+      left: 14%;
+    }
+
+    .vinyl-groove-3 {
+      width: 56%;
+      height: 56%;
+      top: 22%;
+      left: 22%;
+    }
+
+    .vinyl-cover {
+      width: calc(32px * var(--desktop-widget-scale));
+      height: calc(32px * var(--desktop-widget-scale));
+      border-radius: 50%;
+      overflow: hidden;
+      z-index: 2;
+      background: color-mix(in srgb, var(--accent) 30%, var(--bg-card));
+    }
+
+    .vinyl-cover img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .vinyl-cover-placeholder {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--accent);
+    }
+
+    .vinyl-cover-placeholder svg {
+      width: calc(14px * var(--desktop-widget-scale));
+      height: calc(14px * var(--desktop-widget-scale));
+    }
+
+    .vinyl-info {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: calc(4px * var(--desktop-widget-scale));
+    }
+
+    .vinyl-title {
+      font-size: calc(14px * var(--desktop-widget-scale));
+      font-weight: 600;
+      color: var(--text-primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      text-shadow: 0 1px 12px color-mix(in srgb, var(--bg-primary) 72%, transparent);
+    }
+
+    .vinyl-artist {
+      font-size: calc(12px * var(--desktop-widget-scale));
+      color: var(--text-secondary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .vinyl-controls {
+      display: flex;
+      align-items: center;
+      gap: calc(6px * var(--desktop-widget-scale));
+      margin-top: calc(2px * var(--desktop-widget-scale));
+    }
+
+    .vinyl-ctrl-btn {
+      width: calc(32px * var(--desktop-widget-scale));
+      height: calc(32px * var(--desktop-widget-scale));
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: color-mix(in srgb, var(--bg-primary) 40%, transparent);
+      color: var(--text-primary);
+      box-shadow: var(--shadow-sm);
+      transition: all 200ms ease;
+    }
+
+    .vinyl-ctrl-btn:active {
+      transform: scale(0.9);
+    }
+
+    .vinyl-ctrl-btn.main-play {
+      width: calc(38px * var(--desktop-widget-scale));
+      height: calc(38px * var(--desktop-widget-scale));
+      background: var(--accent);
+      color: var(--bubble-user-text);
+    }
+
+    .vinyl-ctrl-btn svg {
+      width: calc(16px * var(--desktop-widget-scale));
+      height: calc(16px * var(--desktop-widget-scale));
+    }
+
+    .vinyl-ctrl-btn.main-play svg {
+      width: calc(18px * var(--desktop-widget-scale));
+      height: calc(18px * var(--desktop-widget-scale));
+    }
+
+    .vinyl-empty-text {
+      font-size: calc(12px * var(--desktop-widget-scale));
+      color: var(--text-hint);
+    }
+
+    @keyframes vinyl-spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
   </style>
 </head>
 
@@ -1010,14 +1183,16 @@
       { id: 'shop', name: '商店', module: './apps/shop.js', icon: 'star', dock: false, page: 0, ready: true },
       { id: 'memo', name: '备忘录', module: './apps/memo.js', icon: 'edit', dock: false, page: 0, ready: true },
       { id: 'anniversary', name: '纪念日', module: './apps/anniversary.js', icon: 'check', dock: false, page: 0, ready: true },
-      { id: 'games', name: '游戏', module: './apps/games.js', icon: 'play', dock: false, page: 0, ready: true }
+      { id: 'games', name: '游戏', module: './apps/games.js', icon: 'play', dock: false, page: 0, ready: true },
+      { id: 'music', name: '音乐', module: './apps/music.js', icon: 'play', dock: false, page: 0, ready: true }
     ];
 
     const WIDGETS = [
       { id: 'time', label: '时间', shape: 'rectangle', defaultPage: 0, defaultX: 20, defaultY: 24 },
       { id: 'weather', label: '天气', shape: 'square', defaultPage: 0, defaultX: 20, defaultY: 154 },
       { id: 'anniversary', label: '纪念日', shape: 'square', defaultPage: 0, defaultX: 168, defaultY: 154 },
-      { id: 'focus', label: '今日提示', shape: 'wide', defaultPage: 0, defaultX: 20, defaultY: 304 }
+      { id: 'focus', label: '今日提示', shape: 'wide', defaultPage: 0, defaultX: 20, defaultY: 304 },
+      { id: 'vinyl', label: '音乐', shape: 'wide', defaultPage: 1, defaultX: 20, defaultY: 24 }
     ];
 
     const DEFAULT_SETTINGS = {
@@ -1025,7 +1200,7 @@
       ttsGlobal: { provider: 'openai', apiKey: '', endpoint: '', voice: 'alloy', model: 'tts-1', modelList: [] },
       mcpServers: [], bubbleMode: 'bubble', fontSize: 15,
       user: { name: '', avatar: '', avatarSource: '', avatarOpacity: 100 },
-      widgets: { time: true, weather: true, anniversary: true, focus: true },
+      widgets: { time: true, weather: true, anniversary: true, focus: true, vinyl: true },
       apiEndpoints: []
     };
 
@@ -1061,6 +1236,7 @@
     let dockDragState = null;
     let clockTimer = null;
     let weatherTimer = null;
+    let vinylTimer = null;
     let lockInput = '';
     let renderTimer = null;
     let resizeTimer = null;
@@ -1082,6 +1258,7 @@
     window.AppImages = { getImageKeys, buildImageKey, readImageRecord, readImageValue, writeImageRecord, removeImageRecord, applyImageToElement, applyAllImages, getImageFromRecord, getOpacityFromRecord, normalizeImageRecord };
 
     window.closeCurrentApp = closeCurrentApp;
+    window.openApp = openApp;
     window.refreshDesktopBadges = refreshBadges;
     window.refreshDesktopImages = applyAllImages;
     window.refreshDesktop = refreshDesktop;
@@ -1331,7 +1508,7 @@
       const icons = getCustomIcons();
       const localCustom = icons[app.id] || icons[app.name] || null;
       const candidateKeys = [`app_icon_${app.id}`, `app_${app.id}_icon`, `icon_${app.id}`, `${app.id}_icon`, app.id, app.name];
-      const aliasMap = { chat: ['聊天','消息','message','messages'], moments: ['朋友圈','moments'], settings: ['设置','settings'], gallery: ['记仇本','相册','gallery','grudge','grudges','photo','photos'], characters: ['角色','character','characters'], worldbook: ['世界书','worldbook','world_book'], wallet: ['钱包','wallet'], shop: ['商店','shop'], memo: ['备忘录','memo','memos','note','notes'], anniversary: ['纪念日','anniversary','anniversaries','calendar','date'], games: ['游戏','games','game','play'] };
+      const aliasMap = { chat: ['聊天','消息','message','messages'], moments: ['朋友圈','moments'], settings: ['设置','settings'], gallery: ['记仇本','相册','gallery','grudge','grudges','photo','photos'], characters: ['角色','character','characters'], worldbook: ['世界书','worldbook','world_book'], wallet: ['钱包','wallet'], shop: ['商店','shop'], memo: ['备忘录','memo','memos','note','notes'], anniversary: ['纪念日','anniversary','anniversaries','calendar','date'], games: ['游戏','games','game','play'], music: ['音乐','music','player','播放器'] };
       candidateKeys.push(...(aliasMap[app.id] || []));
       let blobRecord = null;
       for (const key of candidateKeys) { const record = await readImageRecord(key); if (getImageFromRecord(record) || record?.name) { blobRecord = record; break; } }
@@ -1447,6 +1624,7 @@
         if (widget.id === 'weather' && enabled.weather === false) return;
         if (widget.id === 'anniversary' && enabled.anniversary === false) return;
         if (widget.id === 'focus' && enabled.focus === false) return;
+        if (widget.id === 'vinyl' && enabled.vinyl === false) return;
         const widgetEl = createWidget(widget);
         const position = getResolvedWidgetPosition(widget);
         getLayer(position.page).appendChild(widgetEl);
@@ -1490,6 +1668,84 @@
       if (widget.id === 'focus') {
         widgetEl.id = 'focus-widget';
         widgetEl.innerHTML = `<div class="widget-top"><div><div id="focus-title" class="focus-title">今天也要好好休息</div><div id="focus-text" class="focus-text">打开聊天，看看谁在想你</div></div><div class="widget-mark" data-widget-icon="focus"></div></div>`;
+      }
+
+      // ─────────────────────────────────────
+      // 黑胶唱片小组件
+      // ─────────────────────────────────────
+      if (widget.id === 'vinyl') {
+        widgetEl.id = 'vinyl-widget';
+        widgetEl.classList.add('vinyl-widget');
+        widgetEl.style.justifyContent = 'flex-start';
+
+        const recordWrap = document.createElement('div');
+        recordWrap.className = 'vinyl-record-wrap';
+
+        const record = document.createElement('div');
+        record.className = 'vinyl-record';
+        record.id = 'vinyl-disc';
+
+        for (let g = 1; g <= 3; g++) {
+          const groove = document.createElement('div');
+          groove.className = `vinyl-groove vinyl-groove-${g}`;
+          record.appendChild(groove);
+        }
+
+        const cover = document.createElement('div');
+        cover.className = 'vinyl-cover';
+        cover.id = 'vinyl-cover';
+        const placeholderSvg = document.createElement('div');
+        placeholderSvg.className = 'vinyl-cover-placeholder';
+        placeholderSvg.appendChild(createIcon('music', 14));
+        cover.appendChild(placeholderSvg);
+
+        record.appendChild(cover);
+        recordWrap.appendChild(record);
+
+        const info = document.createElement('div');
+        info.className = 'vinyl-info';
+
+        const titleEl = document.createElement('div');
+        titleEl.className = 'vinyl-title';
+        titleEl.id = 'vinyl-title';
+        titleEl.textContent = '还没有歌曲';
+
+        const artistEl = document.createElement('div');
+        artistEl.className = 'vinyl-artist';
+        artistEl.id = 'vinyl-artist';
+        artistEl.textContent = '打开音乐开始播放';
+
+        const controls = document.createElement('div');
+        controls.className = 'vinyl-controls';
+
+        const prevBtn = document.createElement('button');
+        prevBtn.className = 'vinyl-ctrl-btn';
+        prevBtn.appendChild(createIcon('back', 16));
+        prevBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          window.musicPlayer?.playPrevious?.();
+        });
+
+        const playBtn = document.createElement('button');
+        playBtn.className = 'vinyl-ctrl-btn main-play';
+        playBtn.id = 'vinyl-play-btn';
+        playBtn.appendChild(createIcon('play', 18));
+        playBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          window.musicPlayer?.togglePlay?.();
+        });
+
+        const nextBtn = document.createElement('button');
+        nextBtn.className = 'vinyl-ctrl-btn';
+        nextBtn.appendChild(createIcon('forward', 16));
+        nextBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          window.musicPlayer?.playNext?.();
+        });
+
+        controls.append(prevBtn, playBtn, nextBtn);
+        info.append(titleEl, artistEl, controls);
+        widgetEl.append(recordWrap, info);
       }
 
       widgetEl.querySelectorAll('[data-widget-icon]').forEach((iconEl) => {
@@ -1789,7 +2045,11 @@
     function renderLockDots() { [...lockDotsEl.querySelectorAll('.lock-dot')].forEach((dot, index) => { dot.classList.toggle('filled', index < lockInput.length); }); }
     function checkLockPassword() { if (lockInput === LOCK_PASSWORD) { setData('app_lock_unlocked', true); lockScreenEl.classList.add('hidden'); showToast('已解锁'); return; } lockInput = ''; lockErrorEl.textContent = '密码不正确'; renderLockDots(); }
 
-    function initWidgets() { updateClock(); clearInterval(clockTimer); clockTimer = window.setInterval(updateClock, 1000); updateWeather(); clearInterval(weatherTimer); weatherTimer = window.setInterval(updateWeather, 1000 * 60 * 30); updateAnniversaryWidget(); updateFocusWidget(); }
+    // ═══════════════════════════════════════
+    // 【小组件初始化】时钟、天气、黑胶唱片同步
+    // ═══════════════════════════════════════
+
+    function initWidgets() { updateClock(); clearInterval(clockTimer); clockTimer = window.setInterval(updateClock, 1000); updateWeather(); clearInterval(weatherTimer); weatherTimer = window.setInterval(updateWeather, 1000 * 60 * 30); updateAnniversaryWidget(); updateFocusWidget(); clearInterval(vinylTimer); vinylTimer = window.setInterval(updateVinylWidget, 800); }
 
     function updateClock() {
       const now = new Date();
@@ -1841,6 +2101,57 @@
       if (!titleEl || !textEl) return;
       const focus = getData('app_focus_widget');
       if (focus && typeof focus === 'object') { titleEl.textContent = focus.title || '今天也要好好休息'; textEl.textContent = focus.text || '打开聊天，看看谁在想你'; }
+    }
+
+    // ─────────────────────────────────────
+    // 黑胶唱片小组件：定时同步播放器状态
+    // ─────────────────────────────────────
+
+    function updateVinylWidget() {
+      const disc = document.getElementById('vinyl-disc');
+      const coverEl = document.getElementById('vinyl-cover');
+      const titleEl = document.getElementById('vinyl-title');
+      const artistEl = document.getElementById('vinyl-artist');
+      const playBtnEl = document.getElementById('vinyl-play-btn');
+
+      if (!disc) return;
+
+      const player = window.musicPlayer;
+      const isPlaying = player?.isPlaying?.() || false;
+      const song = player?.getCurrentSong?.() || null;
+
+      // 唱片旋转
+      disc.classList.toggle('spinning', isPlaying);
+
+      // 封面
+      if (coverEl) {
+        if (song?.cover) {
+          coverEl.innerHTML = '';
+          const img = document.createElement('img');
+          img.src = song.cover;
+          img.alt = '';
+          coverEl.appendChild(img);
+        } else if (!coverEl.querySelector('.vinyl-cover-placeholder')) {
+          coverEl.innerHTML = '';
+          const ph = document.createElement('div');
+          ph.className = 'vinyl-cover-placeholder';
+          ph.appendChild(createIcon('music', 14));
+          coverEl.appendChild(ph);
+        }
+      }
+
+      // 歌名/艺术家
+      if (titleEl) titleEl.textContent = song?.title || '还没有歌曲';
+      if (artistEl) artistEl.textContent = song ? (song.artist || '未知艺术家') : '打开音乐开始播放';
+
+      // 播放按钮图标
+      if (playBtnEl) {
+        const svg = playBtnEl.querySelector('svg');
+        if (svg) {
+          const newIcon = createIcon(isPlaying ? 'pause' : 'play', 18);
+          svg.replaceWith(newIcon);
+        }
+      }
     }
 
     async function openApp(appId) {
