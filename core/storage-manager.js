@@ -56,7 +56,9 @@ const LOCAL_STORAGE_KEYS = [
   'app_first_open_seed',
   'anniversaries',
   'app_anniversaries',
-  'anniversary_list'
+  'anniversary_list',
+  'app_dream_last_gen',
+  'app_dream_config'
 ];
 
 const INDEXED_DB_STORES = [
@@ -74,6 +76,7 @@ const INDEXED_DB_STORES = [
   'grudges',
   'punishments',
   'relationship_locks',
+  'dreams',
   'albums',
   'memories_album',
   'songs',
