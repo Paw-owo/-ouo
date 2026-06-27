@@ -151,6 +151,29 @@ function injectStyles() {
     .mood-sad{background:color-mix(in srgb,var(--accent) 50%,transparent)}
     .mood-adventure{background:color-mix(in srgb,var(--accent-dark) 70%,transparent)}
     .mood-chaos{background:color-mix(in srgb,var(--accent) 30%,var(--text-primary))}
+    .dream-edit-title{margin-bottom:16px;color:var(--text-primary);font-size:20px;font-weight:600;line-height:1.35;letter-spacing:-.01em}
+    .dream-edit-field{margin-bottom:16px}
+    .dream-edit-label{display:flex;align-items:center;gap:6px;margin-bottom:8px;color:var(--text-secondary);font-size:13px;font-weight:500;line-height:1.4}
+    .dream-edit-label svg{width:15px;height:15px;color:var(--accent)}
+    .dream-edit-input,.dream-edit-textarea{width:100%;border-radius:16px;background:var(--surface-muted);color:var(--text-primary);font-size:15px;border:none;outline:none}
+    .dream-edit-input{min-height:46px;padding:10px 16px}
+    .dream-edit-textarea{min-height:180px;padding:12px 16px;line-height:1.6;resize:none}
+    .dream-edit-input::placeholder,.dream-edit-textarea::placeholder{color:var(--text-hint)}
+    .dream-edit-moods{display:flex;flex-wrap:wrap;gap:8px}
+    .dream-edit-mood-btn{min-height:34px;display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:999px;color:var(--text-secondary);background:var(--surface-muted);font-size:13px;font-weight:500;transition:all 200ms ease;border:none;outline:none}
+    .dream-edit-mood-btn:active{transform:scale(.96)}
+    .dream-edit-mood-btn.selected{background:var(--accent-light);color:var(--accent-dark)}
+    .dream-edit-mood-dot{width:8px;height:8px;border-radius:50%}
+    .dream-edit-kw-wrap{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px}
+    .dream-edit-kw-tag{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:999px;background:var(--surface-muted);color:var(--text-secondary);font-size:12px;font-weight:500}
+    .dream-edit-kw-tag button{background:none;border:none;outline:none;color:var(--text-hint);font-size:14px;line-height:1;padding:0;cursor:pointer}
+    .dream-edit-kw-input{display:flex;gap:8px}
+    .dream-edit-kw-input input{flex:1;min-width:0;min-height:40px;border-radius:18px;padding:0 14px;background:var(--surface-muted);color:var(--text-primary);font-size:14px;border:none;outline:none}
+    .dream-edit-kw-input input::placeholder{color:var(--text-hint)}
+    .dream-edit-kw-input button{min-width:40px;height:40px;border-radius:18px;background:var(--accent);color:var(--bubble-user-text);display:flex;align-items:center;justify-content:center;border:none;outline:none;cursor:pointer}
+    .dream-edit-kw-input button:active{transform:scale(.94)}
+    .dream-edit-actions{display:flex;gap:8px;margin-top:20px}
+    .dream-edit-actions button{flex:1}
   `;
   document.head.appendChild(s);
 }
@@ -235,7 +258,6 @@ function renderMainPage() {
   const detail = screen.querySelector('.dream-detail');
   if (detail) detail.remove();
 
-  // 顶栏
   const nav = document.createElement('div');
   nav.className = 'dream-nav';
   const backBtn = document.createElement('button');
@@ -250,11 +272,9 @@ function renderMainPage() {
   nav.append(backBtn, title);
   screen.appendChild(nav);
 
-  // 内容区
   const body = document.createElement('div');
   body.className = 'dream-body';
 
-  // 英雄区
   const hero = document.createElement('section');
   hero.className = 'dream-hero';
   const heroTop = document.createElement('div');
@@ -275,7 +295,6 @@ function renderMainPage() {
   heroTop.append(heroMain, mark);
   hero.appendChild(heroTop);
 
-  // 开关
   const settings = getData('app_settings') || {};
   const enabled = settings.dreamEnabled === true;
   const toggle = document.createElement('div');
@@ -300,7 +319,6 @@ function renderMainPage() {
   });
   toggle.append(toggleInfo, tSwitch);
 
-  // 搜索
   const searchWrap = document.createElement('div');
   searchWrap.className = 'dream-search';
   searchWrap.appendChild(createIcon('search', 18));
@@ -311,7 +329,6 @@ function renderMainPage() {
   searchInput.addEventListener('input', () => { searchText = searchInput.value; renderList(body); });
   searchWrap.appendChild(searchInput);
 
-  // 筛选
   const filterRow = document.createElement('div');
   filterRow.className = 'dream-filter';
   const allChip = document.createElement('button');
@@ -337,7 +354,6 @@ function renderMainPage() {
 
   body.append(hero, toggle, searchWrap, filterRow);
 
-  // 生成中提示
   if (generating) {
     const gen = document.createElement('div');
     gen.className = 'dream-gen';
@@ -361,7 +377,11 @@ function renderList(body) {
   let dreams = [...dreamsCache];
   if (filterCharId !== 'all') dreams = dreams.filter(d => d.characterId === filterCharId);
   const kw = searchText.trim().toLowerCase();
-  if (kw) dreams = dreams.filter(d => `${d.content || ''} ${d.summary || ''} ${(d.keywords || []).join(' ')}`.toLowerCase().includes(kw));
+  if (kw) dreams = dreams.filter(d => {
+    const ch = charactersCache.find(c => c.id === d.characterId);
+    const nameMatch = ch && (ch.name || '').toLowerCase().includes(kw);
+    return nameMatch || `${d.content || ''} ${d.summary || ''} ${(d.keywords || []).join(' ')}`.toLowerCase().includes(kw);
+  });
   dreams.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
 
   if (!dreams.length) {
@@ -455,7 +475,6 @@ function renderDetailPage() {
   const ch = charactersCache.find(c => c.id === currentDream.characterId);
   const cl = getClarity(currentDream.createdAt);
 
-  // 顶栏
   const nav = document.createElement('div');
   nav.className = 'dream-nav';
   const backBtn = document.createElement('button');
@@ -470,7 +489,6 @@ function renderDetailPage() {
   nav.append(backBtn, title);
   screen.appendChild(nav);
 
-  // 内容
   const body = document.createElement('div');
   body.className = 'dream-detail-body';
 
@@ -519,6 +537,12 @@ function renderDetailPage() {
   wakeBtn.append(createIcon('dream', 18), document.createTextNode('叫醒TA'));
   wakeBtn.addEventListener('click', () => { wakeMessages = []; pageView = 'wake'; renderPage(); });
 
+  const editBtn = document.createElement('button');
+  editBtn.className = 'dream-btn secondary';
+  editBtn.type = 'button';
+  editBtn.append(createIcon('edit', 18), document.createTextNode('编辑'));
+  editBtn.addEventListener('click', () => openEditSheet());
+
   const delBtn = document.createElement('button');
   delBtn.className = 'dream-btn danger';
   delBtn.type = 'button';
@@ -533,9 +557,151 @@ function renderDetailPage() {
     renderPage();
   });
 
-  actions.append(wakeBtn, delBtn);
+  actions.append(wakeBtn, editBtn, delBtn);
   body.append(card, actions);
   screen.appendChild(body);
+}
+
+// ============================================================
+// 编辑抽屉
+// ============================================================
+
+function openEditSheet() {
+  if (!currentDream) return;
+
+  let editedContent = currentDream.content || '';
+  let editedSummary = currentDream.summary || '';
+  let editedMood = currentDream.mood || 'sweet';
+  let editedKeywords = [...(currentDream.keywords || [])];
+
+  const sheet = document.createElement('div');
+
+  const title = document.createElement('div');
+  title.className = 'dream-edit-title';
+  title.textContent = '编辑梦境';
+
+  // 正文
+  const contentField = createEditField('memory', '梦境正文');
+  const contentTa = document.createElement('textarea');
+  contentTa.className = 'dream-edit-textarea';
+  contentTa.placeholder = '写下这个梦...';
+  contentTa.value = editedContent;
+  contentTa.addEventListener('input', () => { editedContent = contentTa.value; });
+  contentField.appendChild(contentTa);
+
+  // 摘要
+  const summaryField = createEditField('star', '一句话摘要');
+  const summaryInput = document.createElement('input');
+  summaryInput.className = 'dream-edit-input';
+  summaryInput.type = 'text';
+  summaryInput.placeholder = '用一句话描述这个梦';
+  summaryInput.value = editedSummary;
+  summaryInput.addEventListener('input', () => { editedSummary = summaryInput.value; });
+  summaryField.appendChild(summaryInput);
+
+  // 心情
+  const moodField = createEditField('heart', '梦境心情');
+  const moodGrid = document.createElement('div');
+  moodGrid.className = 'dream-edit-moods';
+  MOODS.forEach(m => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = `dream-edit-mood-btn ${editedMood === m.id ? 'selected' : ''}`;
+    btn.dataset.mood = m.id;
+    const dot = document.createElement('span');
+    dot.className = `dream-edit-mood-dot mood-${m.id}`;
+    btn.append(dot, document.createTextNode(m.label));
+    btn.addEventListener('click', () => {
+      editedMood = m.id;
+      moodGrid.querySelectorAll('.dream-edit-mood-btn').forEach(b => b.classList.toggle('selected', b.dataset.mood === m.id));
+    });
+    moodGrid.appendChild(btn);
+  });
+  moodField.appendChild(moodGrid);
+
+  // 关键词
+  const kwField = createEditField('search', '关键词');
+  const kwWrap = document.createElement('div');
+  kwWrap.className = 'dream-edit-kw-wrap';
+  const renderKwTags = () => {
+    kwWrap.innerHTML = '';
+    editedKeywords.forEach((kw, i) => {
+      const tag = document.createElement('span');
+      tag.className = 'dream-edit-kw-tag';
+      tag.appendChild(document.createTextNode(kw));
+      const removeBtn = document.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.textContent = '×';
+      removeBtn.addEventListener('click', () => { editedKeywords.splice(i, 1); renderKwTags(); });
+      tag.appendChild(removeBtn);
+      kwWrap.appendChild(tag);
+    });
+  };
+  renderKwTags();
+
+  const kwInputRow = document.createElement('div');
+  kwInputRow.className = 'dream-edit-kw-input';
+  const kwInput = document.createElement('input');
+  kwInput.type = 'text';
+  kwInput.placeholder = '输入关键词，点加号';
+  const kwAddBtn = document.createElement('button');
+  kwAddBtn.type = 'button';
+  kwAddBtn.appendChild(createIcon('add', 18));
+  const addKw = () => {
+    const v = kwInput.value.trim();
+    if (!v) return;
+    if (editedKeywords.includes(v)) { showToast('已经有了'); return; }
+    if (editedKeywords.length >= 8) { showToast('最多8个关键词'); return; }
+    editedKeywords.push(v);
+    kwInput.value = '';
+    renderKwTags();
+  };
+  kwAddBtn.addEventListener('click', addKw);
+  kwInput.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); addKw(); } });
+  kwInputRow.append(kwInput, kwAddBtn);
+  kwField.append(kwWrap, kwInputRow);
+
+  // 按钮
+  const actions = document.createElement('div');
+  actions.className = 'dream-edit-actions';
+  const cancelBtn = document.createElement('button');
+  cancelBtn.className = 'btn-ghost';
+  cancelBtn.type = 'button';
+  cancelBtn.textContent = '取消';
+  cancelBtn.addEventListener('click', hideBottomSheet);
+  const saveBtn = document.createElement('button');
+  saveBtn.className = 'btn-primary';
+  saveBtn.type = 'button';
+  saveBtn.textContent = '保存';
+  saveBtn.addEventListener('click', async () => {
+    if (!editedContent.trim()) { showToast('梦境正文不能为空'); return; }
+    currentDream = {
+      ...currentDream,
+      content: editedContent.trim(),
+      summary: editedSummary.trim() || editedContent.trim().slice(0, 15),
+      mood: editedMood,
+      keywords: editedKeywords,
+      updatedAt: getNow()
+    };
+    await saveDream(currentDream);
+    hideBottomSheet();
+    showToast('梦境已修改');
+    renderPage();
+  });
+  actions.append(cancelBtn, saveBtn);
+
+  sheet.append(title, contentField, summaryField, moodField, kwField, actions);
+  showBottomSheet(sheet);
+}
+
+function createEditField(iconName, labelText) {
+  const field = document.createElement('div');
+  field.className = 'dream-edit-field';
+  const label = document.createElement('div');
+  label.className = 'dream-edit-label';
+  label.append(createIcon(iconName, 15), document.createTextNode(labelText));
+  field.appendChild(label);
+  return field;
 }
 
 // ============================================================
@@ -552,7 +718,6 @@ function renderWakePage() {
 
   const ch = charactersCache.find(c => c.id === currentDream.characterId);
 
-  // 顶栏
   const nav = document.createElement('div');
   nav.className = 'dream-nav';
   const backBtn = document.createElement('button');
@@ -567,7 +732,6 @@ function renderWakePage() {
   nav.append(backBtn, title);
   screen.appendChild(nav);
 
-  // 消息区
   const body = document.createElement('div');
   body.className = 'dream-wake-body';
 
@@ -581,7 +745,6 @@ function renderWakePage() {
   }
   wakeMessages.forEach(m => body.appendChild(wakeMsg(m, ch)));
 
-  // 输入栏
   const bar = document.createElement('div');
   bar.className = 'dream-wake-bar';
   const input = document.createElement('textarea');
@@ -626,7 +789,6 @@ async function doSend(input, body, ch) {
   input.style.height = 'auto';
   body.scrollTop = body.scrollHeight;
 
-  // 打字指示器
   const typing = document.createElement('div');
   typing.className = 'dream-wake-msg';
   const tAv = document.createElement('div');
