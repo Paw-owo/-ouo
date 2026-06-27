@@ -1,16 +1,19 @@
-// ═══════════════════════════════════════
-// 【模块】工具抽屉 - 圆润粗线条猫咪简笔画图标
-// ═══════════════════════════════════════
+// apps/chat/thread-tools.js
+// imports:
+//   from './thread-sheets.js': openQuickReplySheet, openTransferSheet, openVoiceTextSheet, openClearContextSheet, openMcpSheet
+//   from './thread-relationship.js': openRelationshipLockSheet
+//   from './thread-actions.js': sendThreadMessage
 
-import { showPanel, hidePanel } from '../chat/thread.js';
 import {
   openQuickReplySheet,
   openTransferSheet,
   openVoiceTextSheet,
   openClearContextSheet,
-  openRelationshipLockSheet
-} from '../chat/thread-sheets.js';
-import { openPhoneMode } from '../chat/thread-actions.js';
+  openMcpSheet
+} from './thread-sheets.js';
+
+import { openRelationshipLockSheet } from './thread-relationship.js';
+import { sendThreadMessage } from './thread-actions.js';
 
 // ═══════════════════════════════════════
 // 【工具列表】11个工具，每页8个，滑动翻页
@@ -137,18 +140,14 @@ function updateDots(container) {
 }
 
 // ═══════════════════════════════════════
-// 【发送消息到聊天】修正选择器
+// 【发送消息到聊天】通过回调或直接调用
 // ═══════════════════════════════════════
 
-function sendMessageToChat(text) {
-  const textarea = document.querySelector('textarea.chat-thread-input');
-  if (!textarea) return;
-  textarea.value = text;
-  textarea.dispatchEvent(new Event('input', { bubbles: true }));
-  setTimeout(() => {
-    const btn = document.querySelector('.chat-thread-send');
-    if (btn) btn.click();
-  }, 100);
+async function sendMessageToChat(text, options) {
+  if (typeof options?.onSend === 'function') {
+    await options.onSend(text);
+    return;
+  }
 }
 
 // ═══════════════════════════════════════
@@ -159,15 +158,14 @@ function closeDetailAndShowGrid(panelEl) {
   panelEl.classList.remove('is-open');
   setTimeout(() => {
     panelEl.remove();
-    showToolsPanel();
   }, 300);
 }
 
 // ═══════════════════════════════════════
-// 【小任务sheet】预设任务 + 自定义输入
+// 【小任务详情】预设任务 + 自定义输入
 // ═══════════════════════════════════════
 
-function openTaskSheet() {
+function openTaskSheet(state, options) {
   const content = document.createElement('div');
   content.style.cssText = 'display:flex;flex-direction:column;gap:14px;padding-top:8px;';
 
@@ -189,10 +187,9 @@ function openTaskSheet() {
     card.textContent = p.text;
     card.addEventListener('touchstart', function() { card.style.transform = 'scale(0.95)'; }, { passive: true });
     card.addEventListener('touchend', function() { card.style.transform = ''; });
-    card.addEventListener('click', function() {
-      sendMessageToChat(p.prompt);
-      const panel = content.closest('.thread-tools-panel');
-      if (panel) { panel.classList.remove('is-open'); setTimeout(function() { panel.remove(); }, 300); }
+    card.addEventListener('click', async function() {
+      if (typeof options?.onClose === 'function') options.onClose();
+      await sendMessageToChat(p.prompt, options);
     });
     grid.appendChild(card);
   });
@@ -209,12 +206,11 @@ function openTaskSheet() {
   const sendBtn = document.createElement('button');
   sendBtn.textContent = '发送';
   sendBtn.style.cssText = 'padding:0 20px;height:44px;border-radius:var(--radius-md,12px);background:var(--accent,#9F8F82);color:#fff;font-size:14px;font-weight:500;border:none;cursor:pointer;white-space:nowrap;transition:all 0.2s ease;';
-  sendBtn.addEventListener('click', function() {
+  sendBtn.addEventListener('click', async function() {
     var t = input.value.trim();
     if (!t) return;
-    sendMessageToChat(t);
-    var panel = content.closest('.thread-tools-panel');
-    if (panel) { panel.classList.remove('is-open'); setTimeout(function() { panel.remove(); }, 300); }
+    if (typeof options?.onClose === 'function') options.onClose();
+    await sendMessageToChat(t, options);
   });
 
   inputWrap.appendChild(input);
@@ -233,10 +229,10 @@ function openTaskSheet() {
 }
 
 // ═══════════════════════════════════════
-// 【默契问答sheet】选范围后让AI出题
+// 【默契问答详情】选范围后让AI出题
 // ═══════════════════════════════════════
 
-function openQuizSheet() {
+function openQuizSheet(state, options) {
   const content = document.createElement('div');
   content.style.cssText = 'display:flex;flex-direction:column;gap:10px;padding-top:8px;';
 
@@ -262,10 +258,9 @@ function openQuizSheet() {
     card.appendChild(descDiv);
     card.addEventListener('touchstart', function() { card.style.transform = 'scale(0.97)'; }, { passive: true });
     card.addEventListener('touchend', function() { card.style.transform = ''; });
-    card.addEventListener('click', function() {
-      sendMessageToChat(cat.prompt);
-      var panel = content.closest('.thread-tools-panel');
-      if (panel) { panel.classList.remove('is-open'); setTimeout(function() { panel.remove(); }, 300); }
+    card.addEventListener('click', async function() {
+      if (typeof options?.onClose === 'function') options.onClose();
+      await sendMessageToChat(cat.prompt, options);
     });
     content.appendChild(card);
   });
@@ -282,23 +277,56 @@ function openQuizSheet() {
 }
 
 // ═══════════════════════════════════════
-// 【工具点击处理】
+// 【工具点击处理】分发到各个sheet或回调
 // ═══════════════════════════════════════
 
-function handleToolClick(toolId) {
+function handleToolClick(toolId, state, options) {
   switch (toolId) {
-    case 'quickReply': openQuickReplySheet(); break;
-    case 'task':       openTaskSheet(); break;
-    case 'quiz':       openQuizSheet(); break;
-    case 'transfer':   openTransferSheet(); break;
-    case 'voiceText':  openVoiceTextSheet(); break;
-    case 'clearCtx':   openClearContextSheet(); break;
-    case 'relLock':    openRelationshipLockSheet(); break;
-    case 'phone':      openPhoneMode(); break;
-    case 'dice':       showDiceResult(); break;
-    case 'rps':        showRPSResult(); break;
-    case 'mcp':        showMCPNotice(); break;
-    default: break;
+    case 'quickReply':
+      if (typeof options?.onClose === 'function') options.onClose();
+      openQuickReplySheet(state, options);
+      break;
+    case 'task':
+      if (typeof options?.onClose === 'function') options.onClose();
+      openTaskSheet(state, options);
+      break;
+    case 'quiz':
+      if (typeof options?.onClose === 'function') options.onClose();
+      openQuizSheet(state, options);
+      break;
+    case 'transfer':
+      if (typeof options?.onClose === 'function') options.onClose();
+      openTransferSheet(state, options);
+      break;
+    case 'voiceText':
+      if (typeof options?.onClose === 'function') options.onClose();
+      openVoiceTextSheet(state, options);
+      break;
+    case 'clearCtx':
+      if (typeof options?.onClose === 'function') options.onClose();
+      openClearContextSheet(state, options);
+      break;
+    case 'relLock':
+      if (typeof options?.onClose === 'function') options.onClose();
+      openRelationshipLockSheet(state, options);
+      break;
+    case 'phone':
+      if (typeof options?.onPick === 'function') {
+        options.onPick({ id: 'phone' });
+      }
+      break;
+    case 'dice':
+      showDiceResult();
+      break;
+    case 'rps':
+      showRPSResult();
+      break;
+    case 'mcp':
+      if (typeof options?.onClose === 'function') options.onClose();
+      openMcpSheet(state, options);
+      break;
+    default:
+      break;
   }
 }
 
@@ -350,12 +378,78 @@ function showMCPNotice() {
 }
 
 // ═══════════════════════════════════════
-// 【面板显示/隐藏】工具网格 + 详情页
+// 【给thread-panels用的宫格入口】返回DOM节点
+// ═══════════════════════════════════════
+
+export function createThreadToolsGrid(state, options = {}) {
+  injectToolsCSS();
+  currentPage = 0;
+
+  const pages = [];
+  for (let i = 0; i < DEFAULT_TOOLS.length; i += TOOLS_PER_PAGE) {
+    pages.push(DEFAULT_TOOLS.slice(i, i + TOOLS_PER_PAGE));
+  }
+  totalPages = pages.length;
+
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'display:flex;flex-direction:column;flex:1;min-height:0;';
+
+  const carouselWrap = document.createElement('div');
+  carouselWrap.className = 'tools-carousel-wrap';
+  const carousel = document.createElement('div');
+  carousel.className = 'tools-carousel';
+
+  pages.forEach(function(pageTools) {
+    const pageEl = document.createElement('div');
+    pageEl.className = 'tools-page';
+    pageTools.forEach(function(tool) {
+      const cell = document.createElement('div');
+      cell.className = 'tool-cell';
+      cell.appendChild(createToolIcon(tool.icon));
+      const nameEl = document.createElement('div');
+      nameEl.className = 'tool-name';
+      nameEl.textContent = tool.title;
+      cell.appendChild(nameEl);
+      cell.addEventListener('click', function() { handleToolClick(tool.id, state, options); });
+      pageEl.appendChild(cell);
+    });
+    const remaining = TOOLS_PER_PAGE - pageTools.length;
+    for (let i = 0; i < remaining; i++) {
+      const empty = document.createElement('div');
+      empty.className = 'tool-cell';
+      empty.style.visibility = 'hidden';
+      pageEl.appendChild(empty);
+    }
+    carousel.appendChild(pageEl);
+  });
+
+  carouselWrap.appendChild(carousel);
+  wrap.appendChild(carouselWrap);
+
+  if (totalPages > 1) {
+    const dotsEl = document.createElement('div');
+    dotsEl.className = 'tools-dots';
+    for (let i = 0; i < totalPages; i++) {
+      const dot = document.createElement('div');
+      dot.className = 'tools-dot' + (i === 0 ? ' is-active' : '');
+      dotsEl.appendChild(dot);
+    }
+    wrap.appendChild(dotsEl);
+    setupSwipe(carousel, dotsEl);
+  }
+
+  return wrap;
+}
+
+// ═══════════════════════════════════════
+// 【独立面板】直接打开工具全屏面板（非抽屉模式）
 // ═══════════════════════════════════════
 
 let toolsPanelEl = null;
 
-export function showToolsPanel() {
+export function showToolsPanel(state, options = {}) {
+  injectToolsCSS();
+
   if (!toolsPanelEl) {
     toolsPanelEl = document.createElement('div');
     toolsPanelEl.className = 'thread-tools-panel';
@@ -364,7 +458,6 @@ export function showToolsPanel() {
   toolsPanelEl._isAnimating = true;
   setTimeout(function() { toolsPanelEl._isAnimating = false; }, 400);
 
-  injectToolsCSS();
   currentPage = 0;
 
   const pages = [];
@@ -391,7 +484,12 @@ export function showToolsPanel() {
       nameEl.className = 'tool-name';
       nameEl.textContent = tool.title;
       cell.appendChild(nameEl);
-      cell.addEventListener('click', function() { handleToolClick(tool.id); hidePanel(); });
+      cell.addEventListener('click', function() {
+        handleToolClick(tool.id, state, options);
+        if (tool.id !== 'phone') {
+          toolsPanelEl.classList.remove('is-open');
+        }
+      });
       pageEl.appendChild(cell);
     });
     const remaining = TOOLS_PER_PAGE - pageTools.length;
@@ -419,7 +517,8 @@ export function showToolsPanel() {
     setupSwipe(carousel, dotsEl);
   }
 
-  showPanel(toolsPanelEl, { enableBackdropClose: false });
+  document.body.appendChild(toolsPanelEl);
+  requestAnimationFrame(function() { toolsPanelEl.classList.add('is-open'); });
 }
 
 // ═══════════════════════════════════════
