@@ -80,7 +80,7 @@ function createMessageRow(state, message, pageEl) {
 
   row.append(createReasoningStack(state, message, role, mode));
 
-  if (role === 'assistant' && mode === 'bubble' && !message.isPending) {
+  if (role === 'assistant' && mode === 'bubble' && !message.isPending && !message.isError) {
     const chunks = splitAIBubbleChunks(message);
     if (chunks.length > 1) {
       chunks.forEach((chunkText, chunkIndex) => {
@@ -271,6 +271,7 @@ function createBubbleContent(state, message) {
   if (message.type === 'sticker') bubble.classList.add('sticker-bubble');
   if (message.type === 'image') bubble.classList.add('image-bubble');
   if (isVoiceMessage(message)) bubble.classList.add('voice-bubble');
+  if (message.isError) bubble.classList.add('error-bubble');
 
   if (message.quoteText) {
     bubble.append(createQuoteBlock(message.quoteText));
@@ -291,6 +292,12 @@ function createBubbleContent(state, message) {
 
 function createMessageContent(state, message) {
   const content = el('div', `chat-message-content ${message.type === 'sticker' ? 'sticker-content' : ''}`);
+
+  // 错误消息优先处理
+  if (message.isError) {
+    content.appendChild(createErrorBubble(message));
+    return content;
+  }
 
   if (message.isPending && !String(message.content || '').trim()) {
     content.appendChild(createPendingLoadingCard());
@@ -366,6 +373,22 @@ function createPendingLoadingCard() {
   const text = el('span', 'chat-pending-text', '正在想…');
 
   card.append(dots, text);
+  return card;
+}
+
+// ───────────────────
+// 错误气泡卡片
+// ───────────────────
+
+function createErrorBubble(message) {
+  const card = el('div', 'chat-error-card');
+
+  const iconWrap = el('div', 'chat-error-icon');
+  iconWrap.appendChild(createLineIcon('warning'));
+
+  const text = el('div', 'chat-error-text', String(message.content || '出了点小状况'));
+
+  card.append(iconWrap, text);
   return card;
 }
 
@@ -1434,6 +1457,10 @@ function createLineIcon(name) {
   } else if (name === 'continue') {
     addPath('M5 12h12');
     addPath('m13 8 4 4-4 4');
+  } else if (name === 'warning') {
+    addPath('M12 2L2 20h20L12 2z');
+    addPath('M12 10v4');
+    addPath('M12 18h.01');
   } else if (name === 'rps-rock') {
     addPath('M7 11c0-2 1.3-3.5 3-3.5h3.5c2 0 3.5 1.5 3.5 3.5v2.5c0 2.8-2.2 5-5 5s-5-2.2-5-5V11Z');
     addPath('M9 8V6.5');
@@ -1651,6 +1678,11 @@ function injectStyle() {
       align-items: flex-start;
     }
 
+    .chat-message-bubble.error-bubble {
+      background: var(--bubble-ai-bg);
+      color: var(--bubble-ai-text);
+    }
+
     .chat-message-bubble.sticker-bubble,
     .chat-message-bubble.image-bubble {
       padding: 6px;
@@ -1688,6 +1720,43 @@ function injectStyle() {
       padding: 0;
       background: transparent;
       box-shadow: none;
+    }
+
+    /* ── 错误气泡卡片 ── */
+
+    .chat-error-card {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 2px 0;
+      animation: chatErrorPulse 2.4s ease-in-out infinite;
+    }
+
+    .chat-error-icon {
+      width: 26px;
+      height: 26px;
+      flex: 0 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 999px;
+      background: rgba(230, 120, 100, 0.12);
+      color: rgba(200, 80, 60, 0.8);
+      animation: chatErrorIconGlow 2.4s ease-in-out infinite;
+    }
+
+    .chat-error-icon svg {
+      width: 14px;
+      height: 14px;
+    }
+
+    .chat-error-text {
+      flex: 1;
+      min-width: 0;
+      font-size: var(--font-size-small);
+      line-height: 1.5;
+      color: var(--text-secondary);
+      animation: chatErrorTextFade 2.4s ease-in-out infinite;
     }
 
     /* ── 内容区域 ── */
@@ -2662,6 +2731,35 @@ function injectStyle() {
       100% { transform: rotateY(360deg) scale(1); }
     }
 
+    @keyframes chatErrorPulse {
+      0%, 100% {
+        opacity: 0.82;
+      }
+      50% {
+        opacity: 1;
+      }
+    }
+
+    @keyframes chatErrorIconGlow {
+      0%, 100% {
+        transform: scale(1);
+        box-shadow: 0 0 0 0 rgba(230, 120, 100, 0.18);
+      }
+      50% {
+        transform: scale(1.06);
+        box-shadow: 0 0 0 6px rgba(230, 120, 100, 0);
+      }
+    }
+
+    @keyframes chatErrorTextFade {
+      0%, 100% {
+        opacity: 0.72;
+      }
+      50% {
+        opacity: 0.92;
+      }
+    }
+
     /* ── 响应式 ── */
 
     @media (max-width: 520px) {
@@ -2779,6 +2877,9 @@ function injectStyle() {
       .chat-voice-waves i,
       .chat-pending-dot,
       .chat-pending-text,
+      .chat-error-card,
+      .chat-error-icon,
+      .chat-error-text,
       .chat-html-preview-overlay {
         animation: none;
         transition: none;
