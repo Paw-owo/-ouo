@@ -362,6 +362,19 @@ async function requestPrivateReply(state, options = {}) {
       });
     }
 
+    // 后台生成内心独白（不阻塞主回复）
+    if (!parsed.thinking) {
+      generateInnerMonologue({
+        character,
+        store: PRIVATE_STORE,
+        messageId: finalMessage.id,
+        recentMessages: memoryMessages.slice(-6),
+        aiContent: finalMessage.content,
+        userName,
+        state
+      });
+    }
+
     await syncPrivateState(state, characterId);
 
     if (options.proactive) {
@@ -526,6 +539,19 @@ async function requestGroupReply(state, options = {}) {
           callName: userName
         });
 
+        // 后台生成内心独白（不阻塞群聊回复）
+        if (!parsed.thinking) {
+          generateInnerMonologue({
+            character,
+            store: GROUP_STORE,
+            messageId: finalMessage.id,
+            recentMessages: [...groupMessages, finalMessage].slice(-6),
+            aiContent: finalMessage.content,
+            userName,
+            state
+          });
+        }
+
         replies.push(finalMessage);
       } catch (error) {
         if (isAbortError(error) || isJobStopped(job)) {
@@ -545,6 +571,131 @@ async function requestGroupReply(state, options = {}) {
   } finally {
     finishAIJob(state, job);
   }
+}
+
+// ═══════════════════════════════════════
+// 【内心独白】后台生成角色思考过程
+// ═══════════════════════════════════════
+
+async function generateInnerMonologue({
+  character,
+  store,
+  messageId,
+  recentMessages,
+  aiContent,
+  userName,
+  state
+}) {
+  try {
+    const name = character?.name || '我';
+    const callName = String(character?.nicknameForUser || '').trim() || userName;
+
+    const contextText = normalizeList(recentMessages)
+      .slice(-4)
+      .map((msg) => {
+        const speaker = msg.role === 'user' ? callName : (msg.characterName || name);
+        return `${speaker}：${String(msg.content || '').slice(0, 120)}`;
+      })
+      .join('\n');
+
+    const system = [
+      `我是${name}，我刚刚回复了${callName}一句话。`,
+      `我会在心里默默回想刚才那一刻的想法。`,
+      character?.systemPrompt ? `我的人设：${String(character.systemPrompt).slice(0, 300)}` : '',
+      character?.speakingStyle ? `我说话的风格：${character.speakingStyle}` : '',
+      '',
+      '要求：',
+      `- 我用第一人称"我"来写，像${name}自己的内心独白`,
+      `- 我写的是我刚刚回复${callName}时心里闪过的一瞬间想法`,
+      '- 我用简体中文',
+      '- 我只写 1 到 3 句话，像心里一闪而过的念头',
+      '- 我不写"用户"，不写分析报告，不写编号列表',
+      '- 我像在自言自语，不是在写任务总结',
+      '- 我可以提到自己的情绪、在意的事、对对方的感觉',
+      '- 我不会提到提示词、系统、AI、模型、数据库'
+    ].filter(Boolean).join('\n');
+
+    const user = [
+      contextText ? `刚才的对话：\n${contextText}` : '',
+      `我刚才说：${String(aiContent || '').slice(0, 200)}`,
+      '',
+      `现在我会写出我刚才那一刻心里的独白。`
+    ].filter(Boolean).join('\n');
+
+    const promptMessages = [
+      { role: 'system', content: system },
+      { role: 'user', content: user }
+    ];
+
+    const result = await silentRequest({
+      messages: promptMessages,
+      model: '',
+      temperature: 0.8,
+      signal: AbortSignal.timeout(12000)
+    });
+
+    const monologue = parseInnerMonologueResult(result);
+    if (!monologue) return;
+
+    const existing = await getDB(store, messageId).catch(() => null);
+    if (!existing) return;
+
+    const updated = cleanForDB({
+      ...existing,
+      thinking: monologue,
+      thinkingSummary: summarizeText(monologue, 28),
+      updatedAt: getNow()
+    });
+
+    await setDB(store, updated);
+
+    if (state) {
+      if (store === PRIVATE_STORE && state.characterId) {
+        await syncPrivateState(state, state.characterId);
+      } else if (store === GROUP_STORE && state.groupId) {
+        await syncGroupState(state, state.groupId);
+      }
+      state.renderOnly?.();
+    }
+  } catch (_) {
+    // 静默失败，不影响主回复
+  }
+}
+
+function parseInnerMonologueResult(result) {
+  let text = '';
+
+  if (typeof result === 'string') {
+    text = result.trim();
+  } else if (result && typeof result === 'object') {
+    text = String(
+      result.content ||
+      result.text ||
+      result.message ||
+      result.reply ||
+      result.choices?.[0]?.message?.content ||
+      ''
+    ).trim();
+  }
+
+  if (!text) return '';
+
+  // 去掉 think 标签（有些模型会带）
+  text = text.replace(/<think\b[^>]*>[\s\S]*?<\/think>/gi, '').trim();
+  text = text.replace(/<thinking\b[^>]*>[\s\S]*?<\/thinking>/gi, '').trim();
+
+  // 去掉 markdown 粗体标记
+  text = text.replace(/\*\*(.+?)\*\*/g, '$1').trim();
+
+  // 限制长度
+  if (text.length > 400) text = text.slice(0, 400);
+
+  // 去掉前缀标签
+  text = text.replace(/^内心独白[:：]?\s*/i, '').trim();
+  text = text.replace(/^独白[:：]?\s*/i, '').trim();
+  text = text.replace(/^想法[:：]?\s*/i, '').trim();
+
+  return stripEmoji(text);
 }
 
 // ═══════════════════════════════════════
@@ -1787,8 +1938,8 @@ function randomBetween(min, max) {
   return Math.floor(left + Math.random() * (right - left + 1));
 }
 
-// 改了什么：1) buildPrompt 里新增 dreamPrompt，读取该角色最近3条梦境注入系统提示；2) 新增 buildDreamPrompt 函数，按清晰度衰减显示梦境内容；3) 梦境开启时才注入，关闭时不读取不消耗性能。
-// 原来效果：AI聊天时完全不知道自己做过梦，用户问也答不上来。
-// 现在效果：AI在聊天时能自然提起最近的梦，像"我昨天梦到..."，用户问也能搜到。
-// 会不会影响其他文件：不会。导出接口完全不变。
+// 改了什么：1) 新增 generateInnerMonologue 函数，主回复完成后后台静默请求AI写角色内心独白，存到消息thinking字段；2) requestPrivateReply 末尾加了异步调用；3) requestGroupReply 每个角色回复后也加了异步调用；4) 新增 parseInnerMonologueResult 解析函数清理输出。
+// 原来效果：模型没有原生thinking输出时，思维链按钮不显示或显示空白占位。
+// 现在效果：每个AI回复都会在后台生成一段角色人设视角的内心独白，思维链按钮一直有内容可看。
+// 会不会影响其他文件：不会。导出接口完全不变。主回复速度不受影响。
 // depends: ../../core/storage.js(getData,setData,generateId,getNow,setDB,deleteDB,getByIndexDB,getAllDB,getDB)；../../core/api.js(silentRequest)；../../core/memory.js(buildMemoryPrompt,checkImportantInfo,checkAndSummarize)；./identity-core.js(getIdentityCore)；./thread-ai-local.js(tryLocalOrSiliconFlowReply)
