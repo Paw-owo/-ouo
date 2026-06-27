@@ -1,162 +1,354 @@
-// apps/chat/thread-sheets.js
-// imports:
-//   from '../../core/storage.js': getData, setData, getNow
-//   from '../../core/ui.js': createIcon, showBottomSheet, hideBottomSheet, showToast
-//   from './thread-actions.js': sendThreadMessage, sendTransferMessage
-//   from './thread-relationship.js': openRelationshipLockSheet
+// ═══════════════════════════════════════
+// 【模块】工具详情页 - 快捷回复/心情/接龙可编辑 + 转账/语音文字/清上下文/MCP
+// ═══════════════════════════════════════
+// imports from storage.js: getData, setData, getNow
+// imports from ui.js: createIcon, showBottomSheet, hideBottomSheet, showToast
+// imports from thread-actions.js: sendThreadMessage, sendTransferMessage
+// imports from thread-relationship.js: openRelationshipLockSheet
+// ═══════════════════════════════════════
 
-import {
-  getData,
-  setData,
-  getNow
-} from '../../core/storage.js';
-
-import {
-  createIcon,
-  showBottomSheet,
-  hideBottomSheet,
-  showToast
-} from '../../core/ui.js';
-
-import {
-  sendThreadMessage,
-  sendTransferMessage
-} from './thread-actions.js';
-
+import { getData, setData, getNow } from '../../core/storage.js';
+import { createIcon, showBottomSheet, hideBottomSheet, showToast } from '../../core/ui.js';
+import { sendThreadMessage, sendTransferMessage } from './thread-actions.js';
 import { openRelationshipLockSheet } from './thread-relationship.js';
 
 const SHEET_STYLE_ID = 'chat-thread-sheets-style';
 
-const DEFAULT_QUICK_REPLIES = [
-  '我在',
-  '等我一下',
-  '好呀',
-  '抱抱我',
-  '慢慢说',
-  '我听着呢'
-];
+// ═══════════════════════════════════════
+// 【数据读写】快捷回复/心情/接龙统一结构
+// ═══════════════════════════════════════
 
-const DEFAULT_MOOD_OPTIONS = [
-  {
-    id: 'warm',
-    title: '暖一点',
-    desc: '说话更软一点，慢一点。',
-    icon: 'heart',
-    text: '我今天想要你温柔一点陪我。'
-  },
-  {
-    id: 'cute',
-    title: '可爱一点',
-    desc: '语气轻轻的，黏一点。',
-    icon: 'sparkles',
-    text: '我今天想要更软乎一点的陪伴。'
-  },
-  {
-    id: 'calm',
-    title: '安静一点',
-    desc: '少说废话，慢慢接住我。',
-    icon: 'moon',
-    text: '我今天想安静一点，陪我慢慢聊。'
-  },
-  {
-    id: 'clingy',
-    title: '黏一点',
-    desc: '想被多理理。',
-    icon: 'chat',
-    text: '我今天有点想你，多陪我一会儿。'
-  }
-];
+function loadList(key) {
+  const raw = getData(key);
+  return Array.isArray(raw) ? raw.filter(Boolean) : [];
+}
+
+function saveList(key, list) {
+  setData(key, list.filter(Boolean));
+}
 
 // ═══════════════════════════════════════
-// 【快捷回复】一键发预设短句
+// 【快捷回复】可编辑列表，点标题直接发出去
 // ═══════════════════════════════════════
 
 export function openQuickReplySheet(state, options = {}) {
   injectStyle();
-
-  const replies = normalizeArray(options.items || getData('chat_quick_replies') || DEFAULT_QUICK_REPLIES);
-  const sheet = el('div', 'thread-sheet-wrap');
-
-  sheet.append(
-    createSheetHead('快捷回复', '点一下就发出去，适合懒懒的。'),
-    createChipGrid(replies.map((item) => ({
-      title: String(item).trim(),
-      desc: '',
-      icon: 'message'
-    })), async (item) => {
-      if (!options.containerEl) hideBottomSheet();
-      await sendThreadMessage(state, item.title, { triggerAI: true });
-    }, '没有可用的快捷回复。')
-  );
-
-  renderSheet(sheet, options.containerEl);
+  renderEditableSheet(state, options, {
+    title: '快捷回复',
+    desc: '自定义常用指令，点一下就发出去。',
+    emptyTip: '还没有快捷回复，点"添加"开始吧~',
+    storageKey: 'chat_quick_replies',
+    sendLabel: '发出去',
+  });
 }
 
 // ═══════════════════════════════════════
-// 【心情】快速发一条带情绪的消息
+// 【心情】可编辑列表，点标题直接发出去
 // ═══════════════════════════════════════
 
 export function openMoodSheet(state, options = {}) {
   injectStyle();
+  renderEditableSheet(state, options, {
+    title: '心情',
+    desc: '告诉AI你现在想要什么感觉。',
+    emptyTip: '还没有心情卡片，点"添加"开始吧~',
+    storageKey: 'chat_mood_options',
+    sendLabel: '发出去',
+  });
+}
 
-  const moods = normalizeArray(options.items || getData('chat_mood_options') || DEFAULT_MOOD_OPTIONS);
+// ═══════════════════════════════════════
+// 【接龙】可编辑列表，点标题直接发出去
+// ═══════════════════════════════════════
+
+export function openRelaySheet(state, options = {}) {
+  injectStyle();
+  renderEditableSheet(state, options, {
+    title: '接龙',
+    desc: '自定义接龙内容，点一下就把话题丢出去。',
+    emptyTip: '还没有接龙内容，点"添加"开始吧~',
+    storageKey: 'chat_relay_presets',
+    sendLabel: '发出去',
+  });
+}
+
+// ═══════════════════════════════════════
+// 【统一编辑列表渲染】快捷回复/心情/接龙共用
+// ═══════════════════════════════════════
+
+function renderEditableSheet(state, options, config) {
+  const { title, desc, emptyTip, storageKey, sendLabel } = config;
   const sheet = el('div', 'thread-sheet-wrap');
 
-  sheet.append(
-    createSheetHead('心情', '选一个现在的感觉。'),
-    createChipGrid(moods.map((item) => ({
-      title: String(item.title || item.name || '').trim(),
-      desc: String(item.desc || item.description || '').trim(),
-      icon: String(item.icon || 'heart')
-    })), async (item) => {
-      if (!options.containerEl) hideBottomSheet();
-      await sendThreadMessage(state, item.text || item.title, { triggerAI: true });
-    }, '还没有心情卡片。')
+  const head = el('div', 'thread-sheet-head');
+  head.append(
+    el('div', 'thread-sheet-title', title),
+    el('div', 'thread-sheet-desc', desc)
   );
+  sheet.append(head);
+
+  const toolbar = el('div', 'editable-toolbar');
+
+  const editBtn = el('button', 'editable-toolbar-btn', '编辑');
+  const deleteBtn = el('button', 'editable-toolbar-btn', '删除');
+  const addBtn = el('button', 'editable-toolbar-btn primary', '添加');
+
+  let mode = 'view';
+  let items = loadList(storageKey);
+
+  function rerender() {
+    renderEditableSheet(state, options, config);
+  }
+
+  function refreshList() {
+    listWrap.innerHTML = '';
+    if (!items.length) {
+      listWrap.append(createEmptyTip(emptyTip));
+      return;
+    }
+
+    items.forEach((item, index) => {
+      const card = el('div', 'editable-card');
+      if (mode === 'delete') card.classList.add('is-delete-mode');
+      if (mode === 'edit') card.classList.add('is-edit-mode');
+
+      if (mode === 'delete') {
+        const delBtn = el('button', 'editable-card-del');
+        delBtn.innerHTML = '<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="4" x2="12" y2="12"/><line x1="12" y1="4" x2="4" y2="12"/></svg>';
+        delBtn.addEventListener('click', function() {
+          items.splice(index, 1);
+          saveList(storageKey, items);
+          refreshList();
+        });
+        card.appendChild(delBtn);
+      }
+
+      const titleEl = el('div', 'editable-card-title', item.title || '无标题');
+      const contentPreview = el('div', 'editable-card-content');
+
+      if (mode === 'edit') {
+        titleEl.style.cursor = 'pointer';
+        titleEl.addEventListener('click', function() {
+          openEditItemSheet(state, options, config, items, index, rerender);
+        });
+        contentPreview.textContent = item.content || '点击编辑内容...';
+        contentPreview.style.cursor = 'pointer';
+        contentPreview.addEventListener('click', function() {
+          openEditItemSheet(state, options, config, items, index, rerender);
+        });
+      } else {
+        contentPreview.textContent = item.content ? (item.content.length > 50 ? item.content.slice(0, 50) + '...' : item.content) : '暂无内容';
+      }
+
+      card.append(titleEl, contentPreview);
+
+      if (mode === 'view') {
+        card.style.cursor = 'pointer';
+        card.addEventListener('click', async function() {
+          const text = item.content || item.title || '';
+          if (!text) {
+            showToast('没有可发送的内容');
+            return;
+          }
+          if (options.containerEl) {
+            if (typeof options.onBack === 'function') options.onBack();
+          } else {
+            hideBottomSheet();
+          }
+          await sendThreadMessage(state, text, { triggerAI: true });
+        });
+      }
+
+      listWrap.appendChild(card);
+    });
+  }
+
+  function refreshToolbar() {
+    editBtn.classList.toggle('is-active', mode === 'edit');
+    deleteBtn.classList.toggle('is-active', mode === 'delete');
+  }
+
+  editBtn.addEventListener('click', function() {
+    mode = mode === 'edit' ? 'view' : 'edit';
+    refreshToolbar();
+    refreshList();
+  });
+
+  deleteBtn.addEventListener('click', function() {
+    mode = mode === 'delete' ? 'view' : 'delete';
+    refreshToolbar();
+    refreshList();
+  });
+
+  addBtn.addEventListener('click', function() {
+    openAddItemSheet(state, options, config, items, rerender);
+  });
+
+  toolbar.append(editBtn, deleteBtn, addBtn);
+  sheet.append(toolbar);
+
+  const listWrap = el('div', 'editable-list');
+  refreshList();
+  sheet.append(listWrap);
 
   renderSheet(sheet, options.containerEl);
 }
 
 // ═══════════════════════════════════════
-// 【接龙】发一条可继续接的话
+// 【添加条目】底部抽屉填标题+内容
 // ═══════════════════════════════════════
 
-export function openRelaySheet(state, options = {}) {
-  injectStyle();
+function openAddItemSheet(state, options, config, items, rerender) {
+  const addSheet = el('div', 'thread-sheet-wrap');
 
-  const presets = normalizeArray(options.items || getData('chat_relay_presets') || [
-    {
-      title: '接龙开始',
-      desc: '谁来接下一句。',
-      text: '我先起个头，谁来接下一句。'
-    },
-    {
-      title: '轮到你啦',
-      desc: '轻轻把球丢出去。',
-      text: '轮到你啦，快接住。'
-    },
-    {
-      title: '继续吧',
-      desc: '让话题别断掉。',
-      text: '我们继续吧，别停。'
-    }
-  ]);
-
-  const sheet = el('div', 'thread-sheet-wrap');
-
-  sheet.append(
-    createSheetHead('接龙', '把话题递出去。'),
-    createChipGrid(presets.map((item) => ({
-      title: String(item.title || '').trim(),
-      desc: String(item.desc || '').trim(),
-      icon: 'repeat'
-    })), async (item) => {
-      if (!options.containerEl) hideBottomSheet();
-      await sendThreadMessage(state, item.text || item.title, { triggerAI: true });
-    }, '还没有接龙内容。')
+  const head = el('div', 'thread-sheet-head');
+  head.append(
+    el('div', 'thread-sheet-title', '添加' + config.title),
+    el('div', 'thread-sheet-desc', '给这条起个标题，再写具体内容。')
   );
+  addSheet.append(head);
 
-  renderSheet(sheet, options.containerEl);
+  const form = el('section', 'thread-sheet-form');
+
+  const titleField = el('div', 'thread-sheet-field');
+  titleField.append(el('div', 'thread-sheet-field-title', '标题'));
+  const titleInput = document.createElement('input');
+  titleInput.type = 'text';
+  titleInput.className = 'thread-sheet-input';
+  titleInput.placeholder = '例如：ai自检';
+  titleInput.autocomplete = 'off';
+  titleInput.setAttribute('spellcheck', 'false');
+  titleField.append(titleInput);
+
+  const contentField = el('div', 'thread-sheet-field');
+  contentField.append(el('div', 'thread-sheet-field-title', '内容'));
+  const contentInput = document.createElement('textarea');
+  contentInput.className = 'thread-sheet-textarea';
+  contentInput.placeholder = '例如：请检查你当前的记忆状态，汇报给我。';
+  contentInput.rows = 3;
+  contentInput.autocomplete = 'off';
+  contentInput.setAttribute('spellcheck', 'false');
+  contentField.append(contentInput);
+
+  const actions = el('div', 'thread-sheet-actions');
+
+  const cancel = actionButton('取消', 'ghost');
+  cancel.addEventListener('click', function() {
+    if (options.containerEl) {
+      rerender();
+    } else {
+      hideBottomSheet();
+    }
+  });
+
+  const confirm = actionButton('确认添加', 'primary');
+  confirm.addEventListener('click', function() {
+    const t = titleInput.value.trim();
+    const c = contentInput.value.trim();
+    if (!t && !c) {
+      showToast('至少写点内容吧~');
+      return;
+    }
+    items.push({ title: t || '未命名', content: c || '' });
+    saveList(config.storageKey, items);
+    showToast('已添加~');
+    if (options.containerEl) {
+      rerender();
+    } else {
+      hideBottomSheet();
+    }
+  });
+
+  actions.append(cancel, confirm);
+  form.append(titleField, contentField, actions);
+  addSheet.append(form);
+
+  if (options.containerEl) {
+    options.containerEl.innerHTML = '';
+    options.containerEl.appendChild(addSheet);
+    return;
+  }
+
+  showBottomSheet(addSheet);
+}
+
+// ═══════════════════════════════════════
+// 【编辑条目】底部抽屉修改标题+内容
+// ═══════════════════════════════════════
+
+function openEditItemSheet(state, options, config, items, index, rerender) {
+  const item = items[index] || { title: '', content: '' };
+  const editSheet = el('div', 'thread-sheet-wrap');
+
+  const head = el('div', 'thread-sheet-head');
+  head.append(
+    el('div', 'thread-sheet-title', '编辑' + config.title),
+    el('div', 'thread-sheet-desc', '修改这条的标题和内容。')
+  );
+  editSheet.append(head);
+
+  const form = el('section', 'thread-sheet-form');
+
+  const titleField = el('div', 'thread-sheet-field');
+  titleField.append(el('div', 'thread-sheet-field-title', '标题'));
+  const titleInput = document.createElement('input');
+  titleInput.type = 'text';
+  titleInput.className = 'thread-sheet-input';
+  titleInput.value = item.title || '';
+  titleInput.autocomplete = 'off';
+  titleInput.setAttribute('spellcheck', 'false');
+  titleField.append(titleInput);
+
+  const contentField = el('div', 'thread-sheet-field');
+  contentField.append(el('div', 'thread-sheet-field-title', '内容'));
+  const contentInput = document.createElement('textarea');
+  contentInput.className = 'thread-sheet-textarea';
+  contentInput.value = item.content || '';
+  contentInput.rows = 3;
+  contentInput.autocomplete = 'off';
+  contentInput.setAttribute('spellcheck', 'false');
+  contentField.append(contentInput);
+
+  const actions = el('div', 'thread-sheet-actions');
+
+  const cancel = actionButton('取消', 'ghost');
+  cancel.addEventListener('click', function() {
+    if (options.containerEl) {
+      rerender();
+    } else {
+      hideBottomSheet();
+    }
+  });
+
+  const confirm = actionButton('保存修改', 'primary');
+  confirm.addEventListener('click', function() {
+    const t = titleInput.value.trim();
+    const c = contentInput.value.trim();
+    if (!t && !c) {
+      showToast('至少写点内容吧~');
+      return;
+    }
+    items[index] = { title: t || '未命名', content: c || '' };
+    saveList(config.storageKey, items);
+    showToast('已保存~');
+    if (options.containerEl) {
+      rerender();
+    } else {
+      hideBottomSheet();
+    }
+  });
+
+  actions.append(cancel, confirm);
+  form.append(titleField, contentField, actions);
+  editSheet.append(form);
+
+  if (options.containerEl) {
+    options.containerEl.innerHTML = '';
+    options.containerEl.appendChild(editSheet);
+    return;
+  }
+
+  showBottomSheet(editSheet);
 }
 
 // ═══════════════════════════════════════
@@ -386,7 +578,6 @@ export function openVoiceTextSheet(state, options = {}) {
 // ═══════════════════════════════════════
 
 export function openRelationshipSheet(state, options = {}) {
-  // 修复：把 containerEl 和 onBack 透传给关系锁函数
   return openRelationshipLockSheet(state, {
     ...options,
     containerEl: options.containerEl || null,
@@ -403,7 +594,6 @@ function renderSheet(sheet, containerEl) {
     containerEl.replaceChildren(sheet);
     return;
   }
-
   showBottomSheet(sheet);
 }
 
@@ -422,33 +612,24 @@ function createSheetHead(title, desc) {
 
 function createChipGrid(items, onPick, emptyText) {
   const wrap = el('div', 'thread-chip-grid');
-
   if (!items.length) {
     wrap.append(createEmptyTip(emptyText || '没有内容。'));
     return wrap;
   }
-
   items.forEach((item) => {
     const button = el('button', 'thread-chip-card');
     button.type = 'button';
-
     const icon = el('span', 'thread-chip-icon');
     icon.appendChild(createIcon(item.icon || 'message', 18));
-
     const text = el('span', 'thread-chip-text');
     text.append(
       el('span', 'thread-chip-title', item.title || ''),
       el('span', 'thread-chip-desc', item.desc || '')
     );
-
     button.append(icon, text);
-    button.addEventListener('click', async () => {
-      await onPick?.(item);
-    });
-
+    button.addEventListener('click', async () => { await onPick?.(item); });
     wrap.append(button);
   });
-
   return wrap;
 }
 
@@ -458,47 +639,33 @@ function createEmptyTip(text) {
 
 function textInput(title, desc, value) {
   const wrap = el('section', 'thread-sheet-field');
-  wrap.append(
-    el('div', 'thread-sheet-field-title', title || ''),
-    el('div', 'thread-sheet-field-desc', desc || '')
-  );
-
+  wrap.append(el('div', 'thread-sheet-field-title', title || ''), el('div', 'thread-sheet-field-desc', desc || ''));
   const input = document.createElement('input');
   input.type = 'text';
   input.className = 'thread-sheet-input';
   input.value = String(value || '');
   input.autocomplete = 'off';
   input.setAttribute('spellcheck', 'false');
-
   wrap.append(input);
   return { wrap, input };
 }
 
 function textareaInput(title, desc, value) {
   const wrap = el('section', 'thread-sheet-field');
-  wrap.append(
-    el('div', 'thread-sheet-field-title', title || ''),
-    el('div', 'thread-sheet-field-desc', desc || '')
-  );
-
+  wrap.append(el('div', 'thread-sheet-field-title', title || ''), el('div', 'thread-sheet-field-desc', desc || ''));
   const input = document.createElement('textarea');
   input.className = 'thread-sheet-textarea';
   input.value = String(value || '');
   input.rows = 3;
   input.autocomplete = 'off';
   input.setAttribute('spellcheck', 'false');
-
   wrap.append(input);
   return { wrap, input };
 }
 
 function numberInput(title, desc, value, min, max, step) {
   const wrap = el('section', 'thread-sheet-field');
-  wrap.append(
-    el('div', 'thread-sheet-field-title', title || ''),
-    el('div', 'thread-sheet-field-desc', desc || '')
-  );
-
+  wrap.append(el('div', 'thread-sheet-field-title', title || ''), el('div', 'thread-sheet-field-desc', desc || ''));
   const input = document.createElement('input');
   input.type = 'number';
   input.className = 'thread-sheet-input';
@@ -506,7 +673,6 @@ function numberInput(title, desc, value, min, max, step) {
   input.min = String(min);
   input.max = String(max);
   input.step = String(step || 1);
-
   wrap.append(input);
   return { wrap, input };
 }
@@ -553,226 +719,56 @@ function el(tag, className = '', text = '') {
 }
 
 // ═══════════════════════════════════════
-// 【样式】底部抽屉、卡片和按钮
+// 【样式】底部抽屉、卡片、按钮、编辑列表
 // ═══════════════════════════════════════
 
 function injectStyle() {
   if (document.getElementById(SHEET_STYLE_ID)) return;
-
   const style = document.createElement('style');
   style.id = SHEET_STYLE_ID;
   style.textContent = `
-    .thread-sheet-wrap{
-      padding:6px 20px 20px;
-      color:var(--text-primary);
-    }
-
-    .thread-sheet-head{
-      margin-bottom:16px;
-    }
-
-    .thread-sheet-title{
-      color:var(--text-primary);
-      font-size:17px;
-      font-weight:600;
-      line-height:1.35;
-    }
-
-    .thread-sheet-desc{
-      margin-top:4px;
-      color:var(--text-secondary);
-      font-size:13px;
-      line-height:1.55;
-    }
-
-    .thread-sheet-card,
-    .thread-sheet-form{
-      padding:14px;
-      border-radius:24px;
-      background:var(--bg-card);
-      box-shadow:var(--shadow-sm);
-    }
-
-    .thread-chip-grid{
-      display:grid;
-      grid-template-columns:repeat(2,minmax(0,1fr));
-      gap:10px;
-    }
-
-    .thread-chip-card{
-      min-height:74px;
-      display:grid;
-      grid-template-columns:auto minmax(0,1fr);
-      align-items:center;
-      gap:10px;
-      padding:12px;
-      border-radius:18px;
-      background:var(--surface-muted);
-      color:var(--text-primary);
-      box-shadow:var(--shadow-sm);
-      text-align:left;
-      transition:all 200ms ease;
-    }
-
-    .thread-chip-card:active,
-    .thread-sheet-btn:active{
-      transform:scale(.96);
-    }
-
-    .thread-chip-icon{
-      width:36px;
-      height:36px;
-      display:inline-flex;
-      align-items:center;
-      justify-content:center;
-      border-radius:14px;
-      background:var(--bg-card);
-      color:var(--accent);
-      box-shadow:var(--shadow-sm);
-    }
-
-    .thread-chip-text{
-      min-width:0;
-      display:flex;
-      flex-direction:column;
-      gap:4px;
-    }
-
-    .thread-chip-title{
-      color:var(--text-primary);
-      font-size:14px;
-      font-weight:600;
-      line-height:1.35;
-      overflow:hidden;
-      white-space:nowrap;
-      text-overflow:ellipsis;
-    }
-
-    .thread-chip-desc{
-      color:var(--text-secondary);
-      font-size:12px;
-      line-height:1.45;
-      overflow:hidden;
-      white-space:nowrap;
-      text-overflow:ellipsis;
-    }
-
-    .thread-sheet-empty{
-      padding:16px 12px;
-      border-radius:18px;
-      background:var(--surface-muted);
-      color:var(--text-secondary);
-      font-size:13px;
-      line-height:1.6;
-      text-align:center;
-    }
-
-    .thread-sheet-field{
-      margin-top:12px;
-      display:flex;
-      flex-direction:column;
-      gap:8px;
-    }
-
-    .thread-sheet-field-title{
-      color:var(--text-primary);
-      font-size:14px;
-      font-weight:600;
-      line-height:1.35;
-    }
-
-    .thread-sheet-field-desc{
-      color:var(--text-secondary);
-      font-size:12px;
-      line-height:1.5;
-    }
-
-    .thread-sheet-input,
-    .thread-sheet-textarea{
-      width:100%;
-      border-radius:18px;
-      background:var(--surface-muted);
-      color:var(--text-primary);
-      box-shadow:var(--shadow-sm);
-      font:inherit;
-      font-size:16px;
-      line-height:1.6;
-      -webkit-appearance:none;
-      appearance:none;
-    }
-
-    .thread-sheet-input{
-      min-height:44px;
-      padding:0 12px;
-    }
-
-    .thread-sheet-textarea{
-      min-height:96px;
-      padding:11px 12px;
-      resize:none;
-    }
-
-    .thread-sheet-slider{
-      width:100%;
-      margin-top:12px;
-      accent-color:var(--accent);
-    }
-
-    .thread-sheet-slider-value{
-      margin-top:8px;
-      color:var(--text-hint);
-      font-size:12px;
-      line-height:1.4;
-    }
-
-    .thread-sheet-actions{
-      display:grid;
-      grid-template-columns:1fr 1fr;
-      gap:10px;
-      margin-top:14px;
-    }
-
-    .thread-sheet-btn{
-      min-height:44px;
-      display:inline-flex;
-      align-items:center;
-      justify-content:center;
-      border-radius:16px;
-      box-shadow:var(--shadow-sm);
-      font:inherit;
-      font-size:14px;
-      font-weight:600;
-      transition:all 200ms ease;
-    }
-
-    .thread-sheet-btn.ghost{
-      background:var(--bg-card);
-      color:var(--text-secondary);
-    }
-
-    .thread-sheet-btn.primary{
-      background:var(--accent);
-      color:var(--bubble-user-text);
-    }
-
-    @media(max-width:430px){
-      .thread-chip-grid{
-        grid-template-columns:1fr;
-      }
-
-      .thread-sheet-actions{
-        grid-template-columns:1fr;
-      }
-    }
-
-    @media(prefers-reduced-motion:reduce){
-      .thread-chip-card,
-      .thread-sheet-btn{
-        transition:none;
-      }
-    }
+    .thread-sheet-wrap{padding:6px 20px 20px;color:var(--text-primary)}
+    .thread-sheet-head{margin-bottom:16px}
+    .thread-sheet-title{color:var(--text-primary);font-size:17px;font-weight:600;line-height:1.35}
+    .thread-sheet-desc{margin-top:4px;color:var(--text-secondary);font-size:13px;line-height:1.55}
+    .thread-sheet-card,.thread-sheet-form{padding:14px;border-radius:24px;background:var(--bg-card);box-shadow:var(--shadow-sm)}
+    .thread-chip-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+    .thread-chip-card{min-height:74px;display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:10px;padding:12px;border-radius:18px;background:var(--surface-muted);color:var(--text-primary);box-shadow:var(--shadow-sm);text-align:left;transition:all 200ms ease}
+    .thread-chip-card:active,.thread-sheet-btn:active{transform:scale(.96)}
+    .thread-chip-icon{width:36px;height:36px;display:inline-flex;align-items:center;justify-content:center;border-radius:14px;background:var(--bg-card);color:var(--accent);box-shadow:var(--shadow-sm)}
+    .thread-chip-text{min-width:0;display:flex;flex-direction:column;gap:4px}
+    .thread-chip-title{color:var(--text-primary);font-size:14px;font-weight:600;line-height:1.35;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+    .thread-chip-desc{color:var(--text-secondary);font-size:12px;line-height:1.45;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+    .thread-sheet-empty{padding:16px 12px;border-radius:18px;background:var(--surface-muted);color:var(--text-secondary);font-size:13px;line-height:1.6;text-align:center}
+    .thread-sheet-field{margin-top:12px;display:flex;flex-direction:column;gap:8px}
+    .thread-sheet-field-title{color:var(--text-primary);font-size:14px;font-weight:600;line-height:1.35}
+    .thread-sheet-field-desc{color:var(--text-secondary);font-size:12px;line-height:1.5}
+    .thread-sheet-input,.thread-sheet-textarea{width:100%;border-radius:18px;background:var(--surface-muted);color:var(--text-primary);box-shadow:var(--shadow-sm);font:inherit;font-size:16px;line-height:1.6;-webkit-appearance:none;appearance:none}
+    .thread-sheet-input{min-height:44px;padding:0 12px}
+    .thread-sheet-textarea{min-height:96px;padding:11px 12px;resize:none}
+    .thread-sheet-slider{width:100%;margin-top:12px;accent-color:var(--accent)}
+    .thread-sheet-slider-value{margin-top:8px;color:var(--text-hint);font-size:12px;line-height:1.4}
+    .thread-sheet-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}
+    .thread-sheet-btn{min-height:44px;display:inline-flex;align-items:center;justify-content:center;border-radius:16px;box-shadow:var(--shadow-sm);font:inherit;font-size:14px;font-weight:600;transition:all 200ms ease}
+    .thread-sheet-btn.ghost{background:var(--bg-card);color:var(--text-secondary)}
+    .thread-sheet-btn.primary{background:var(--accent);color:var(--bubble-user-text)}
+    .editable-toolbar{display:flex;gap:8px;margin-bottom:12px}
+    .editable-toolbar-btn{flex:1;height:36px;border-radius:12px;background:var(--bg-card);color:var(--text-secondary);font-size:13px;font-weight:500;border:none;cursor:pointer;transition:all 200ms ease;box-shadow:var(--shadow-sm)}
+    .editable-toolbar-btn:active{transform:scale(0.95)}
+    .editable-toolbar-btn.is-active{background:var(--accent);color:var(--bubble-user-text)}
+    .editable-toolbar-btn.primary{background:var(--accent);color:var(--bubble-user-text)}
+    .editable-list{display:flex;flex-direction:column;gap:10px;max-height:50vh;overflow-y:auto;padding-bottom:8px}
+    .editable-card{position:relative;padding:14px 16px;border-radius:18px;background:var(--bg-card);box-shadow:var(--shadow-sm);transition:all 200ms ease;overflow:hidden}
+    .editable-card:active{transform:scale(0.98)}
+    .editable-card.is-delete-mode{padding-left:40px}
+    .editable-card.is-edit-mode{padding-bottom:16px}
+    .editable-card-title{font-size:15px;font-weight:600;color:var(--text-primary);line-height:1.4;margin-bottom:4px}
+    .editable-card-content{font-size:13px;color:var(--text-secondary);line-height:1.5;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+    .editable-card-del{position:absolute;left:10px;top:50%;transform:translateY(-50%);width:24px;height:24px;border-radius:50%;background:rgba(255,80,80,0.12);color:rgb(255,80,80);display:flex;align-items:center;justify-content:center;border:none;cursor:pointer;transition:all 0.2s ease}
+    .editable-card-del:active{transform:translateY(-50%) scale(0.9)}
+    @media(max-width:430px){.thread-chip-grid{grid-template-columns:1fr}.thread-sheet-actions{grid-template-columns:1fr}}
+    @media(prefers-reduced-motion:reduce){.thread-chip-card,.thread-sheet-btn,.editable-card,.editable-toolbar-btn{transition:none}}
   `;
-
   document.head.appendChild(style);
 }
 
