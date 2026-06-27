@@ -1,771 +1,464 @@
-// apps/chat/thread-tools.js
-// imports:
-//   from '../../core/ui.js': createIcon, showToast
-//   from './thread-sheets.js': openQuickReplySheet, openMoodSheet, openRelaySheet, openTransferSheet, openClearContextSheet, openMcpSheet, openVoiceTextSheet, openRelationshipSheet
-//   from './thread-call.js': mountThreadCall
-//   from './thread-actions.js': sendDiceMessage, sendRpsMessage
-import { createIcon, showToast } from '../../core/ui.js';
+// ═══════════════════════════════════════
+// 【模块】工具抽屉 - 圆润粗线条猫咪简笔画图标
+// ═══════════════════════════════════════
+
+import { showPanel, hidePanel } from '../chat/thread.js';
 import {
   openQuickReplySheet,
-  openMoodSheet,
-  openRelaySheet,
   openTransferSheet,
-  openClearContextSheet,
-  openMcpSheet,
   openVoiceTextSheet,
-  openRelationshipSheet
-} from './thread-sheets.js';
-import { mountThreadCall } from './thread-call.js';
-import { sendDiceMessage, sendRpsMessage } from './thread-actions.js';
-
-const STYLE_ID = 'chat-thread-tools-style';
-const PAGE_SIZE = 8;
+  openClearContextSheet,
+  openRelationshipLockSheet
+} from '../chat/thread-sheets.js';
+import { openPhoneMode } from '../chat/thread-actions.js';
 
 // ═══════════════════════════════════════
-// 【工具列表】定义所有可展示的工具
+// 【工具列表】11个工具，每页8个，滑动翻页
 // ═══════════════════════════════════════
+
 const DEFAULT_TOOLS = [
-  { id: 'quickReply', title: '快捷回复', icon: 'chatHeart' },
-  { id: 'mood', title: '心情', icon: 'flowerCute' },
-  { id: 'relay', title: '接龙', icon: 'linkBunny' },
-  { id: 'transfer', title: '转账', icon: 'coinStar' },
-  { id: 'voiceText', title: '语音文字', icon: 'micCute' },
-  { id: 'clearContext', title: '清上下文', icon: 'broomSparkle' },
-  { id: 'relationship', title: '关系锁', icon: 'lockHeart' },
-  { id: 'call', title: '电话', icon: 'phoneHeart' },
-  { id: 'dice', title: '骰子', icon: 'diceFace' },
-  { id: 'rps', title: '猜拳', icon: 'handPeace' },
-  { id: 'mcp', title: 'MCP', icon: 'globeMandCute' }
+  { id: 'quickReply', title: '快捷回复', icon: 'chat' },
+  { id: 'task',       title: '小任务',   icon: 'task' },
+  { id: 'quiz',       title: '默契问答', icon: 'quiz' },
+  { id: 'transfer',   title: '转账',     icon: 'transfer' },
+  { id: 'voiceText',  title: '语音文字', icon: 'mic' },
+  { id: 'clearCtx',   title: '清上下文', icon: 'clean' },
+  { id: 'relLock',    title: '关系锁',   icon: 'lock' },
+  { id: 'phone',      title: '电话',     icon: 'phone' },
+  { id: 'dice',       title: '骰子',     icon: 'dice' },
+  { id: 'rps',        title: '猜拳',     icon: 'rps' },
+  { id: 'mcp',        title: 'MCP',      icon: 'mcp' },
 ];
 
+const TOOLS_PER_PAGE = 8;
+
 // ═══════════════════════════════════════
-// 【工具宫格】分页式 4×2 网格，跟手滑翻页
+// 【猫咪简笔画SVG图标】粗线条 stroke 2.5
+// viewBox 16×16 round caps，走 --accent
 // ═══════════════════════════════════════
-export function createThreadToolsGrid(state, options = {}) {
-  injectStyle();
-  const tools = normalizeArray(options.tools || DEFAULT_TOOLS);
-  const pages = splitPages(tools, PAGE_SIZE);
-  const root = el('section', 'thread-tools-root');
 
-  if (!tools.length) {
-    const emptyHint = el('div', 'thread-tools-empty-hint', '暂无工具～');
-    root.append(emptyHint);
-    return root;
-  }
+const TOOL_ICONS = {
+  chat: `<rect x="1" y="2.5" width="9" height="6.5" rx="3.5" fill="none" stroke="currentColor" stroke-width="2.5"/><path d="M3.5 9L2 12V9" fill="none" stroke="currentColor" stroke-width="2.5"/><circle cx="4.5" cy="5.5" r="0.7" fill="currentColor"/><circle cx="7" cy="5.5" r="0.7" fill="currentColor"/><path d="M5 7.2C5.3 7.8 5.8 7.8 6 7.2C6.2 7.8 6.7 7.8 7 7.2" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="6" y="4.5" width="9" height="6.5" rx="3.5" fill="var(--bg-surface,#fff)" stroke="currentColor" stroke-width="2.5"/>`,
+  task: `<path d="M4 4.5L2.5 1.5L6.5 3" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 4.5L13.5 1.5L9.5 3" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><rect x="3" y="4" width="10" height="10" rx="3" fill="none" stroke="currentColor" stroke-width="2.5"/><line x1="5.5" y1="7.5" x2="10.5" y2="7.5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><line x1="5.5" y1="10.5" x2="8.5" y2="10.5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>`,
+  quiz: `<path d="M5.5 3.5L4.5 1L7.5 2.5" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M10.5 3.5L11.5 1L8.5 2.5" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8" cy="9" r="5.5" fill="none" stroke="currentColor" stroke-width="2.5"/><path d="M6.5 7.5C6.5 6.5 7.2 6 8 6C8.8 6 9.5 6.5 9.5 7.5C9.5 8.2 8.5 8 8 9" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><circle cx="8" cy="11" r="0.8" fill="currentColor"/>`,
+  transfer: `<circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="2.5"/><text x="8" y="11" text-anchor="middle" font-size="8" font-weight="600" fill="currentColor" stroke="none">¥</text><circle cx="12.5" cy="3.5" r="0.7" fill="currentColor" opacity="0.3"/><circle cx="13.8" cy="5.2" r="0.7" fill="currentColor" opacity="0.3"/><circle cx="11.5" cy="2.5" r="0.7" fill="currentColor" opacity="0.3"/>`,
+  mic: `<rect x="6" y="1.5" width="4" height="7" rx="2" fill="none" stroke="currentColor" stroke-width="2.5"/><path d="M3.5 7C3.5 9.5 5.5 11.5 8 11.5C10.5 11.5 12.5 9.5 12.5 7" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><line x1="8" y1="11.5" x2="8" y2="14.5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><line x1="5.5" y1="14.5" x2="10.5" y2="14.5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>`,
+  clean: `<rect x="3" y="4" width="10" height="10.5" rx="3" fill="none" stroke="currentColor" stroke-width="2.5"/><line x1="2" y1="4.5" x2="14" y2="4.5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><path d="M6 4V2.5C6 1.8 6.8 1.5 8 1.5C9.2 1.5 10 1.8 10 2.5V4" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><circle cx="6" cy="8.5" r="0.6" fill="currentColor"/><circle cx="10" cy="8.5" r="0.6" fill="currentColor"/><path d="M6.5 10.5C7 11.2 7.5 11.2 8 10.5C8.5 11.2 9 11.2 9.5 10.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>`,
+  lock: `<path d="M8 3L5.5 5.5C4 7 4 9.5 5.5 11L8 13.5L10.5 11C12 9.5 12 7 10.5 5.5L8 3Z" fill="currentColor" opacity="0.1" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"/><circle cx="8" cy="8.5" r="1.5" fill="currentColor"/>`,
+  phone: `<path d="M3.5 2.5C3.5 1.5 4 1.5 5 1.5H7L8.5 5.5L6 7C6 7 7.5 10 10 12L12.5 9.5L15 11V13.5C15 14.5 14 15 13 15C7 15 1.5 9 1.5 3.5C1.5 2.5 2 2 3.5 2.5Z" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"/>`,
+  dice: `<rect x="2" y="2" width="12" height="12" rx="3" fill="none" stroke="currentColor" stroke-width="2.5"/><circle cx="5" cy="5" r="1" fill="currentColor"/><circle cx="11" cy="5" r="1" fill="currentColor"/><circle cx="8" cy="8" r="1" fill="currentColor"/><circle cx="5" cy="11" r="1" fill="currentColor"/><circle cx="11" cy="11" r="1" fill="currentColor"/>`,
+  rps: `<circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="2.5"/><circle cx="6" cy="7.5" r="0.8" fill="currentColor"/><circle cx="10" cy="7.5" r="0.8" fill="currentColor"/><path d="M6 10.5C6.8 11.5 7.5 11.5 8 10.5C8.5 11.5 9.2 11.5 10 10.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>`,
+  mcp: `<rect x="1.5" y="3" width="13" height="10" rx="3" fill="none" stroke="currentColor" stroke-width="2.5"/><path d="M5 6.5L3.5 8L5 9.5" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><line x1="7" y1="9.5" x2="11" y2="9.5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>`,
+};
 
-  const debounceMap = new Map();
-  const DEBOUNCE_MS = 300;
+// ═══════════════════════════════════════
+// 【创建图标DOM】
+// ═══════════════════════════════════════
 
-  const gridView = el('div', 'thread-tools-grid-view');
-  const header = el('div', 'thread-tools-header');
-  const titleWrap = el('div', 'thread-tools-title-wrap');
-  titleWrap.append(
-    el('div', 'thread-tools-title', options.title || '小工具'),
-    el('div', 'thread-tools-subtitle', options.subtitle || '点一下打开..')
-  );
-  const dots = el('div', 'thread-tools-dots');
-  pages.forEach((_, index) => {
-    const dot = el('span', 'thread-tools-dot');
-    if (index === 0) dot.classList.add('is-active');
-    dot.dataset.index = String(index);
-    dots.appendChild(dot);
-  });
-  if (pages.length <= 1) {
-    dots.style.display = 'none';
-  }
-  header.append(titleWrap, dots);
-
-  const carousel = el('div', 'thread-tools-carousel');
-  const track = el('div', 'thread-tools-track');
-  let currentPage = 0;
-  let isDragging = false;
-  let startX = 0;
-  let startY = 0;
-  let deltaX = 0;
-  let dragLocked = false;
-  let dragHorizontal = false;
-
-  let velocity = 0;
-  let lastMoveX = 0;
-  let cachedPageWidth = 0;
-  let rafId = null;
-
-  pages.forEach((pageTools) => {
-    const page = el('div', 'thread-tools-page');
-    const grid = el('div', 'thread-tools-grid');
-    pageTools.forEach((item) => {
-      const button = createToolIcon(item);
-      button.addEventListener('click', async () => {
-        const now = Date.now();
-        const last = debounceMap.get(item.id) || 0;
-        if (now - last < DEBOUNCE_MS) return;
-        debounceMap.set(item.id, now);
-        await handleToolClick(state, item, options, root, detailView, gridView);
-      });
-      grid.append(button);
-    });
-    page.append(grid);
-    track.append(page);
-  });
-  carousel.append(track);
-
-  const pageWidth = () => cachedPageWidth || carousel.offsetWidth || 280;
-  const snapTo = (index, animate) => {
-    const clamped = Math.max(0, Math.min(pages.length - 1, index));
-    const isChanging = clamped !== currentPage;
-    currentPage = clamped;
-    if (animate !== false) {
-      const spd = Math.abs(velocity);
-      const dur = isChanging && spd > 3 ? 220 : 300;
-      track.style.transition = `transform ${dur}ms cubic-bezier(0.25, 1, 0.5, 1)`;
-    } else {
-      track.style.transition = 'none';
-    }
-    track.style.transform = `translateX(-${clamped * 100}%)`;
-    dots.querySelectorAll('.thread-tools-dot').forEach((dot, i) => {
-      dot.classList.toggle('is-active', i === clamped);
-    });
-  };
-
-  const setDragOffset = (offsetPx) => {
-    const pw = pageWidth();
-    const base = -currentPage * pw;
-    const total = base + offsetPx;
-    const maxOffset = (pages.length - 1) * pw;
-    const clamped = Math.max(-maxOffset - 30, Math.min(30, total));
-    track.style.transition = 'none';
-    track.style.transform = `translateX(${clamped}px)`;
-  };
-
-  carousel.addEventListener('touchstart', (event) => {
-    if (pages.length < 2) return;
-    isDragging = true;
-    startX = event.touches[0].clientX;
-    startY = event.touches[0].clientY;
-    lastMoveX = startX;
-    deltaX = 0;
-    velocity = 0;
-    dragLocked = false;
-    dragHorizontal = false;
-    cachedPageWidth = carousel.offsetWidth || 280;
-    const tx = -currentPage * cachedPageWidth;
-    track.style.transition = 'none';
-    track.style.transform = `translateX(${tx}px)`;
-  }, { passive: true });
-
-  carousel.addEventListener('touchmove', (event) => {
-    if (!isDragging) return;
-    const currentX = event.touches[0].clientX;
-    const dx = currentX - startX;
-    const dy = event.touches[0].clientY - startY;
-    if (!dragLocked) {
-      if (Math.abs(dx) > 6 || Math.abs(dy) > 6) {
-        dragHorizontal = Math.abs(dx) > Math.abs(dy);
-        dragLocked = true;
-      }
-      return;
-    }
-    if (!dragHorizontal) return;
-    velocity = currentX - lastMoveX;
-    lastMoveX = currentX;
-    deltaX = dx;
-    event.preventDefault();
-    if (rafId) cancelAnimationFrame(rafId);
-    rafId = requestAnimationFrame(() => {
-      setDragOffset(deltaX);
-      rafId = null;
-    });
-  }, { passive: false });
-
-  carousel.addEventListener('touchend', () => {
-    if (!isDragging) return;
-    isDragging = false;
-    if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
-    if (!dragHorizontal) {
-      snapTo(currentPage);
-      return;
-    }
-    const threshold = pageWidth() * 0.22;
-    const velThreshold = 2.5;
-    if (deltaX < -threshold || (Math.abs(deltaX) > 10 && velocity < -velThreshold)) {
-      snapTo(currentPage + 1);
-    } else if (deltaX > threshold || (Math.abs(deltaX) > 10 && velocity > velThreshold)) {
-      snapTo(currentPage - 1);
-    } else {
-      snapTo(currentPage);
-    }
-  }, { passive: true });
-
-  carousel.addEventListener('touchcancel', () => {
-    if (!isDragging) return;
-    isDragging = false;
-    if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
-    snapTo(currentPage);
-  }, { passive: true });
-
-  dots.addEventListener('click', (event) => {
-    const dot = event.target.closest('.thread-tools-dot');
-    if (!dot) return;
-    snapTo(Number(dot.dataset.index || 0));
-  });
-
-  gridView.append(header, carousel);
-
-  const detailView = el('div', 'thread-tools-detail-view');
-  detailView.hidden = true;
-  const detailHeader = el('div', 'thread-tools-detail-header');
-  const backBtn = iconButton('chevron-left', '返回');
-  backBtn.addEventListener('click', () => {
-    switchToGrid(root, detailView, gridView);
-  });
-  const detailTitle = el('div', 'thread-tools-detail-title', '');
-  detailHeader.append(backBtn, detailTitle);
-  const detailBody = el('div', 'thread-tools-detail-body');
-  detailView.append(detailHeader, detailBody);
-  root.append(gridView, detailView);
-
-  return root;
+function createToolIcon(type) {
+  const wrap = document.createElement('div');
+  wrap.className = 'tool-icon-wrap';
+  wrap.innerHTML = '<svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">' + (TOOL_ICONS[type] || TOOL_ICONS.chat) + '</svg>';
+  return wrap;
 }
 
 // ═══════════════════════════════════════
-// 【视图切换】在图标网格和详情之间切换，带淡入淡出过渡
+// 【CSS注入】走全局变量，不硬编码颜色
 // ═══════════════════════════════════════
-function switchToDetail(root, detailView, gridView, title) {
-  const detailTitle = detailView.querySelector('.thread-tools-detail-title');
-  if (detailTitle) detailTitle.textContent = title || '';
 
-  gridView.style.transition = 'opacity 160ms ease';
-  gridView.style.opacity = '0';
-
-  setTimeout(() => {
-    gridView.hidden = true;
-    gridView.style.opacity = '';
-    gridView.style.transition = '';
-
-    detailView.hidden = false;
-    detailView.style.opacity = '0';
-    detailView.style.transition = 'opacity 200ms ease';
-    requestAnimationFrame(() => {
-      detailView.style.opacity = '1';
-    });
-  }, 160);
-}
-
-function switchToGrid(root, detailView, gridView) {
-  const detailBody = detailView.querySelector('.thread-tools-detail-body');
-  if (detailBody) detailBody.replaceChildren();
-
-  detailView.style.transition = 'opacity 160ms ease';
-  detailView.style.opacity = '0';
-
-  setTimeout(() => {
-    detailView.hidden = true;
-    detailView.style.opacity = '';
-    detailView.style.transition = '';
-
-    gridView.hidden = false;
-    gridView.style.opacity = '0';
-    gridView.style.transition = 'opacity 200ms ease';
-    requestAnimationFrame(() => {
-      gridView.style.opacity = '1';
-    });
-  }, 160);
-}
-
-// ═══════════════════════════════════════
-// 【工具点击】分发到对应动作或渲染详情
-// ═══════════════════════════════════════
-async function handleToolClick(state, item, options, root, detailView, gridView) {
-  const id = String(item?.id || '').trim();
-  if (!id) return;
-
-  if (typeof options.onPick === 'function') {
-    const handled = await options.onPick(item, state);
-    if (handled) return;
-  }
-
-  if (id === 'dice') {
-    await sendDiceMessage(state, { triggerAI: true });
-    return;
-  }
-  if (id === 'rps') {
-    await sendRpsMessage(state, { triggerAI: true });
-    return;
-  }
-  if (id === 'call') {
-    await mountThreadCall(document.body, {
-      state,
-      character: state?.character || null,
-      characterId: state?.characterId || '',
-      close: typeof options.onCloseCall === 'function' ? options.onCloseCall : null,
-      onReject: typeof options.onRejectCall === 'function' ? options.onRejectCall : null
-    });
-    return;
-  }
-
-  const detailBody = detailView.querySelector('.thread-tools-detail-body');
-  if (!detailBody) return;
-
-  const sheetOptions = {
-    ...options,
-    containerEl: detailBody,
-    onBack: () => switchToGrid(root, detailView, gridView)
-  };
-
-  const sheetMap = {
-    quickReply: openQuickReplySheet,
-    mood: openMoodSheet,
-    relay: openRelaySheet,
-    transfer: openTransferSheet,
-    voiceText: openVoiceTextSheet,
-    clearContext: openClearContextSheet,
-    mcp: openMcpSheet,
-    relationship: openRelationshipSheet
-  };
-
-  const handler = sheetMap[id];
-  if (handler) {
-    switchToDetail(root, detailView, gridView, item.title || '详情');
-    handler(state, sheetOptions);
-    return;
-  }
-
-  switchToGrid(root, detailView, gridView);
-  showToast('这个工具还没接好');
-}
-
-// ═══════════════════════════════════════
-// 【可爱图标】粗线条圆幼简笔画 SVG，每个只保留 2~3 个核心元素
-// ═══════════════════════════════════════
-function createCuteIcon(name) {
-  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  svg.setAttribute('viewBox', '0 0 48 48');
-  svg.setAttribute('fill', 'none');
-  svg.setAttribute('stroke', 'currentColor');
-  svg.setAttribute('stroke-width', '3');
-  svg.setAttribute('stroke-linecap', 'round');
-  svg.setAttribute('stroke-linejoin', 'round');
-  svg.setAttribute('aria-hidden', 'true');
-
-  const add = (tag, attrs) => {
-    const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
-    for (const [k, v] of Object.entries(attrs)) {
-      el.setAttribute(k, v);
-    }
-    svg.appendChild(el);
-    return el;
-  };
-
-  // ───────────────────
-  // 快捷回复：胖气泡 + 填充爱心
-  // ───────────────────
-  if (name === 'chatHeart') {
-    add('path', { d: 'M8 14C8 9.6 11.6 6 16 6H32C36.4 6 40 9.6 40 14V20C40 24.4 36.4 28 32 28H26L20 34V28C14 28 8 24 8 18V14Z' });
-    add('path', {
-      d: 'M24 15C24 12 21 10 19 12C17 14 18 17 24 22C30 17 31 14 29 12C27 10 24 12 24 15Z',
-      fill: 'var(--accent)',
-      stroke: 'none'
-    });
-    return svg;
-  }
-
-  // ───────────────────
-  // 心情：小花朵
-  // ───────────────────
-  if (name === 'flowerCute') {
-    add('path', { d: 'M24 26C24 22 21 19 24 16C27 19 24 22 24 26Z' });
-    add('path', { d: 'M24 26C20 26 17 23 14 26C17 29 20 26 24 26Z' });
-    add('path', { d: 'M24 26C24 30 27 33 24 36C21 33 24 30 24 26Z' });
-    add('path', { d: 'M24 26C28 26 31 29 34 26C31 23 28 26 24 26Z' });
-    add('path', { d: 'M24 26C21.5 24 19 21.5 16.5 23C18.5 25 20.5 25 24 26Z' });
-    add('path', { d: 'M24 26C26.5 24 29 21.5 31.5 23C29.5 25 27.5 25 24 26Z' });
-    add('path', { d: 'M24 26C21.5 28 19 30.5 16.5 29C18.5 27 20.5 27 24 26Z' });
-    add('path', { d: 'M24 26C26.5 28 29 30.5 31.5 29C29.5 27 27.5 27 24 26Z' });
-    add('circle', { cx: '24', cy: '26', r: '3', fill: 'var(--accent)', stroke: 'none' });
-    add('path', { d: 'M24 29V38', stroke: 'currentColor' });
-    add('path', { d: 'M20 34C22 33 24 34 24 34C24 34 26 33 28 34', stroke: 'currentColor' });
-    return svg;
-  }
-
-  // ───────────────────
-  // 接龙：三颗星星用虚线连起来
-  // ───────────────────
-  if (name === 'linkBunny') {
-    add('path', { d: 'M11 24L24 16L37 24L24 32Z', 'stroke-dasharray': '4 3' });
-    add('path', { d: 'M24 16L24 8L20 13L16 8L20 16H16L11 19L16 22H20L20 28L24 23L28 28L28 22H32L37 19L32 16H28L24 8' });
-    add('path', { d: 'M10 22L14 16M34 16L38 22' });
-    return svg;
-  }
-
-  // ───────────────────
-  // 转账：硬币 + 星星
-  // ───────────────────
-  if (name === 'coinStar') {
-    add('circle', { cx: '24', cy: '24', r: '14' });
-    add('path', {
-      d: 'M24 16L26 21H31L27 24.5L28.5 30L24 26.5L19.5 30L21 24.5L17 21H22Z',
-      fill: 'var(--accent)',
-      stroke: 'none'
-    });
-    return svg;
-  }
-
-  // ───────────────────
-  // 语音文字：铅笔 + 声波
-  // ───────────────────
-  if (name === 'micCute') {
-    add('path', { d: 'M10 38L30 18L34 22L14 42L8 44L10 38Z' });
-    add('path', { d: 'M28 16L32 20' });
-    add('path', { d: 'M32 12C34 11 36 12.5 36 14.5' });
-    add('path', { d: 'M35 9C38 7.5 42 9 42 12.5' });
-    return svg;
-  }
-
-  // ───────────────────
-  // 清上下文：星星扫帚
-  // ───────────────────
-  if (name === 'broomSparkle') {
-    add('path', { d: 'M12 36L32 12' });
-    add('path', { d: 'M30 10L34 6L36 12L40 14L34 16L30 10Z' });
-    add('path', { d: 'M10 38C8 36 8 33 12 32C16 31 18 34 16 37C14 40 10 40 10 38Z' });
-    add('circle', { cx: '38', cy: '28', r: '1.5', fill: 'var(--accent)', stroke: 'none' });
-    return svg;
-  }
-
-  // ───────────────────
-  // 关系锁：圆锁 + 爱心
-  // ───────────────────
-  if (name === 'lockHeart') {
-    add('rect', { x: '12', y: '22', width: '24', height: '18', rx: '6' });
-    add('path', { d: 'M18 22V16C18 12 21 8 24 8C27 8 30 12 30 16V22' });
-    add('path', {
-      d: 'M24 30C24 28 22.5 26 21 27.5C19.5 29 20.5 31.5 24 34.5C27.5 31.5 28.5 29 27 27.5C25.5 26 24 28 24 30Z',
-      fill: 'var(--accent)',
-      stroke: 'none'
-    });
-    return svg;
-  }
-
-  // ───────────────────
-  // 电话：听筒 + 爱心
-  // ───────────────────
-  if (name === 'phoneHeart') {
-    add('path', { d: 'M10 14C10 11 13 8 16 8L19 14L16 18C18 21 22 25 24 28L28 25L34 28C34 31 31 34 28 34C20 34 10 24 10 14Z' });
-    add('path', {
-      d: 'M36 10C36 8 34.5 6 33 7.5C31.5 9 32.5 11.5 36 14.5C39.5 11.5 40.5 9 39 7.5C37.5 6 36 8 36 10Z',
-      fill: 'var(--accent)',
-      stroke: 'none'
-    });
-    return svg;
-  }
-
-  // ───────────────────
-  // 骰子：圆角方块 + 点
-  // ───────────────────
-  if (name === 'diceFace') {
-    add('rect', { x: '8', y: '8', width: '32', height: '32', rx: '8' });
-    add('circle', { cx: '17', cy: '17', r: '2.5', fill: 'currentColor', stroke: 'none' });
-    add('circle', { cx: '31', cy: '17', r: '2.5', fill: 'currentColor', stroke: 'none' });
-    add('circle', { cx: '17', cy: '31', r: '2.5', fill: 'currentColor', stroke: 'none' });
-    add('circle', { cx: '31', cy: '31', r: '2.5', fill: 'currentColor', stroke: 'none' });
-    add('circle', { cx: '24', cy: '24', r: '2.5', fill: 'currentColor', stroke: 'none' });
-    return svg;
-  }
-
-  // ───────────────────
-  // 猜拳：剪刀手
-  // ───────────────────
-  if (name === 'handPeace') {
-    add('path', { d: 'M18 32V18L16 14' });
-    add('path', { d: 'M18 18V10C18 8.5 19.5 7 21 7C22.5 7 24 8.5 24 10V20' });
-    add('path', { d: 'M26 10C26 8.5 27.5 7 29 7C30.5 7 32 8.5 32 10V22' });
-    add('path', { d: 'M26 14C28 12 30 12 32 14L24 32C21 35 17 35 14 33C11 31 10 27 13 24L18 18' });
-    add('circle', { cx: '36', cy: '14', r: '2', fill: 'var(--accent)', stroke: 'none' });
-    return svg;
-  }
-
-  // ───────────────────
-  // MCP：地球 + 小花
-  // ───────────────────
-  if (name === 'globeMandCute') {
-    add('circle', { cx: '24', cy: '24', r: '15' });
-    add('path', { d: 'M9 24H39' });
-    add('path', { d: 'M24 9C28 14 30 19 30 24C30 29 28 34 24 39' });
-    add('path', { d: 'M24 9C20 14 18 19 18 24C18 29 20 34 24 39' });
-    add('circle', { cx: '36', cy: '36', r: '5', fill: 'var(--accent)', stroke: 'none' });
-    add('circle', { cx: '36', cy: '33', r: '1.5', fill: 'var(--accent-light)', stroke: 'none' });
-    add('circle', { cx: '33.5', cy: '35.5', r: '1.5', fill: 'var(--accent-light)', stroke: 'none' });
-    add('circle', { cx: '38.5', cy: '35.5', r: '1.5', fill: 'var(--accent-light)', stroke: 'none' });
-    add('circle', { cx: '34.5', cy: '38', r: '1.5', fill: 'var(--accent-light)', stroke: 'none' });
-    add('circle', { cx: '37.5', cy: '38', r: '1.5', fill: 'var(--accent-light)', stroke: 'none' });
-    return svg;
-  }
-
-  // ───────────────────
-  // 兜底：星星
-  // ───────────────────
-  add('path', { d: 'M24 6L28 18H40L30 26L34 38L24 30L14 38L18 26L8 18H20Z' });
-  return svg;
-}
-
-// ═══════════════════════════════════════
-// 【小图标按钮】分页里的单个工具
-// ═══════════════════════════════════════
-function createToolIcon(item) {
-  const button = el('button', 'thread-tool-icon-btn');
-  button.type = 'button';
-  const iconWrap = el('span', 'thread-tool-icon-wrap');
-  iconWrap.appendChild(createCuteIcon(item.icon || 'chatHeart'));
-  const label = el('span', 'thread-tool-icon-label', item.title || '');
-  button.append(iconWrap, label);
-  return button;
-}
-
-// ═══════════════════════════════════════
-// 【公共组件】图标按钮
-// ═══════════════════════════════════════
-function iconButton(iconName, label) {
-  const button = el('button', 'thread-tools-icon-btn');
-  button.type = 'button';
-  button.setAttribute('aria-label', label || iconName);
-  button.appendChild(createIcon(iconName, 18));
-  return button;
-}
-
-// ═══════════════════════════════════════
-// 【工具函数】分页、数组和 DOM
-// ═══════════════════════════════════════
-function splitPages(items, size) {
-  const result = [];
-  for (let i = 0; i < items.length; i += size) {
-    result.push(items.slice(i, i + size));
-  }
-  return result.length ? result : [[]];
-}
-
-function normalizeArray(value) {
-  return Array.isArray(value) ? value.filter(Boolean) : [];
-}
-
-function el(tag, className = '', text = '') {
-  const node = document.createElement(tag);
-  if (className) node.className = className;
-  if (text !== '') node.textContent = text;
-  return node;
-}
-
-// ═══════════════════════════════════════
-// 【样式】分页网格、翻页指示器、详情页、空列表兜底
-// ═══════════════════════════════════════
-function injectStyle() {
-  if (document.getElementById(STYLE_ID)) return;
+function injectToolsCSS() {
+  if (document.getElementById('thread-tools-style')) return;
   const style = document.createElement('style');
-  style.id = STYLE_ID;
+  style.id = 'thread-tools-style';
   style.textContent = `
-    .thread-tools-root{
-      display:flex;
-      flex-direction:column;
-      min-height:0;
-      color:var(--text-primary);
-    }
-    .thread-tools-empty-hint{
-      padding:40px 20px;
-      text-align:center;
-      color:var(--text-hint, var(--text-secondary));
-      font-size:14px;
-      line-height:1.6;
-    }
-    .thread-tools-grid-view,
-    .thread-tools-detail-view{
-      padding:6px 20px 20px;
-    }
-    .thread-tools-header{
-      display:grid;
-      grid-template-columns:minmax(0,1fr) auto;
-      align-items:center;
-      gap:12px;
-      margin-bottom:14px;
-    }
-    .thread-tools-title-wrap{
-      min-width:0;
-      display:flex;
-      flex-direction:column;
-      gap:4px;
-    }
-    .thread-tools-title{
-      color:var(--text-primary);
-      font-size:17px;
-      font-weight:600;
-      line-height:1.35;
-    }
-    .thread-tools-subtitle{
-      color:var(--text-secondary);
-      font-size:13px;
-      line-height:1.5;
-    }
-    .thread-tools-dots{
-      display:inline-flex;
-      align-items:center;
-      gap:6px;
-    }
-    .thread-tools-dot{
-      width:7px;
-      height:7px;
-      border-radius:999px;
-      background:var(--text-secondary);
-      opacity:0.3;
-      transition:all 300ms cubic-bezier(0.25,1,0.5,1);
-    }
-    .thread-tools-dot.is-active{
-      width:18px;
-      opacity:1;
-      background:var(--accent);
-    }
-    .thread-tools-carousel{
-      overflow:hidden;
-      border-radius:20px;
-      touch-action:pan-y;
-      will-change:transform;
-    }
-    .thread-tools-track{
-      display:flex;
-      will-change:transform;
-      transition:transform 300ms cubic-bezier(0.25,1,0.5,1);
-    }
-    .thread-tools-page{
-      flex:0 0 100%;
-      min-width:100%;
-    }
-    .thread-tools-grid{
-      display:grid;
-      grid-template-columns:repeat(4,1fr);
-      grid-template-rows:repeat(2,auto);
-      gap:10px;
-    }
-    .thread-tool-icon-btn{
-      display:flex;
-      flex-direction:column;
-      align-items:center;
-      gap:8px;
-      padding:14px 4px 12px;
-      border-radius:22px;
-      background:var(--bg-card, var(--bg-surface));
-      color:var(--text-primary);
-      box-shadow:var(--shadow-card);
-      transition:transform 180ms cubic-bezier(0.25,1,0.5,1), box-shadow 180ms ease;
-      touch-action:manipulation;
-      -webkit-tap-highlight-color:transparent;
-    }
-    .thread-tool-icon-btn:active{
-      transform:scale(0.92);
-      box-shadow:var(--shadow-float);
-    }
-    .thread-tool-icon-wrap{
-      width:56px;
-      height:56px;
-      display:inline-flex;
-      align-items:center;
-      justify-content:center;
-      border-radius:18px;
-      background:var(--bg-card, var(--bg-surface));
-      color:var(--accent);
-      box-shadow:var(--shadow-card);
-      transition:all 180ms ease;
-    }
-    .thread-tool-icon-btn:active .thread-tool-icon-wrap{
-      transform:scale(1.08);
-      background:var(--accent-light);
-    }
-    .thread-tool-icon-wrap svg{
-      width:36px;
-      height:36px;
-    }
-    .thread-tool-icon-label{
-      max-width:72px;
-      color:var(--text-primary);
-      font-size:12px;
-      font-weight:500;
-      line-height:1.3;
-      text-align:center;
-      overflow:hidden;
-      white-space:nowrap;
-      text-overflow:ellipsis;
-    }
-    .thread-tools-detail-view{
-      animation:toolDetailIn 240ms cubic-bezier(0.25,1,0.5,1) both;
-    }
-    .thread-tools-detail-header{
-      display:grid;
-      grid-template-columns:auto minmax(0,1fr);
-      align-items:center;
-      gap:10px;
-      margin-bottom:16px;
-    }
-    .thread-tools-detail-title{
-      min-width:0;
-      color:var(--text-primary);
-      font-size:17px;
-      font-weight:600;
-      line-height:1.35;
-      overflow:hidden;
-      white-space:nowrap;
-      text-overflow:ellipsis;
-    }
-    .thread-tools-icon-btn{
-      width:44px;
-      height:44px;
-      display:inline-flex;
-      align-items:center;
-      justify-content:center;
-      border-radius:14px;
-      background:var(--bg-card, var(--bg-surface));
-      color:var(--text-primary);
-      box-shadow:var(--shadow-card);
-      transition:all 180ms cubic-bezier(0.25,1,0.5,1);
-      touch-action:manipulation;
-    }
-    .thread-tools-icon-btn:active{
-      transform:scale(0.94);
-    }
-    .thread-tools-detail-body{
-      display:flex;
-      flex-direction:column;
-      gap:10px;
-    }
-    @keyframes toolDetailIn{
-      from{ opacity:0; transform:translateX(16px); }
-      to{ opacity:1; transform:translateX(0); }
-    }
-    @media(max-width:430px){
-      .thread-tool-icon-btn{
-        padding:10px 2px 8px;
-      }
-      .thread-tool-icon-wrap{
-        width:48px;
-        height:48px;
-      }
-      .thread-tool-icon-wrap svg{
-        width:30px;
-        height:30px;
-      }
-      .thread-tool-icon-label{
-        font-size:11px;
-      }
-    }
-    @media(prefers-reduced-motion:reduce){
-      .thread-tool-icon-btn,
-      .thread-tools-icon-btn,
-      .thread-tools-dot,
-      .thread-tools-track,
-      .thread-tool-icon-wrap,
-      .thread-tools-detail-view,
-      .thread-tools-grid-view{
-        animation:none !important;
-        transition:none !important;
-      }
-    }
+    .thread-tools-panel{position:absolute;inset:0;z-index:100;display:flex;flex-direction:column;background:var(--bg-base,#faf5f0);opacity:0;transform:translateY(100%);transition:all 0.3s cubic-bezier(0.34,1.56,0.64,1);pointer-events:none}
+    .thread-tools-panel.is-open{opacity:1;transform:translateY(0);pointer-events:auto}
+    .tools-carousel-wrap{flex:1;overflow:hidden;position:relative}
+    .tools-carousel{display:flex;transition:transform 0.35s cubic-bezier(0.25,0.46,0.45,0.94);height:100%;will-change:transform}
+    .tools-page{min-width:100%;display:grid;grid-template-columns:repeat(4,1fr);grid-template-rows:repeat(2,1fr);gap:12px;padding:12px 16px;align-content:center;justify-items:center}
+    .tool-cell{width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:14px 2px;border-radius:var(--radius-lg,20px);background:var(--bg-surface,#fff);box-shadow:0 2px 10px rgba(0,0,0,0.05);cursor:pointer;transition:all 0.2s cubic-bezier(0.34,1.56,0.64,1);-webkit-tap-highlight-color:transparent;user-select:none}
+    .tool-cell:active{transform:scale(0.92);box-shadow:inset 0 2px 6px rgba(0,0,0,0.06)}
+    .tool-icon-wrap{width:36px;height:36px;display:flex;align-items:center;justify-content:center;color:var(--accent,#9F8F82);background:var(--bg-base,#faf5f0);border-radius:12px;padding:4px}
+    .tool-icon-wrap svg{width:100%;height:100%}
+    .tool-name{font-size:11px;font-weight:500;color:var(--text-secondary,#888);line-height:1.2;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;padding:0 2px}
+    .tools-dots{display:flex;justify-content:center;align-items:center;gap:6px;padding:6px 0 18px;flex-shrink:0}
+    .tools-dot{width:6px;height:6px;border-radius:50%;background:var(--text-placeholder,#ccc);transition:all 0.3s ease}
+    .tools-dot.is-active{width:18px;border-radius:3px;background:var(--accent,#9F8F82)}
+    .thread-tools-detail-header{display:flex;align-items:center;padding:14px 16px;gap:12px;flex-shrink:0}
+    .thread-tools-detail-header .back-btn{width:34px;height:34px;border-radius:50%;background:var(--bg-surface,#fff);box-shadow:0 2px 8px rgba(0,0,0,0.06);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text-secondary,#888);border:none;transition:all 0.2s ease;-webkit-tap-highlight-color:transparent}
+    .thread-tools-detail-header .back-btn:active{transform:scale(0.92)}
+    .thread-tools-detail-header .back-btn svg{width:18px;height:18px}
+    .thread-tools-detail-header .detail-title{font-size:17px;font-weight:600;color:var(--text-primary,#333)}
   `;
   document.head.appendChild(style);
 }
 
-// 依赖：../../core/ui.js(createIcon,showToast)；./thread-sheets.js(openQuickReplySheet,openMoodSheet,openRelaySheet,openTransferSheet,openClearContextSheet,openMcpSheet,openVoiceTextSheet,openRelationshipSheet)；./thread-call.js(mountThreadCall)；./thread-actions.js(sendDiceMessage,sendRpsMessage)
+// ═══════════════════════════════════════
+// 【翻页触摸滑动】丝滑跟手+边界阻尼
+// ═══════════════════════════════════════
+
+let currentPage = 0;
+let totalPages = 1;
+let touchStartX = 0;
+let touchDeltaX = 0;
+let isSwiping = false;
+
+function setupSwipe(carousel, dotsContainer) {
+  const wrap = carousel.parentElement;
+  wrap.addEventListener('touchstart', (e) => {
+    touchStartX = e.touches[0].clientX;
+    touchDeltaX = 0;
+    isSwiping = true;
+    carousel.style.transition = 'none';
+  }, { passive: true });
+  wrap.addEventListener('touchmove', (e) => {
+    if (!isSwiping) return;
+    touchDeltaX = e.touches[0].clientX - touchStartX;
+    const atStart = currentPage === 0 && touchDeltaX > 0;
+    const atEnd = currentPage === totalPages - 1 && touchDeltaX < 0;
+    const damped = (atStart || atEnd) ? touchDeltaX * 0.3 : touchDeltaX;
+    carousel.style.transform = 'translateX(calc(' + (-currentPage * 100) + '% + ' + damped + 'px))';
+  }, { passive: true });
+  wrap.addEventListener('touchend', () => {
+    if (!isSwiping) return;
+    isSwiping = false;
+    carousel.style.transition = 'transform 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94)';
+    const threshold = wrap.clientWidth * 0.2;
+    if (touchDeltaX < -threshold && currentPage < totalPages - 1) currentPage++;
+    else if (touchDeltaX > threshold && currentPage > 0) currentPage--;
+    carousel.style.transform = 'translateX(' + (-currentPage * 100) + '%)';
+    updateDots(dotsContainer);
+  });
+}
+
+function updateDots(container) {
+  if (!container) return;
+  container.querySelectorAll('.tools-dot').forEach((d, i) => d.classList.toggle('is-active', i === currentPage));
+}
+
+// ═══════════════════════════════════════
+// 【发送消息到聊天】修正选择器
+// ═══════════════════════════════════════
+
+function sendMessageToChat(text) {
+  const textarea = document.querySelector('textarea.chat-thread-input');
+  if (!textarea) return;
+  textarea.value = text;
+  textarea.dispatchEvent(new Event('input', { bubbles: true }));
+  setTimeout(() => {
+    const btn = document.querySelector('.chat-thread-send');
+    if (btn) btn.click();
+  }, 100);
+}
+
+// ═══════════════════════════════════════
+// 【关掉详情面板，回到工具网格】
+// ═══════════════════════════════════════
+
+function closeDetailAndShowGrid(panelEl) {
+  panelEl.classList.remove('is-open');
+  setTimeout(() => {
+    panelEl.remove();
+    showToolsPanel();
+  }, 300);
+}
+
+// ═══════════════════════════════════════
+// 【小任务sheet】预设任务 + 自定义输入
+// ═══════════════════════════════════════
+
+function openTaskSheet() {
+  const content = document.createElement('div');
+  content.style.cssText = 'display:flex;flex-direction:column;gap:14px;padding-top:8px;';
+
+  const grid = document.createElement('div');
+  grid.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:10px;';
+
+  const presets = [
+    { text: '提醒我喝水', prompt: '提醒我要多喝水，关心一下我~' },
+    { text: '帮我记件事', prompt: '帮我记一件重要的事，我接下来要跟你说~' },
+    { text: '讲个小故事', prompt: '给我讲一个温馨可爱的小故事吧~' },
+    { text: '给我加油', prompt: '我今天有点累，给我加油打气吧~' },
+    { text: '哄我睡觉', prompt: '现在该睡觉了，哄我入睡吧~' },
+    { text: '帮我做决定', prompt: '我有两个选择拿不定主意，帮我选一个~' },
+  ];
+
+  presets.forEach(function(p) {
+    const card = document.createElement('div');
+    card.style.cssText = 'padding:16px 12px;border-radius:var(--radius-lg,16px);background:var(--bg-surface,#fff);box-shadow:0 2px 8px rgba(0,0,0,0.05);cursor:pointer;transition:all 0.2s cubic-bezier(0.34,1.56,0.64,1);text-align:center;font-size:14px;color:var(--text-primary,#333);font-weight:500;-webkit-tap-highlight-color:transparent;';
+    card.textContent = p.text;
+    card.addEventListener('touchstart', function() { card.style.transform = 'scale(0.95)'; }, { passive: true });
+    card.addEventListener('touchend', function() { card.style.transform = ''; });
+    card.addEventListener('click', function() {
+      sendMessageToChat(p.prompt);
+      const panel = content.closest('.thread-tools-panel');
+      if (panel) { panel.classList.remove('is-open'); setTimeout(function() { panel.remove(); }, 300); }
+    });
+    grid.appendChild(card);
+  });
+
+  content.appendChild(grid);
+
+  const inputWrap = document.createElement('div');
+  inputWrap.style.cssText = 'display:flex;gap:8px;margin-top:4px;';
+
+  const input = document.createElement('textarea');
+  input.placeholder = '或者自己输入任务...';
+  input.style.cssText = 'flex:1;padding:12px;border-radius:var(--radius-md,12px);background:var(--bg-surface,#fff);box-shadow:0 2px 8px rgba(0,0,0,0.05);font-size:14px;color:var(--text-primary,#333);resize:none;height:44px;outline:none;border:none;font-family:inherit;';
+
+  const sendBtn = document.createElement('button');
+  sendBtn.textContent = '发送';
+  sendBtn.style.cssText = 'padding:0 20px;height:44px;border-radius:var(--radius-md,12px);background:var(--accent,#9F8F82);color:#fff;font-size:14px;font-weight:500;border:none;cursor:pointer;white-space:nowrap;transition:all 0.2s ease;';
+  sendBtn.addEventListener('click', function() {
+    var t = input.value.trim();
+    if (!t) return;
+    sendMessageToChat(t);
+    var panel = content.closest('.thread-tools-panel');
+    if (panel) { panel.classList.remove('is-open'); setTimeout(function() { panel.remove(); }, 300); }
+  });
+
+  inputWrap.appendChild(input);
+  inputWrap.appendChild(sendBtn);
+  content.appendChild(inputWrap);
+
+  const panel = showToolDetail(content, '小任务');
+  if (panel) {
+    var backBtn = panel.querySelector('.back-btn');
+    if (backBtn) {
+      backBtn.replaceWith(backBtn.cloneNode(true));
+      var freshBtn = panel.querySelector('.back-btn');
+      freshBtn.addEventListener('click', function() { closeDetailAndShowGrid(panel); });
+    }
+  }
+}
+
+// ═══════════════════════════════════════
+// 【默契问答sheet】选范围后让AI出题
+// ═══════════════════════════════════════
+
+function openQuizSheet() {
+  const content = document.createElement('div');
+  content.style.cssText = 'display:flex;flex-direction:column;gap:10px;padding-top:8px;';
+
+  const categories = [
+    { title: '你有多了解我', desc: 'AI出题考你，看它对你了解多少', prompt: '我们来玩默契问答吧~你来出题考考我，看你对我有多了解！问我一些关于我的喜好的问题，我来回答~' },
+    { title: '我有多了解你', desc: '你来答题，看对AI了解多少', prompt: '我们来玩默契问答吧~我来出题考考你，看我对你有多了解！问我一些关于你的问题，看你记不记得~' },
+    { title: '生活小测验', desc: '聊聊日常生活里的小事', prompt: '我们来玩默契问答吧~聊一聊日常生活的小事，你问我一些关于生活习惯、喜好的问题~' },
+    { title: '脑洞大开', desc: '奇奇怪怪的假设问题', prompt: '我们来玩默契问答吧~来点脑洞大开的假设问题！比如如果我是动物会是什么、如果穿越到古代会干什么之类的~' },
+    { title: '情感默契', desc: '测测彼此的心意', prompt: '我们来玩默契问答吧~来测测彼此的情感默契！你问我一些关于感情、心情、小确幸的问题~' },
+    { title: '随机挑战', desc: '随机来点刺激的', prompt: '我们来玩默契问答吧~来个随机挑战！你可以随便问我任何有趣的问题，越出乎意料越好~' },
+  ];
+
+  categories.forEach(function(cat) {
+    const card = document.createElement('div');
+    card.style.cssText = 'padding:16px;border-radius:var(--radius-lg,16px);background:var(--bg-surface,#fff);box-shadow:0 2px 8px rgba(0,0,0,0.05);cursor:pointer;transition:all 0.2s cubic-bezier(0.34,1.56,0.64,1);-webkit-tap-highlight-color:transparent;';
+    var titleDiv = document.createElement('div');
+    titleDiv.style.cssText = 'font-size:15px;color:var(--text-primary,#333);font-weight:500;';
+    titleDiv.textContent = cat.title;
+    var descDiv = document.createElement('div');
+    descDiv.style.cssText = 'font-size:12px;color:var(--text-secondary,#888);margin-top:4px;';
+    descDiv.textContent = cat.desc;
+    card.appendChild(titleDiv);
+    card.appendChild(descDiv);
+    card.addEventListener('touchstart', function() { card.style.transform = 'scale(0.97)'; }, { passive: true });
+    card.addEventListener('touchend', function() { card.style.transform = ''; });
+    card.addEventListener('click', function() {
+      sendMessageToChat(cat.prompt);
+      var panel = content.closest('.thread-tools-panel');
+      if (panel) { panel.classList.remove('is-open'); setTimeout(function() { panel.remove(); }, 300); }
+    });
+    content.appendChild(card);
+  });
+
+  const panel = showToolDetail(content, '默契问答');
+  if (panel) {
+    var backBtn = panel.querySelector('.back-btn');
+    if (backBtn) {
+      backBtn.replaceWith(backBtn.cloneNode(true));
+      var freshBtn = panel.querySelector('.back-btn');
+      freshBtn.addEventListener('click', function() { closeDetailAndShowGrid(panel); });
+    }
+  }
+}
+
+// ═══════════════════════════════════════
+// 【工具点击处理】
+// ═══════════════════════════════════════
+
+function handleToolClick(toolId) {
+  switch (toolId) {
+    case 'quickReply': openQuickReplySheet(); break;
+    case 'task':       openTaskSheet(); break;
+    case 'quiz':       openQuizSheet(); break;
+    case 'transfer':   openTransferSheet(); break;
+    case 'voiceText':  openVoiceTextSheet(); break;
+    case 'clearCtx':   openClearContextSheet(); break;
+    case 'relLock':    openRelationshipLockSheet(); break;
+    case 'phone':      openPhoneMode(); break;
+    case 'dice':       showDiceResult(); break;
+    case 'rps':        showRPSResult(); break;
+    case 'mcp':        showMCPNotice(); break;
+    default: break;
+  }
+}
+
+// ═══════════════════════════════════════
+// 【骰子弹窗】随机1-6
+// ═══════════════════════════════════════
+
+function showDiceResult() {
+  const result = Math.floor(Math.random() * 6) + 1;
+  const el = document.createElement('div');
+  el.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) scale(0.85);background:var(--bg-surface,#fff);border-radius:var(--radius-xl,28px);box-shadow:0 8px 32px rgba(0,0,0,0.12);padding:32px 40px;text-align:center;z-index:9999;opacity:0;transition:all 0.3s cubic-bezier(0.34,1.56,0.64,1);';
+  el.innerHTML = '<svg viewBox="0 0 16 16" width="48" height="48" fill="none" stroke="var(--accent,#9F8F82)" stroke-width="1.5"><rect x="2" y="2" width="12" height="12" rx="3"/><circle cx="5" cy="5" r="1" fill="var(--accent,#9F8F82)" stroke="none"/><circle cx="11" cy="5" r="1" fill="var(--accent,#9F8F82)" stroke="none"/><circle cx="8" cy="8" r="1" fill="var(--accent,#9F8F82)" stroke="none"/><circle cx="5" cy="11" r="1" fill="var(--accent,#9F8F82)" stroke="none"/><circle cx="11" cy="11" r="1" fill="var(--accent,#9F8F82)" stroke="none"/></svg><div style="font-size:28px;font-weight:600;color:var(--text-primary,#333);margin-top:12px;">' + result + '</div><div style="font-size:13px;color:var(--text-secondary,#888);margin-top:4px;">掷出了 ' + result + ' 点</div>';
+  document.body.appendChild(el);
+  requestAnimationFrame(function() { el.style.opacity = '1'; el.style.transform = 'translate(-50%,-50%) scale(1)'; });
+  setTimeout(function() { el.style.opacity = '0'; el.style.transform = 'translate(-50%,-50%) scale(0.85)'; setTimeout(function() { el.remove(); }, 300); }, 1500);
+}
+
+// ═══════════════════════════════════════
+// 【猜拳弹窗】随机石头剪刀布
+// ═══════════════════════════════════════
+
+function showRPSResult() {
+  const choices = ['石头', '剪刀', '布'];
+  const aiIdx = Math.floor(Math.random() * 3);
+  const el = document.createElement('div');
+  el.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) scale(0.85);background:var(--bg-surface,#fff);border-radius:var(--radius-xl,28px);box-shadow:0 8px 32px rgba(0,0,0,0.12);padding:32px 40px;text-align:center;z-index:9999;opacity:0;transition:all 0.3s cubic-bezier(0.34,1.56,0.64,1);';
+  const svgIcons = [
+    '<svg viewBox="0 0 16 16" width="48" height="48" fill="none" stroke="var(--accent,#9F8F82)" stroke-width="2" stroke-linecap="round"><circle cx="8" cy="9" r="5"/></svg>',
+    '<svg viewBox="0 0 16 16" width="48" height="48" fill="none" stroke="var(--accent,#9F8F82)" stroke-width="2" stroke-linecap="round"><path d="M5 10L6.5 5M11 10L9.5 5M6.5 5L8 3L9.5 5"/></svg>',
+    '<svg viewBox="0 0 16 16" width="48" height="48" fill="none" stroke="var(--accent,#9F8F82)" stroke-width="2" stroke-linecap="round"><path d="M3 8C3 4 5 2 8 2C11 2 13 4 13 8V10C13 12 11 13 8 13C5 13 3 12 3 10Z"/></svg>',
+  ];
+  el.innerHTML = svgIcons[aiIdx] + '<div style="font-size:28px;font-weight:600;color:var(--text-primary,#333);margin-top:12px;">' + choices[aiIdx] + '</div><div style="font-size:13px;color:var(--text-secondary,#888);margin-top:4px;">AI 出了 ' + choices[aiIdx] + '</div>';
+  document.body.appendChild(el);
+  requestAnimationFrame(function() { el.style.opacity = '1'; el.style.transform = 'translate(-50%,-50%) scale(1)'; });
+  setTimeout(function() { el.style.opacity = '0'; el.style.transform = 'translate(-50%,-50%) scale(0.85)'; setTimeout(function() { el.remove(); }, 300); }, 1500);
+}
+
+// ═══════════════════════════════════════
+// 【MCP占位提示】
+// ═══════════════════════════════════════
+
+function showMCPNotice() {
+  const el = document.createElement('div');
+  el.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) scale(0.85);background:var(--bg-surface,#fff);border-radius:var(--radius-xl,28px);box-shadow:0 8px 32px rgba(0,0,0,0.12);padding:24px 32px;text-align:center;z-index:9999;opacity:0;transition:all 0.3s cubic-bezier(0.34,1.56,0.64,1);font-size:15px;color:var(--text-secondary,#888);';
+  el.textContent = 'MCP 功能开发中~';
+  document.body.appendChild(el);
+  requestAnimationFrame(function() { el.style.opacity = '1'; el.style.transform = 'translate(-50%,-50%) scale(1)'; });
+  setTimeout(function() { el.style.opacity = '0'; el.style.transform = 'translate(-50%,-50%) scale(0.85)'; setTimeout(function() { el.remove(); }, 300); }, 1500);
+}
+
+// ═══════════════════════════════════════
+// 【面板显示/隐藏】工具网格 + 详情页
+// ═══════════════════════════════════════
+
+let toolsPanelEl = null;
+
+export function showToolsPanel() {
+  if (!toolsPanelEl) {
+    toolsPanelEl = document.createElement('div');
+    toolsPanelEl.className = 'thread-tools-panel';
+  }
+  if (toolsPanelEl._isAnimating) return;
+  toolsPanelEl._isAnimating = true;
+  setTimeout(function() { toolsPanelEl._isAnimating = false; }, 400);
+
+  injectToolsCSS();
+  currentPage = 0;
+
+  const pages = [];
+  for (let i = 0; i < DEFAULT_TOOLS.length; i += TOOLS_PER_PAGE) {
+    pages.push(DEFAULT_TOOLS.slice(i, i + TOOLS_PER_PAGE));
+  }
+  totalPages = pages.length;
+
+  toolsPanelEl.innerHTML = '';
+
+  const carouselWrap = document.createElement('div');
+  carouselWrap.className = 'tools-carousel-wrap';
+  const carousel = document.createElement('div');
+  carousel.className = 'tools-carousel';
+
+  pages.forEach(function(pageTools) {
+    const pageEl = document.createElement('div');
+    pageEl.className = 'tools-page';
+    pageTools.forEach(function(tool) {
+      const cell = document.createElement('div');
+      cell.className = 'tool-cell';
+      cell.appendChild(createToolIcon(tool.icon));
+      const nameEl = document.createElement('div');
+      nameEl.className = 'tool-name';
+      nameEl.textContent = tool.title;
+      cell.appendChild(nameEl);
+      cell.addEventListener('click', function() { handleToolClick(tool.id); hidePanel(); });
+      pageEl.appendChild(cell);
+    });
+    const remaining = TOOLS_PER_PAGE - pageTools.length;
+    for (let i = 0; i < remaining; i++) {
+      const empty = document.createElement('div');
+      empty.className = 'tool-cell';
+      empty.style.visibility = 'hidden';
+      pageEl.appendChild(empty);
+    }
+    carousel.appendChild(pageEl);
+  });
+
+  carouselWrap.appendChild(carousel);
+  toolsPanelEl.appendChild(carouselWrap);
+
+  if (totalPages > 1) {
+    const dotsEl = document.createElement('div');
+    dotsEl.className = 'tools-dots';
+    for (let i = 0; i < totalPages; i++) {
+      const dot = document.createElement('div');
+      dot.className = 'tools-dot' + (i === 0 ? ' is-active' : '');
+      dotsEl.appendChild(dot);
+    }
+    toolsPanelEl.appendChild(dotsEl);
+    setupSwipe(carousel, dotsEl);
+  }
+
+  showPanel(toolsPanelEl, { enableBackdropClose: false });
+}
+
+// ═══════════════════════════════════════
+// 【工具详情页】从右侧弹入
+// ═══════════════════════════════════════
+
+export function showToolDetail(contentEl, title) {
+  const panel = document.createElement('div');
+  panel.className = 'thread-tools-panel is-open';
+
+  const header = document.createElement('div');
+  header.className = 'thread-tools-detail-header';
+
+  const backBtn = document.createElement('button');
+  backBtn.className = 'back-btn';
+  backBtn.innerHTML = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3L5 8L10 13"/></svg>';
+  backBtn.addEventListener('click', function() { panel.classList.remove('is-open'); setTimeout(function() { panel.remove(); }, 300); });
+
+  const titleEl = document.createElement('div');
+  titleEl.className = 'detail-title';
+  titleEl.textContent = title || '工具';
+
+  header.appendChild(backBtn);
+  header.appendChild(titleEl);
+  panel.appendChild(header);
+
+  const contentWrap = document.createElement('div');
+  contentWrap.style.cssText = 'flex:1;overflow-y:auto;padding:0 16px 24px;';
+  if (contentEl) contentWrap.appendChild(contentEl);
+  panel.appendChild(contentWrap);
+
+  document.body.appendChild(panel);
+  requestAnimationFrame(function() { panel.classList.add('is-open'); });
+
+  return panel;
+}
+
+// ═══════════════════════════════════════
+// 【导出】
+// ═══════════════════════════════════════
+
+export { showToolsPanel as default };
