@@ -2,7 +2,7 @@
 // imports: none
 
 const DB_NAME = 'ai_phone_db';
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 
 const STORE_DEFINITIONS = [
   { name: 'characters', options: { keyPath: 'id' } },
@@ -16,6 +16,14 @@ const STORE_DEFINITIONS = [
   { name: 'groups', options: { keyPath: 'id' } },
   { name: 'group_messages', options: { keyPath: 'id' }, indexes: [{ name: 'groupId', keyPath: 'groupId' }] },
   { name: 'blobs', options: { keyPath: 'key' } },
+  {
+    name: 'dreams',
+    options: { keyPath: 'id' },
+    indexes: [
+      { name: 'characterId', keyPath: 'characterId' },
+      { name: 'createdAt', keyPath: 'createdAt' }
+    ]
+  },
   {
     name: 'grudges',
     options: { keyPath: 'id' },
@@ -464,7 +472,6 @@ export async function getStorageUsage() {
   };
 }
 
-// 改了什么：数据库版本升到 3，新增 grudges / punishments / relationship_locks 三个记仇玩法仓库，原有核心读写不动。
+// 改了什么：数据库版本升到 4，新增 dreams 仓库（characterId + createdAt 索引），原有核心读写不动。
 // 会不会影响其他文件：会影响 IndexedDB 初始化；旧库刷新后自动升级，不需要其他文件同步改导出。
-// 更新记忆里该文件的导出函数：无变化。
 // depends: none
