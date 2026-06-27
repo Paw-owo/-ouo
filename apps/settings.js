@@ -125,6 +125,7 @@ const DESKTOP_WIDGET_LIST = [
   ['focus', '焦点小卡片', '显示桌面上的小提醒']
 ];
 
+// 【更新】免费 API 预设 — 新增 Groq / Cerebras / SambaNova
 const FREE_API_PRESETS = [
   {
     id: 'free_siliconflow',
@@ -146,6 +147,27 @@ const FREE_API_PRESETS = [
     endpoint: 'https://openrouter.ai/api/v1',
     model: 'meta-llama/llama-3.1-8b-instruct:free',
     description: '多个免费模型，注册即可用'
+  },
+  {
+    id: 'free_groq',
+    name: 'Groq',
+    endpoint: 'https://api.groq.com/openai/v1',
+    model: 'llama-3.3-70b-versatile',
+    description: '超快推理芯片，每日 1440 次免费'
+  },
+  {
+    id: 'free_cerebras',
+    name: 'Cerebras',
+    endpoint: 'https://api.cerebras.ai/v1',
+    model: 'llama-3.3-70b',
+    description: '晶圆级芯片推理，每日 100 万 Token 免费'
+  },
+  {
+    id: 'free_sambanova',
+    name: 'SambaNova',
+    endpoint: 'https://api.sambanova.ai/v1',
+    model: 'DeepSeek-V3.1',
+    description: 'DeepSeek/Llama 免费调用，每日 20 万 Token'
   }
 ];
 
@@ -411,7 +433,7 @@ function renderDisplayPage() {
 }
 
 // ═══════════════════════════════════════
-// 【API 页】重写 — 紧凑卡片 + 免费/自建分组
+// 【API 页】紧凑卡片 + 免费/自建分组
 // ═══════════════════════════════════════
 
 function renderApiPage() {
@@ -421,7 +443,6 @@ function renderApiPage() {
   const freeApis = allApis.filter((api) => api.source === 'free');
   const customApis = allApis.filter((api) => api.source !== 'free');
 
-  // 顶部卡片 + 两个按钮
   const top = card('API 小管家', '模型、Key、接口都住这里');
   const topButtons = el('div', 'settings-api-top-buttons');
 
@@ -439,12 +460,10 @@ function renderApiPage() {
   top.append(topButtons);
   wrap.append(top);
 
-  // 空状态
   if (!freeApis.length && !customApis.length) {
     wrap.append(empty('还没有 API，先加一个吧 ᗜ ‸ ᗜ'));
   }
 
-  // 免费 API 分组
   if (freeApis.length) {
     const groupEl = el('div', 'settings-api-group');
     groupEl.append(el('div', 'settings-api-group-title', '免费 API'));
@@ -454,7 +473,6 @@ function renderApiPage() {
     wrap.append(groupEl);
   }
 
-  // 自建 API 分组
   if (customApis.length) {
     const groupEl = el('div', 'settings-api-group');
     groupEl.append(el('div', 'settings-api-group-title', '自建 API'));
@@ -1019,7 +1037,7 @@ function addFreeApi(preset) {
 }
 
 // ═══════════════════════════════════════
-// 【API 编辑器】新增 / 编辑 — 修复 URL 拼接
+// 【API 编辑器】新增 / 编辑 — 自动检测服务商
 // ═══════════════════════════════════════
 
 function openApiEditor(api) {
@@ -1029,7 +1047,6 @@ function openApiEditor(api) {
 
   const sheet = sheetBox(api ? (isFree ? '编辑免费 API' : '编辑 API') : '新增 API');
 
-  // 免费 API 提示
   if (isFree) {
     const note = el('p', 'settings-free-note', '免费 API 预设，地址和模型已填好，填入 Key 就能用');
     sheet.body.append(note);
@@ -1062,7 +1079,6 @@ function openApiEditor(api) {
   let loading = false;
 
   sheet.actions.append(
-    // 拉取模型 — 修复：自动检测服务商，拼对 URL
     actionBtn('refresh', '拉取模型', async () => {
       if (loading) {
         showToast('正在拉取中，等一下哦');
@@ -1131,7 +1147,6 @@ function openApiEditor(api) {
       loading = false;
     }),
 
-    // 测试连接
     actionBtn('check', '测试', async () => {
       if (loading) return;
       const endpointValue = endpoint.input.value.trim();
@@ -1172,7 +1187,6 @@ function openApiEditor(api) {
       loading = false;
     }),
 
-    // 保存
     actionBtn('check', '保存', () => {
       const settings = getSettings();
       const next = {
@@ -1200,7 +1214,7 @@ function openApiEditor(api) {
 }
 
 // ═══════════════════════════════════════
-// 【TTS 操作】编辑器（含 Voice ID）、模型选择、拉取、试听
+// 【TTS 操作】编辑器、模型选择、拉取、试听
 // ═══════════════════════════════════════
 
 function openTtsEditor() {
@@ -1449,8 +1463,9 @@ function saveBubbleMode(mode) {
   showToast('聊天样子换好啦');
   render('display');
 }
+
 // ═══════════════════════════════════════
-// 【桌面缩放/壁纸】保存缩放、壁纸透明度、上传清除
+// 【桌面缩放/壁纸】
 // ═══════════════════════════════════════
 
 function saveScale(key, value, live) {
@@ -1513,7 +1528,7 @@ async function saveIconOpacity(id, value, live) {
 }
 
 // ═══════════════════════════════════════
-// 【图片上传/清除】blob 图片操作
+// 【图片上传/清除】
 // ═══════════════════════════════════════
 
 async function uploadBlobImage(key, opacityKey, msg) {
@@ -1577,7 +1592,7 @@ async function clearWidgetBg(key) {
 }
 
 // ═══════════════════════════════════════
-// 【小组件编辑器】新建/编辑自定义小组件
+// 【小组件编辑器】
 // ═══════════════════════════════════════
 
 async function openWidgetEditor(widget) {
@@ -1648,7 +1663,7 @@ async function deleteWidget(id) {
 }
 
 // ═══════════════════════════════════════
-// 【图标操作】重命名、上传、隐藏
+// 【图标操作】
 // ═══════════════════════════════════════
 
 function renameIcon(id, fallbackName) {
@@ -1717,7 +1732,7 @@ function toggleIconHidden(id) {
 }
 
 // ═══════════════════════════════════════
-// 【数据导出导入】完整备份与恢复
+// 【数据导出导入】
 // ═══════════════════════════════════════
 
 async function exportAll() {
@@ -1771,7 +1786,7 @@ async function importAll() {
 }
 
 // ═══════════════════════════════════════
-// 【数据清理】各维度清除功能
+// 【数据清理】
 // ═══════════════════════════════════════
 
 async function clearStoreWithConfirm(store, message, successText) {
@@ -1865,7 +1880,7 @@ async function clearAllData() {
 }
 
 // ═══════════════════════════════════════
-// 【自定义字体】上传、清除、恢复、注入
+// 【自定义字体】
 // ═══════════════════════════════════════
 
 async function uploadCustomFont() {
@@ -1946,7 +1961,7 @@ async function importThemeFile() {
 }
 
 // ═══════════════════════════════════════
-// 【辅助工具】关闭桌面、标题、UI 构建器
+// 【辅助工具】
 // ═══════════════════════════════════════
 
 function closeDesktop() {
@@ -2285,7 +2300,7 @@ function emitRefresh() {
 }
 
 // ═══════════════════════════════════════
-// 【新增辅助】服务商检测、免费API判断、紧凑卡片、图标按钮
+// 【新增辅助】服务商检测、紧凑卡片、图标按钮
 // ═══════════════════════════════════════
 
 function detectProviderFromUrl(endpoint) {
@@ -2375,7 +2390,6 @@ function el(tag, className = '', text = '') {
 // ═══════════════════════════════════════
 
 function injectStyle() {
-  // 修复：先删旧 style 再建新的
   if (styleEl) {
     styleEl.remove();
     styleEl = null;
@@ -2933,6 +2947,8 @@ function injectStyle() {
     }
 
     .settings-api-top-btn {
+      border: none;
+      outline: none;
       flex: 1;
       min-height: 52px;
       display: flex;
@@ -3041,6 +3057,8 @@ function injectStyle() {
     }
 
     .settings-compact-action {
+      border: none;
+      outline: none;
       width: 30px;
       height: 30px;
       flex: 0 0 30px;
