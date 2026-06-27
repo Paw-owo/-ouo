@@ -3,6 +3,7 @@
   from './core/storage.js': initDB, getData, setData, removeData, getDB, setDB, deleteDB, getAllDB, generateId, getNow
   from './core/theme.js': loadTheme
   from './core/ui.js': createIcon, showToast
+  from './apps/chat/thread-ai-local.js': seedDefaultCharacter
 -->
 <!doctype html>
 <html lang="zh-CN">
@@ -1163,6 +1164,7 @@
     import { initDB, getData, setData, removeData, getDB, setDB, deleteDB, getAllDB, generateId, getNow } from './core/storage.js';
     import { loadTheme } from './core/theme.js';
     import { createIcon, showToast } from './core/ui.js';
+    import { seedDefaultCharacter } from './apps/chat/thread-ai-local.js';
 
     const LOCK_PASSWORD = '0326';
     const CUSTOM_FONT_KEY = 'app_custom_font';
@@ -1273,6 +1275,7 @@
         applyDesktopScale();
         ensureDefaultSettings();
         ensureFirstOpenSeed();
+        await seedDefaultCharacter();
         await renderDesktop();
         bindDesktopEvents();
         bindLockScreen();
@@ -2276,4 +2279,4 @@
   </script>
 </body>
 </html>
-<!-- depends: ./core/storage.js:initDB,getData,setData,removeData,getDB,setDB,deleteDB,getAllDB,generateId,getNow; ./core/theme.js:loadTheme; ./core/ui.js:createIcon,showToast; app modules optional exports: mount/render/open/default/unmount -->
+<!-- depends: ./core/storage.js:initDB,getData,setData,removeData,getDB,setDB,deleteDB,getAllDB,generateId,getNow; ./core/theme.js:loadTheme; ./core/ui.js:createIcon,showToast; ./apps/chat/thread-ai-local.js:seedDefaultCharacter; app modules optional exports: mount/render/open/default/unmount -->
