@@ -479,7 +479,7 @@ function createShopCard(message) {
 }
 
 // ───────────────────
-// 表情包内容（对齐抽屉风格，78%留白，16px圆角）
+// 表情包内容
 // ───────────────────
 
 function createStickerContent(message) {
@@ -679,7 +679,7 @@ function downloadCodeFile(code, lang) {
 }
 
 // ───────────────────
-// HTML 全屏预览（全屏浮层 + 顶部关闭按钮 + ESC关闭）
+// HTML 全屏预览
 // ───────────────────
 
 function previewHtmlCode(code) {
@@ -1762,7 +1762,7 @@ function injectStyle() {
       border-radius: 16px;
     }
 
-    /* ── 表情包（对齐抽屉格子风格，78%留白，16px圆角） ── */
+    /* ── 表情包 ── */
 
     .chat-message-sticker-card {
       width: 112px;
@@ -1999,10 +1999,10 @@ function injectStyle() {
       color: var(--text-secondary);
     }
 
-    /* ── 代码块卡片（窄长圆角，可折叠） ── */
+    /* ── 代码块卡片（扁长方形，宽80%，矮折叠） ── */
 
     .chat-message-code {
-      width: min(100%, 280px);
+      width: min(80vw, 520px);
       overflow: hidden;
       padding: 0;
       border-radius: 22px;
@@ -2083,7 +2083,7 @@ function injectStyle() {
     }
 
     .chat-message-code[data-collapsed="true"] .chat-message-code-pre {
-      max-height: 120px;
+      max-height: 88px;
       overflow: hidden;
     }
 
@@ -2719,7 +2719,7 @@ function injectStyle() {
       }
 
       .chat-message-code {
-        width: min(100%, 240px);
+        width: min(92vw, 420px);
       }
 
       .chat-message-code-top {
