@@ -19,9 +19,9 @@ const FONT_FALLBACK = "'PingFang SC', 'Microsoft YaHei', -apple-system, BlinkMac
 const BASE_VARIABLES = {
   'bg-primary': '#E5F3FA',
   'bg-secondary': '#DED4E6',
-  'bg-card': '#FFFFFF',
+  'bg-card': '#FAFAF6',
   'bg-overlay': 'rgba(0, 0, 0, 0.28)',
-  'surface': '#FFFFFF',
+  'surface': '#FAFAF6',
   'accent': '#FAC7DA',
   'accent-light': '#FDEEF3',
   'accent-dark': '#E8A0BC',
@@ -30,7 +30,7 @@ const BASE_VARIABLES = {
   'text-hint': '#B8B0A8',
   'bubble-user-bg': '#FAC7DA',
   'bubble-user-text': '#4A4038',
-  'bubble-ai-bg': '#FFFFFF',
+  'bubble-ai-bg': '#FAFAF6',
   'bubble-ai-text': '#4A4038',
   'bubble-radius': '18px',
   'bubble-radius-tail': '4px',
@@ -86,9 +86,9 @@ const PRESETS = {
     variables: {
       'bg-primary': '#E5F3FA',
       'bg-secondary': '#DED4E6',
-      'bg-card': '#FFFFFF',
+      'bg-card': '#FAFAF6',
       'bg-overlay': 'rgba(0, 0, 0, 0.28)',
-      'surface': '#FFFFFF',
+      'surface': '#FAFAF6',
       'accent': '#FAC7DA',
       'accent-light': '#FDEEF3',
       'accent-dark': '#E8A0BC',
@@ -97,7 +97,7 @@ const PRESETS = {
       'text-hint': '#B8B0A8',
       'bubble-user-bg': '#FAC7DA',
       'bubble-user-text': '#4A4038',
-      'bubble-ai-bg': '#FFFFFF',
+      'bubble-ai-bg': '#FAFAF6',
       'bubble-ai-text': '#4A4038',
       ...LIGHT_SHADOWS
     }
@@ -123,7 +123,7 @@ const PRESETS = {
       'text-secondary': '#908880',
       'text-hint': '#B8B0A8',
       'bubble-user-bg': '#9F8F82',
-      'bubble-user-text': '#FFFFFF',
+      'bubble-user-text': '#F4F0EC',
       'bubble-ai-bg': '#FDF4ED',
       'bubble-ai-text': '#4A4038',
       ...LIGHT_SHADOWS
@@ -140,9 +140,9 @@ const PRESETS = {
     variables: {
       'bg-primary': '#EDECFA',
       'bg-secondary': '#D5CFEC',
-      'bg-card': '#F8F6FB',
+      'bg-card': '#FAF8FC',
       'bg-overlay': 'rgba(0, 0, 0, 0.28)',
-      'surface': '#F8F6FB',
+      'surface': '#FAF8FC',
       'accent': '#CAB7E3',
       'accent-light': '#F0ECF6',
       'accent-dark': '#A08EC0',
@@ -151,7 +151,7 @@ const PRESETS = {
       'text-hint': '#B8B0A8',
       'bubble-user-bg': '#CAB7E3',
       'bubble-user-text': '#4A4038',
-      'bubble-ai-bg': '#F8F6FB',
+      'bubble-ai-bg': '#FAF8FC',
       'bubble-ai-text': '#4A4038',
       ...LIGHT_SHADOWS
     }
@@ -173,13 +173,13 @@ const PRESETS = {
       'accent': '#C48A9A',
       'accent-light': '#483840',
       'accent-dark': '#D8A0AE',
-      'text-primary': '#E8E0E4',
-      'text-secondary': '#A09098',
+      'text-primary': '#EAE4E8',
+      'text-secondary': '#A89098',
       'text-hint': '#706068',
       'bubble-user-bg': '#C48A9A',
-      'bubble-user-text': '#1E1A1C',
+      'bubble-user-text': '#3A2830',
       'bubble-ai-bg': '#30282C',
-      'bubble-ai-text': '#E8E0E4',
+      'bubble-ai-text': '#EAE4E8',
       ...DARK_SHADOWS
     }
   },
@@ -200,13 +200,13 @@ const PRESETS = {
       'accent': '#C8A882',
       'accent-light': '#443C30',
       'accent-dark': '#DCC098',
-      'text-primary': '#E8E0D4',
-      'text-secondary': '#A09488',
-      'text-hint': '#706458',
+      'text-primary': '#EAE4DC',
+      'text-secondary': '#A89888',
+      'text-hint': '#786858',
       'bubble-user-bg': '#C8A882',
-      'bubble-user-text': '#22201C',
+      'bubble-user-text': '#3A3028',
       'bubble-ai-bg': '#342E26',
-      'bubble-ai-text': '#E8E0D4',
+      'bubble-ai-text': '#EAE4DC',
       ...DARK_SHADOWS
     }
   },
@@ -227,13 +227,13 @@ const PRESETS = {
       'accent': '#989898',
       'accent-light': '#404044',
       'accent-dark': '#B0B0B0',
-      'text-primary': '#E4E4E8',
-      'text-secondary': '#909098',
-      'text-hint': '#606064',
+      'text-primary': '#E4E2E6',
+      'text-secondary': '#949098',
+      'text-hint': '#646068',
       'bubble-user-bg': '#989898',
-      'bubble-user-text': '#1E1E22',
+      'bubble-user-text': '#2E2E32',
       'bubble-ai-bg': '#2E2E32',
-      'bubble-ai-text': '#E4E4E8',
+      'bubble-ai-text': '#E4E2E6',
       ...DARK_SHADOWS
     }
   }
