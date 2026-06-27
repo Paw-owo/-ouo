@@ -110,6 +110,28 @@ const PUNISHMENT_POOL = [
 ];
 
 // ═══════════════════════════════════════
+// 【可爱报错文案】按 HTTP 状态码返回
+// ═══════════════════════════════════════
+
+const FRIENDLY_ERROR_MAP = {
+  400: '这波啊，这波是格式没整对，',
+  401: '没key就想进？急了急了。',
+  402: '余额不足，快去氪金。',
+  403: '没权限，典重典。',
+  404: '你要的东西跑路了，awsl。',
+  408: '请求超时，摆烂了。',
+  429: '冲太猛了，能不能发慢点啊你。',
+  500: '这服务器炸了宝宝呜呜...',
+  502: '服务器上游发来一串梦话。',
+  503: '服务器在卷，排队中。',
+  504: '上游睡死，喊不醒。'
+};
+
+function getFriendlyErrorMessage(status) {
+  return FRIENDLY_ERROR_MAP[Number(status)] || '我刚刚出了点小状况，再说一遍试试？';
+}
+
+// ═══════════════════════════════════════
 // 【公开接口】私聊、群聊、停止、主动消息
 // ═══════════════════════════════════════
 
@@ -282,10 +304,7 @@ async function requestPrivateReply(state, options = {}) {
     let result = null;
 
     try {
-      result = await requestAIText(promptMessages, {
-        signal: job.controller.signal,
-        job
-      });
+      result = await requestAITextDirect(promptMessages, job.controller.signal);
 
       if (!result && character?.useLocalChat) {
         result = await tryLocalOrSiliconFlowReply(state, {
@@ -308,7 +327,8 @@ async function requestPrivateReply(state, options = {}) {
       });
 
       if (!result) {
-        await markMessageStopped(PRIVATE_STORE, placeholder.id, '我刚刚有点卡住了，再说一遍试试？');
+        const friendlyMessage = getFriendlyErrorMessage(apiError?.status || 0);
+        await markMessageError(PRIVATE_STORE, placeholder.id, friendlyMessage);
         await syncPrivateState(state, characterId);
         return null;
       }
@@ -477,10 +497,7 @@ async function requestGroupReply(state, options = {}) {
         let result = null;
 
         try {
-          result = await requestAIText(promptMessages, {
-            signal: job.controller.signal,
-            job
-          });
+          result = await requestAITextDirect(promptMessages, job.controller.signal);
 
           if (!result && character?.useLocalChat) {
             result = await tryLocalOrSiliconFlowReply(state, {
@@ -501,6 +518,13 @@ async function requestGroupReply(state, options = {}) {
             userName,
             signal: job.controller.signal
           });
+
+          if (!result) {
+            const friendlyMessage = getFriendlyErrorMessage(apiError?.status || 0);
+            await markMessageError(GROUP_STORE, placeholder.id, friendlyMessage);
+            await syncGroupState(state, groupId);
+            continue;
+          }
         }
 
         if (isJobStopped(job)) {
@@ -606,7 +630,7 @@ async function generateInnerMonologue({
       '',
       '要求：',
       `- 我用第一人称"我"来写，像${name}自己的内心独白`,
-      `- 我写的是我刚刚回复${callName}时心里闪过的一瞬间想法`,
+      `- 我写的是我刚才回复${callName}时心里闪过的一瞬间想法`,
       '- 我用简体中文',
       '- 我只写 1 到 3 句话，像心里一闪而过的念头',
       '- 我不写"用户"，不写分析报告，不写编号列表',
@@ -1118,6 +1142,134 @@ function formatMessageForPrompt(message, mode, userName = '你') {
   return `${prefix}${message.content || ''}`.trim();
 }
 
+// ═══════════════════════════════════════
+// 【AI请求】直接调用API，能捕获HTTP状态码
+// ═══════════════════════════════════════
+
+async function requestAITextDirect(promptMessages, signal) {
+  const settings = getData('app_settings') || {};
+  const endpoints = Array.isArray(settings.apiEndpoints) ? settings.apiEndpoints : [];
+  const endpointId = settings.defaultApiEndpointId || '';
+  const endpoint = endpoints.find((e) => e.id === endpointId) || endpoints[0] || null;
+
+  if (!endpoint || !endpoint.endpoint) {
+    throw Object.assign(new Error('no_endpoint'), { status: 0 });
+  }
+
+  const base = String(endpoint.endpoint || '').trim().replace(/\/+$/, '');
+  const provider = detectProviderSimple(base);
+  const requestModel = settings.defaultModel || settings.model || endpoint.model || '';
+
+  if (!requestModel && provider !== 'gemini') {
+    throw Object.assign(new Error('no_model'), { status: 0 });
+  }
+
+  // 从消息列表中拆出 system prompt
+  const systemMsg = promptMessages.find((m) => m.role === 'system');
+  const systemPrompt = systemMsg ? String(systemMsg.content || '') : '';
+  const chatMessages = promptMessages.filter((m) => m.role !== 'system');
+
+  let url, headers, body;
+
+  if (provider === 'anthropic') {
+    url = base.includes('/messages') ? base : (base.includes('/v1') ? `${base}/messages` : `${base}/v1/messages`);
+    headers = { 'Content-Type': 'application/json' };
+    if (endpoint.apiKey) headers['x-api-key'] = endpoint.apiKey;
+    headers['anthropic-version'] = '2023-06-01';
+    const msgs = chatMessages
+      .filter((m) => (m.role === 'user' || m.role === 'assistant') && m.content)
+      .map((m) => ({ role: m.role, content: [{ type: 'text', text: m.content }] }));
+    body = { model: requestModel, messages: msgs, stream: false };
+    if (systemPrompt) body.system = systemPrompt;
+  } else if (provider === 'gemini') {
+    let origin = base.replace(/\/v1beta\/models\/?$/i, '').replace(/\/v1beta\/?$/i, '').replace(/\/+$/, '');
+    url = `${origin}/v1beta/models/${encodeURIComponent(requestModel)}:generateContent`;
+    if (endpoint.apiKey) url += `?key=${encodeURIComponent(endpoint.apiKey)}`;
+    headers = { 'Content-Type': 'application/json' };
+    const contents = chatMessages
+      .filter((m) => m.role === 'user' || m.role === 'assistant')
+      .map((m) => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] }));
+    body = { contents };
+    if (systemPrompt) body.systemInstruction = { parts: [{ text: systemPrompt }] };
+    body.generationConfig = { temperature: 0.85 };
+  } else if (provider === 'ollama') {
+    url = base.includes('/api/chat') ? base : `${base}/api/chat`;
+    headers = { 'Content-Type': 'application/json' };
+    const msgs = [];
+    if (systemPrompt) msgs.push({ role: 'system', content: systemPrompt });
+    msgs.push(...chatMessages.filter((m) => m.role && m.content));
+    body = { model: requestModel, messages: msgs, stream: false };
+  } else {
+    // OpenAI 兼容
+    url = base.includes('/chat/completions') ? base : (base.includes('/v1') ? `${base}/chat/completions` : `${base}/v1/chat/completions`);
+    headers = { 'Content-Type': 'application/json' };
+    if (endpoint.apiKey) headers['Authorization'] = `Bearer ${endpoint.apiKey}`;
+    const msgs = [];
+    if (systemPrompt) msgs.push({ role: 'system', content: systemPrompt });
+    msgs.push(...chatMessages.filter((m) => m.role && m.content));
+    body = { model: requestModel, messages: msgs, stream: false, temperature: 0.85 };
+  }
+
+  // 带超时的 fetch
+  const timeoutController = new AbortController();
+  const timeoutId = setTimeout(() => timeoutController.abort(), 60000);
+
+  if (signal) {
+    signal.addEventListener('abort', () => timeoutController.abort(), { once: true });
+  }
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      signal: timeoutController.signal,
+      body: JSON.stringify(body)
+    });
+
+    if (!response.ok) {
+      throw Object.assign(new Error(`HTTP ${response.status}`), { status: response.status });
+    }
+
+    const data = await response.json();
+    return extractResponseText(data, provider);
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+function detectProviderSimple(endpoint) {
+  const raw = String(endpoint || '').toLowerCase();
+  if (raw.includes('anthropic.com')) return 'anthropic';
+  if (raw.includes('generativelanguage.googleapis.com')) return 'gemini';
+  if (raw.includes('localhost') || raw.includes('127.0.0.1')) return 'ollama';
+  return 'openai';
+}
+
+function extractResponseText(data, provider) {
+  if (!data) return '';
+
+  if (provider === 'gemini') {
+    const candidate = (Array.isArray(data?.candidates) ? data.candidates : [])[0] || {};
+    return (candidate?.content?.parts || []).map((p) => p?.text || '').filter(Boolean).join('');
+  }
+
+  if (provider === 'anthropic') {
+    const raw = data?.content;
+    if (Array.isArray(raw)) return raw.map((i) => i?.text || '').filter(Boolean).join('');
+    return String(raw || '');
+  }
+
+  if (provider === 'ollama') {
+    return data?.message?.content || data?.response || '';
+  }
+
+  return data?.choices?.[0]?.message?.content || '';
+}
+
+// ═══════════════════════════════════════
+// 【旧版AI请求】保留兼容（内心独白等仍使用）
+// ═══════════════════════════════════════
+
 async function requestAIText(messages, options = {}) {
   const settings = getData('app_settings') || {};
   const model = settings.defaultModel || settings.model || '';
@@ -1276,6 +1428,7 @@ function createAssistantPlaceholder({
     toolCalls: Array.isArray(toolCalls) ? toolCalls : [],
     isPending: Boolean(isPending),
     isStopped: false,
+    isError: false,
     status: status || (isPending ? 'pending' : ''),
     timestamp: now,
     createdAt: now,
@@ -1359,9 +1512,36 @@ async function markMessageStopped(store, id, content) {
     content: String(content || '我先停在这里了。'),
     isPending: false,
     isStopped: true,
+    isError: false,
     status: 'stopped',
     thinking: message.thinking || '我刚刚被打断了，先把话停住。',
     thinkingSummary: message.thinkingSummary || '已停止',
+    updatedAt: getNow()
+  });
+
+  await setDB(store, next);
+  return next;
+}
+
+// ═══════════════════════════════════════
+// 【错误消息】把 placeholder 更新为可爱报错文案
+// ═══════════════════════════════════════
+
+async function markMessageError(store, id, content) {
+  if (!store || !id) return null;
+
+  const message = await getMessageByIdFromStore(store, id).catch(() => null);
+  if (!message) return null;
+
+  const next = cleanForDB({
+    ...message,
+    content: String(content || '我刚刚出了点小状况'),
+    isPending: false,
+    isStopped: false,
+    isError: true,
+    status: 'error',
+    thinking: '',
+    thinkingSummary: '',
     updatedAt: getNow()
   });
 
@@ -1938,8 +2118,8 @@ function randomBetween(min, max) {
   return Math.floor(left + Math.random() * (right - left + 1));
 }
 
-// 改了什么：1) 新增 generateInnerMonologue 函数，主回复完成后后台静默请求AI写角色内心独白，存到消息thinking字段；2) requestPrivateReply 末尾加了异步调用；3) requestGroupReply 每个角色回复后也加了异步调用；4) 新增 parseInnerMonologueResult 解析函数清理输出。
-// 原来效果：模型没有原生thinking输出时，思维链按钮不显示或显示空白占位。
-// 现在效果：每个AI回复都会在后台生成一段角色人设视角的内心独白，思维链按钮一直有内容可看。
-// 会不会影响其他文件：不会。导出接口完全不变。主回复速度不受影响。
+// 改了什么：1) 新增 getFriendlyErrorMessage 按HTTP状态码返回可爱报错文案；2) 新增 requestAITextDirect 直接调API能捕获状态码；3) requestPrivateReply/requestGroupReply 的catch块改为用可爱文案更新AI气泡（markMessageError + isError:true）；4) 新增 markMessageError 函数。
+// 原来效果：API报错只弹toast，聊天里看不到错误，placeholder直接被删掉。
+// 现在效果：API报错时AI气泡显示可爱文案（如500→"这服务器炸了宝宝呜呜..."），不删placeholder，消息标记isError:true。
+// 会不会影响其他文件：不会。导出接口完全不变。silentRequest和requestAIText保持不动，内心独白仍用silentRequest。
 // depends: ../../core/storage.js(getData,setData,generateId,getNow,setDB,deleteDB,getByIndexDB,getAllDB,getDB)；../../core/api.js(silentRequest)；../../core/memory.js(buildMemoryPrompt,checkImportantInfo,checkAndSummarize)；./identity-core.js(getIdentityCore)；./thread-ai-local.js(tryLocalOrSiliconFlowReply)
