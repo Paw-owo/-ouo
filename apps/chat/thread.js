@@ -1,7 +1,7 @@
 // apps/chat/thread.js
 // imports:
 //   from '../../core/storage.js': getData, setData, getDB, getByIndexDB
-//   from '../../core/ui.js': createIcon, showToast
+//   from '../../core/ui.js': createIcon, showToast, hideBottomSheet
 //   from '../../core/tts.js': stopAll
 //   from './thread-render.js': renderThreadMessages
 //   from './thread-actions.js': sendThreadMessage, stopThreadAIReply
@@ -12,7 +12,7 @@
 //   from './thread-settings.js': mountThreadSettings, unmountThreadSettings
 
 import { getData, setData, getDB, getByIndexDB } from '../../core/storage.js';
-import { createIcon, showToast } from '../../core/ui.js';
+import { createIcon, showToast, hideBottomSheet } from '../../core/ui.js';
 import { stopAll } from '../../core/tts.js';
 
 import { renderThreadMessages } from './thread-render.js';
@@ -122,6 +122,7 @@ export function unmountChatThread() {
   cleanupKeyboardViewport();
   closeStickerSheet();
   closeThreadPanels();
+  hideBottomSheet();
 
   if (state.rootEl) {
     state.rootEl.replaceChildren();
@@ -1073,4 +1074,8 @@ function injectStyle() {
   document.head.appendChild(style);
 }
 
-// 依赖：../../core/storage.js(getData,setData,getDB,getByIndexDB)；../../core/ui.js(createIcon,showToast)；../../core/tts.js(stopAll)；./thread-render.js(renderThreadMessages)；./thread-actions.js(sendThreadMessage,stopThreadAIReply)；./thread-stickers.js(openStickerSheet)；./thread-panels.js(openThreadToolsPanel,closeThreadPanels)；./thread-relationship.js(loadRelationshipState,getRelationshipLockLevel,getRelationshipStatusText,createRelationshipLockBar,openRelationshipLockSheet)；./thread-ai.js(checkThreadProactiveMessages)；./thread-settings.js(mountThreadSettings,unmountThreadSettings)
+// 改了什么：import 加 hideBottomSheet；unmountChatThread 里 closeThreadPanels() 后加一行 hideBottomSheet()。
+// 原来效果：用户在聊天页打开转账/快捷回复等底部抽屉后点返回，抽屉残留在 DOM 里不消失。
+// 现在效果：离开聊天页时所有底部抽屉统一关闭，不会残留。
+// 会不会影响其他文件：不会。导出接口（mountChatThread/unmountChatThread）不变。
+// 依赖：../../core/storage.js(getData,setData,getDB,getByIndexDB)；../../core/ui.js(createIcon,showToast,hideBottomSheet)；../../core/tts.js(stopAll)；./thread-render.js(renderThreadMessages)；./thread-actions.js(sendThreadMessage,stopThreadAIReply)；./thread-stickers.js(openStickerSheet,closeStickerSheet)；./thread-panels.js(openThreadToolsPanel,closeThreadPanels)；./thread-relationship.js(loadRelationshipState,getRelationshipLockLevel,getRelationshipStatusText,createRelationshipLockBar,openRelationshipLockSheet)；./thread-ai.js(checkThreadProactiveMessages)；./thread-settings.js(mountThreadSettings,unmountThreadSettings)
