@@ -2,7 +2,7 @@
 // imports:
 //   from '../../core/storage.js': getData
 //   from '../../core/ui.js': showToast, showBottomSheet, hideBottomSheet
-//   from './thread-actions.js': copyThreadMessage, quoteThreadMessage, editThreadMessage, deleteThreadMessage, regenerateThreadMessage, resendThreadMessage, playThreadTTS, stopThreadTTS
+//   from './thread-actions.js': copyThreadMessage, quoteThreadMessage, editThreadMessage, deleteThreadMessage, regenerateThreadMessage, resendThreadMessage, playThreadTTS, stopThreadTTS, getVersionMessages
 //   from './thinking-chain.js': createThinkingChainButton
 
 import { getData } from '../../core/storage.js';
@@ -17,7 +17,8 @@ import {
   regenerateThreadMessage,
   resendThreadMessage,
   playThreadTTS,
-  stopThreadTTS
+  stopThreadTTS,
+  getVersionMessages
 } from './thread-actions.js';
 
 const RENDER_STYLE_ID = 'chat-thread-render-style';
@@ -65,6 +66,85 @@ export function renderThreadMessages(state, pageEl) {
       list.scrollTop = list.scrollHeight;
     }
   });
+
+  // 异步加载版本数据，追加导航
+  loadAndAppendVersionNavs(state, messages, list);
+}
+
+// ═══════════════════════════════════════
+// 【版本导航】异步加载历史版本，追加到气泡底部
+// ═══════════════════════════════════════
+
+async function loadAndAppendVersionNavs(state, messages, list) {
+  const versionDataMap = new Map();
+
+  for (const msg of messages) {
+    if (msg.versionGroupId && msg.role === 'assistant' && !versionDataMap.has(msg.versionGroupId)) {
+      try {
+        const versions = await getVersionMessages(state, msg.versionGroupId);
+        if (versions.length > 1) {
+          versionDataMap.set(msg.versionGroupId, versions);
+        }
+      } catch (_) {}
+    }
+  }
+
+  if (!versionDataMap.size) return;
+
+  for (const msg of messages) {
+    if (!msg.versionGroupId || msg.role !== 'assistant') continue;
+    const versions = versionDataMap.get(msg.versionGroupId);
+    if (!versions || versions.length <= 1) continue;
+
+    const row = list.querySelector(`[data-message-id="${msg.id}"]`);
+    if (!row) continue;
+
+    const bubble = row.querySelector('.chat-message-bubble.role-ai');
+    if (!bubble) continue;
+    if (bubble.querySelector('.chat-version-nav')) continue;
+
+    const nav = createVersionNavigation(msg, versions);
+    if (nav) bubble.appendChild(nav);
+  }
+}
+
+// ───────────────────
+// 版本翻页导航（同步，接收预加载数据）
+// ───────────────────
+
+function createVersionNavigation(currentMessage, versions) {
+  if (!versions || versions.length <= 1) return null;
+
+  const currentIndex = versions.findIndex((v) => v.id === currentMessage.id);
+  if (currentIndex === -1) return null;
+
+  const nav = el('div', 'chat-version-nav');
+
+  const prevBtn = el('button', `chat-version-btn ${currentIndex > 0 ? '' : 'disabled'}`);
+  prevBtn.appendChild(createLineIcon('chevron'));
+  prevBtn.disabled = currentIndex <= 0;
+  if (currentIndex > 0) {
+    prevBtn.addEventListener('click', () => {
+      showToast(`这是第 ${currentIndex} 个版本`);
+    });
+  }
+
+  const indicator = el('div', 'chat-version-indicator');
+  indicator.textContent = `>${currentIndex + 1}<`;
+  indicator.title = `共 ${versions.length} 个版本`;
+
+  const nextBtn = el('button', `chat-version-btn ${currentIndex < versions.length - 1 ? '' : 'disabled'}`);
+  nextBtn.appendChild(createLineIcon('chevron'));
+  nextBtn.style.transform = 'rotate(180deg)';
+  nextBtn.disabled = currentIndex >= versions.length - 1;
+  if (currentIndex < versions.length - 1) {
+    nextBtn.addEventListener('click', () => {
+      showToast(`这是第 ${currentIndex + 2} 个版本`);
+    });
+  }
+
+  nav.append(prevBtn, indicator, nextBtn);
+  return nav;
 }
 
 // ═══════════════════════════════════════
@@ -293,7 +373,6 @@ function createBubbleContent(state, message) {
 function createMessageContent(state, message) {
   const content = el('div', `chat-message-content ${message.type === 'sticker' ? 'sticker-content' : ''}`);
 
-  // 错误消息优先处理
   if (message.isError) {
     content.appendChild(createErrorBubble(message));
     return content;
@@ -958,7 +1037,9 @@ function createEmptyThread() {
 function getVisibleMessages(state) {
   const list = state.mode === 'group' ? state.groupMessages : state.messages;
   const q = String(state.searchValue || '').trim().toLowerCase();
-  const visible = list.slice(Math.max(0, list.length - state.visibleCount));
+  const visible = list
+    .filter((message) => !message.superseded)
+    .slice(Math.max(0, list.length - state.visibleCount));
 
   if (!q) return visible;
 
@@ -1722,14 +1803,13 @@ function injectStyle() {
       box-shadow: none;
     }
 
-    /* ── 错误气泡卡片 ── */
+    /* ── 错误气泡卡片（颜色走CSS变量）── */
 
     .chat-error-card {
       display: flex;
       align-items: center;
       gap: 8px;
       padding: 2px 0;
-      animation: chatErrorPulse 2.4s ease-in-out infinite;
     }
 
     .chat-error-icon {
@@ -1740,9 +1820,8 @@ function injectStyle() {
       align-items: center;
       justify-content: center;
       border-radius: 999px;
-      background: rgba(230, 120, 100, 0.12);
-      color: rgba(200, 80, 60, 0.8);
-      animation: chatErrorIconGlow 2.4s ease-in-out infinite;
+      background: var(--surface-muted);
+      color: var(--text-secondary);
     }
 
     .chat-error-icon svg {
@@ -1756,7 +1835,59 @@ function injectStyle() {
       font-size: var(--font-size-small);
       line-height: 1.5;
       color: var(--text-secondary);
-      animation: chatErrorTextFade 2.4s ease-in-out infinite;
+    }
+
+    /* ── 版本翻页导航 ── */
+
+    .chat-version-nav {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin-top: 4px;
+      padding-top: 6px;
+    }
+
+    .chat-version-btn {
+      width: 24px;
+      height: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: none;
+      outline: none;
+      border-radius: 999px;
+      background: var(--surface-muted);
+      color: var(--text-secondary);
+      box-shadow: var(--shadow-sm);
+      font: inherit;
+      font-size: 11px;
+      transition: all 200ms ease;
+      touch-action: manipulation;
+    }
+
+    .chat-version-btn:active {
+      transform: scale(0.92);
+    }
+
+    .chat-version-btn.disabled {
+      opacity: 0.3;
+      pointer-events: none;
+    }
+
+    .chat-version-indicator {
+      min-width: 32px;
+      height: 22px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 8px;
+      border-radius: 999px;
+      background: var(--accent-light);
+      color: var(--accent-dark);
+      font-size: 11px;
+      font-weight: 600;
+      line-height: 1.35;
     }
 
     /* ── 内容区域 ── */
@@ -2731,35 +2862,6 @@ function injectStyle() {
       100% { transform: rotateY(360deg) scale(1); }
     }
 
-    @keyframes chatErrorPulse {
-      0%, 100% {
-        opacity: 0.82;
-      }
-      50% {
-        opacity: 1;
-      }
-    }
-
-    @keyframes chatErrorIconGlow {
-      0%, 100% {
-        transform: scale(1);
-        box-shadow: 0 0 0 0 rgba(230, 120, 100, 0.18);
-      }
-      50% {
-        transform: scale(1.06);
-        box-shadow: 0 0 0 6px rgba(230, 120, 100, 0);
-      }
-    }
-
-    @keyframes chatErrorTextFade {
-      0%, 100% {
-        opacity: 0.72;
-      }
-      50% {
-        opacity: 0.92;
-      }
-    }
-
     /* ── 响应式 ── */
 
     @media (max-width: 520px) {
@@ -2877,9 +2979,6 @@ function injectStyle() {
       .chat-voice-waves i,
       .chat-pending-dot,
       .chat-pending-text,
-      .chat-error-card,
-      .chat-error-icon,
-      .chat-error-text,
       .chat-html-preview-overlay {
         animation: none;
         transition: none;
@@ -2890,4 +2989,4 @@ function injectStyle() {
   document.head.appendChild(style);
 }
 
-// 依赖：../../core/storage.js(getData)；../../core/ui.js(showToast,showBottomSheet,hideBottomSheet)；./thread-actions.js(copyThreadMessage,quoteThreadMessage,editThreadMessage,deleteThreadMessage,regenerateThreadMessage,resendThreadMessage,playThreadTTS,stopThreadTTS)；./thinking-chain.js(createThinkingChainButton)
+// 依赖：../../core/storage.js(getData)；../../core/ui.js(showToast,showBottomSheet,hideBottomSheet)；./thread-actions.js(copyThreadMessage,quoteThreadMessage,editThreadMessage,deleteThreadMessage,regenerateThreadMessage,resendThreadMessage,playThreadTTS,stopThreadTTS,getVersionMessages)；./thinking-chain.js(createThinkingChainButton)
