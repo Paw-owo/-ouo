@@ -17,28 +17,49 @@ const THINKING_PILL_TEXTS = [
 // ═══════════════════════════════════════
 
 export function hasThinkingChain(message) {
-  const steps = buildThinkingSteps(message);
-  return steps.length > 0;
+  if (hasRealThinkingContent(message)) return true;
+  if (isMessageRunning(message) && String(message?.content || '').trim()) return true;
+  return false;
 }
 
 export function createThinkingChainButton(message, options = {}) {
   injectStyle();
 
   const steps = buildThinkingSteps(message);
+  const roleName = String(options.roleName || options.characterName || options.name || '').trim();
+  const isRunning = isMessageRunning(message);
+  const hasContent = hasRealThinkingContent(message);
+
+  // 正在生成且还没有实际思考内容 → 极简加载胶囊
+  if (!hasContent && isRunning) {
+    const button = createSafeButton('chat-thinking-pill', '正在准备');
+    button.dataset.running = 'true';
+
+    const dots = el('span', 'chat-thinking-pill-dots');
+    dots.appendChild(el('span', 'chat-thinking-pill-dot'));
+    dots.appendChild(el('span', 'chat-thinking-pill-dot'));
+    dots.appendChild(el('span', 'chat-thinking-pill-dot'));
+
+    const text = el('span', 'chat-thinking-pill-text', '准备中');
+
+    button.append(dots, text);
+    return button;
+  }
+
+  // 没有实际思考内容（生成完毕也没有） → 不显示
   if (!steps.length) return null;
 
-  const roleName = String(options.roleName || options.characterName || options.name || '').trim();
-  const isRunning = isThinkingRunning(message, steps);
-  const button = createSafeButton('chat-thinking-pill', isRunning ? '打开想法步骤' : '打开想法步骤');
-  button.dataset.running = isRunning ? 'true' : 'false';
+  const isThinkingRunning = isRunning || steps.some((step) => step.running);
+  const button = createSafeButton('chat-thinking-pill', isThinkingRunning ? '打开想法步骤' : '打开想法步骤');
+  button.dataset.running = isThinkingRunning ? 'true' : 'false';
 
   const iconWrap = el('span', 'chat-thinking-pill-icon');
-  iconWrap.appendChild(createPillIcon(isRunning ? 'thinking' : 'done'));
+  iconWrap.appendChild(createPillIcon(isThinkingRunning ? 'thinking' : 'done'));
 
   const text = el(
     'span',
     'chat-thinking-pill-text',
-    isRunning
+    isThinkingRunning
       ? getRunningText(message, roleName)
       : `想了${formatThinkingDuration(message, steps)}`
   );
@@ -53,6 +74,8 @@ export function createThinkingChainButton(message, options = {}) {
 }
 
 export function openThinkingChainSheet(message, options = {}) {
+  hideBottomSheet();
+
   injectStyle();
 
   const steps = buildThinkingSteps(message);
@@ -66,13 +89,38 @@ export function openThinkingChainSheet(message, options = {}) {
   const header = el('div', 'chat-thinking-sheet-header');
   const title = el('div', 'chat-thinking-sheet-title', titleText);
 
+  const actions = el('div', 'chat-thinking-sheet-actions');
+
+  const expandBtn = createSafeButton('chat-thinking-sheet-action-btn', '展开收起');
+  expandBtn.dataset.expanded = 'false';
+  expandBtn.appendChild(createNodeIcon('eye', false));
+
+  expandBtn.addEventListener('click', () => {
+    const expanded = expandBtn.dataset.expanded === 'true';
+    const list = sheet.querySelector('.chat-thinking-chain-list');
+
+    if (expanded) {
+      expandBtn.dataset.expanded = 'false';
+      list.dataset.expandAll = 'false';
+      list.querySelectorAll('.chat-thinking-chain-item').forEach((item) => {
+        item.dataset.open = 'false';
+      });
+    } else {
+      expandBtn.dataset.expanded = 'true';
+      list.dataset.expandAll = 'true';
+    }
+  });
+
   const closeBtn = createSafeButton('chat-thinking-sheet-close', '关闭');
   closeBtn.appendChild(createNodeIcon('close', false));
   closeBtn.addEventListener('click', () => hideBottomSheet());
 
-  header.append(title, closeBtn);
+  actions.append(expandBtn, closeBtn);
+
+  header.append(title, actions);
 
   const list = el('div', 'chat-thinking-chain-list');
+  list.dataset.expandAll = 'false';
 
   steps.forEach((step, index) => {
     const item = createChainItem(step, index);
@@ -89,11 +137,15 @@ export function openThinkingChainSheet(message, options = {}) {
 
 export function buildThinkingSteps(message) {
   const steps = [];
+  const isRunning = isMessageRunning(message);
+  const hasContent = hasRealThinkingContent(message);
+
+  // 没有实际思考内容就不构建步骤（不管是正在生成还是已完成）
+  if (!hasContent) return steps;
+
   const toolSteps = normalizeToolCalls(message?.toolCalls);
   const memorySteps = normalizeToolCalls(message?.memoryWrites || message?.memories || message?.memoryUpdates);
   const thinkingText = normalizeMultiline(message?.thinking);
-  const isRunning = isMessageRunning(message);
-  const hasActionSteps = toolSteps.length > 0 || memorySteps.length > 0;
 
   if (thinkingText) {
     steps.push({
@@ -135,9 +187,8 @@ export function buildThinkingSteps(message) {
   }
 
   const messageContent = normalizeMultiline(message?.content);
-  const hasAnySteps = thinkingText || hasActionSteps;
 
-  if (hasAnySteps || messageContent) {
+  if (messageContent) {
     steps.push({
       type: 'write',
       title: isRunning ? '我在组织回复' : '我把想法写出来啦',
@@ -146,20 +197,9 @@ export function buildThinkingSteps(message) {
         : (thinkingText
             ? '前面的想法已经变成现在这段回复了。'
             : '我把心里的话整理好写出来了。'),
-      detail: messageContent || '这一步没有更多内容。',
+      detail: messageContent,
       running: isRunning,
       done: !isRunning
-    });
-  }
-
-  if (steps.length && !isRunning) {
-    steps.push({
-      type: 'done',
-      title: '我想完啦',
-      summary: '这一轮已经顺顺地回完了。',
-      detail: '这次回复已经完成啦。',
-      running: false,
-      done: true
     });
   }
 
@@ -289,12 +329,7 @@ function formatThinkingDuration(message, steps) {
       : `${Math.max(1, Math.round(directSeconds))}秒`;
   }
 
-  const thinkingLength = normalizeText(message?.thinking).length;
-  const toolCount = normalizeToolCalls(message?.toolCalls).length;
-  const memoryCount = normalizeToolCalls(message?.memoryWrites || message?.memories || message?.memoryUpdates).length;
-  const rough = Math.max(1, Math.min(24, Math.round(thinkingLength / 24) + toolCount * 2 + memoryCount));
-  if (rough >= 60) return `${Math.max(1, Math.round(rough / 60))}分钟`;
-  return `${rough}秒`;
+  return '想了一下';
 }
 
 // ═══════════════════════════════════════
@@ -377,6 +412,14 @@ function createNodeIcon(type, animated) {
     return svg;
   }
 
+  if (type === 'eye') {
+    svg.append(
+      pathEl('M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z'),
+      circleEl('12', '12', '2.5')
+    );
+    return svg;
+  }
+
   if (type === 'close') {
     svg.append(pathEl('M7 7l10 10'), pathEl('M17 7 7 17'));
     return svg;
@@ -395,6 +438,15 @@ function createNodeIcon(type, animated) {
 // 【数据处理】兼容不同消息结构
 // ═══════════════════════════════════════
 
+function hasRealThinkingContent(message) {
+  if (normalizeText(message?.thinking)) return true;
+  const toolSteps = normalizeToolCalls(message?.toolCalls);
+  if (toolSteps.length > 0) return true;
+  const memorySteps = normalizeToolCalls(message?.memoryWrites || message?.memories || message?.memoryUpdates);
+  if (memorySteps.length > 0) return true;
+  return false;
+}
+
 function isThinkingRunning(message, steps) {
   if (isMessageRunning(message)) return true;
   return steps.some((step) => step.running);
@@ -409,7 +461,7 @@ function isMessageRunning(message) {
   ).toLowerCase();
 
   if (['streaming', 'thinking', 'running', 'loading', 'pending'].includes(status)) return true;
-  if (message?.isPending === true || message?.isStreaming === true || message?.streaming === true || message?.pending === true) return true;
+  if (message?.isPending === true || message?.pending === true || message?.isStreaming === true || message?.streaming === true) return true;
   return false;
 }
 
@@ -641,6 +693,7 @@ function injectStyle() {
     /* ── 通用按钮重置 ── */
     .chat-thinking-pill,
     .chat-thinking-sheet-close,
+    .chat-thinking-sheet-action-btn,
     .chat-thinking-chain-head {
       border: none;
       outline: none;
@@ -694,6 +747,30 @@ function injectStyle() {
       text-overflow: ellipsis;
     }
 
+    /* ── 加载态小圆点 ── */
+    .chat-thinking-pill-dots {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+    }
+
+    .chat-thinking-pill-dot {
+      width: 4px;
+      height: 4px;
+      border-radius: 999px;
+      background: currentColor;
+      opacity: 0.3;
+      animation: chatThinkingPillDotBounce 1.1s ease-in-out infinite;
+    }
+
+    .chat-thinking-pill-dot:nth-child(2) {
+      animation-delay: 0.12s;
+    }
+
+    .chat-thinking-pill-dot:nth-child(3) {
+      animation-delay: 0.24s;
+    }
+
     /* ── 底部抽屉壳 ── */
     .chat-thinking-sheet {
       min-height: min(56vh, 560px);
@@ -725,6 +802,14 @@ function injectStyle() {
       text-overflow: ellipsis;
     }
 
+    .chat-thinking-sheet-actions {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      flex: 0 0 auto;
+    }
+
+    .chat-thinking-sheet-action-btn,
     .chat-thinking-sheet-close {
       width: 36px;
       height: 36px;
@@ -739,8 +824,14 @@ function injectStyle() {
       touch-action: manipulation;
     }
 
+    .chat-thinking-sheet-action-btn:active,
     .chat-thinking-sheet-close:active {
       transform: scale(0.96);
+    }
+
+    .chat-thinking-sheet-action-btn[data-expanded="true"] {
+      background: var(--color-primary, var(--accent));
+      color: #fff;
     }
 
     /* ── 步骤列表滚动区 ── */
@@ -870,7 +961,7 @@ function injectStyle() {
       transform: rotate(90deg);
     }
 
-    /* ── 详情展开区（grid 行高过渡，不截断长内容） ── */
+    /* ── 详情展开区 ── */
     .chat-thinking-chain-detail {
       display: grid;
       grid-template-rows: 0fr;
@@ -888,6 +979,17 @@ function injectStyle() {
       grid-template-rows: 1fr;
       opacity: 1;
       padding-top: 8px;
+    }
+
+    /* 全部展开：覆盖单个节点的状态 */
+    .chat-thinking-chain-list[data-expand-all="true"] .chat-thinking-chain-detail {
+      grid-template-rows: 1fr;
+      opacity: 1;
+      padding-top: 8px;
+    }
+
+    .chat-thinking-chain-list[data-expand-all="true"] .chat-thinking-chain-arrow {
+      transform: rotate(90deg);
     }
 
     .chat-thinking-chain-detail-text {
@@ -990,6 +1092,17 @@ function injectStyle() {
       100% { transform: scale(1); }
     }
 
+    @keyframes chatThinkingPillDotBounce {
+      0%, 100% {
+        opacity: 0.2;
+        transform: scale(0.8);
+      }
+      50% {
+        opacity: 0.7;
+        transform: scale(1.1);
+      }
+    }
+
     /* ── 移动端适配 ── */
     @media (max-width: 520px) {
       .chat-thinking-pill {
@@ -1012,6 +1125,10 @@ function injectStyle() {
       .chat-thinking-chain-detail {
         margin-left: 44px;
       }
+
+      .chat-thinking-chain-list[data-expand-all="true"] .chat-thinking-chain-detail {
+        margin-left: 44px;
+      }
     }
 
     /* ── 无障碍：减弱动效 ── */
@@ -1022,7 +1139,8 @@ function injectStyle() {
       .chat-thinking-icon-rotate,
       .chat-thinking-icon-book,
       .chat-thinking-icon-write,
-      .chat-thinking-icon-bounce {
+      .chat-thinking-icon-bounce,
+      .chat-thinking-pill-dot {
         animation: none;
       }
 
