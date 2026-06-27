@@ -211,6 +211,12 @@ function createTimeDivider(currentTime, lastTime) {
 
 function createReasoningStack(state, message, role, mode = 'bubble') {
   const stack = el('section', `chat-reasoning-stack role-${role} mode-${mode}`);
+
+  if (role !== 'assistant') {
+    stack.hidden = true;
+    return stack;
+  }
+
   const target = getTargetInfo(state, message);
   const button = createThinkingChainButton(message, { roleName: target.name });
 
