@@ -16,6 +16,7 @@ const CLOSE_ANIMATION_DELAY = 220;
 
 const ICON_PATHS = {
   back: [["path", { d: "M15 18l-6-6 6-6" }]],
+  forward: [["path", { d: "M9 6l6 6-6 6" }]],
   close: [
     ["path", { d: "M6 6l12 12" }],
     ["path", { d: "M18 6L6 18" }]
@@ -116,6 +117,10 @@ const ICON_PATHS = {
     ["path", { d: "M20 14l-6 6" }]
   ],
   play: [["path", { d: "M8 6.5v11l9-5.5-9-5.5z" }]],
+  pause: [
+    ["rect", { x: "7", y: "6", width: "3.5", height: "12", rx: "1" }],
+    ["rect", { x: "13.5", y: "6", width: "3.5", height: "12", rx: "1" }]
+  ],
   stop: [["rect", { x: "7", y: "7", width: "10", height: "10", rx: "2" }]],
   check: [["path", { d: "M5 12.5l4 4L19 6.5" }]],
   "arrow-right": [["path", { d: "M9 5l7 7-7 7" }]],
@@ -182,6 +187,19 @@ const ICON_PATHS = {
     ["path", { d: "M4 5l16 16" }],
     ["path", { d: "M6.2 6.2A3 3 0 004 9v5a3 3 0 003 3h6l4 3v-3" }],
     ["path", { d: "M9 5h8a3 3 0 013 3v6.5" }]
+  ],
+  music: [
+    ["circle", { cx: "8", cy: "17", r: "3" }],
+    ["circle", { cx: "17", cy: "15", r: "3" }],
+    ["path", { d: "M11 17V5l9-2v12" }]
+  ],
+  dream: [
+    ["circle", { cx: "12", cy: "12", r: "7" }],
+    ["path", { d: "M9 10h.1" }],
+    ["path", { d: "M15 10h.1" }],
+    ["path", { d: "M9.5 14c1.2 1.2 3.8 1.2 5 0" }],
+    ["path", { d: "M17.5 4.5a1.5 1.5 0 00-1 1" }],
+    ["path", { d: "M20 6.5a1.5 1.5 0 00-1 1" }]
   ]
 };
 
@@ -762,4 +780,4 @@ ensureCoreUiStyle();
 
 window.showToast = showToast;
 
-/* 依赖：无import；挂载 window.showToast；动态注入 core-ui-style；使用并兼容 .toast / .bottom-sheet / .sheet-overlay / .btn-primary / .btn-ghost / .guide-overlay / .guide-card */
+/* 依赖：无import；挂载 window.showToast；动态注入 core-ui-style；新增 forward 图标 */
