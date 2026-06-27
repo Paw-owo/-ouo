@@ -58,7 +58,6 @@ function urlHasV1(url) {
 
 // ───────────────────
 // 智能拼接聊天 URL
-// 三层检测：完整路径 → 有 /v1 → 啥都没有
 // ───────────────────
 
 function smartChatUrl(base, provider) {
@@ -96,9 +95,10 @@ function smartModelsUrl(base, provider) {
 
 // ───────────────────
 // 智能拼接 Gemini URL
+// 【修复】区分流式/非流式端点
 // ───────────────────
 
-function smartGeminiUrl(base, model, apiKey) {
+function smartGeminiUrl(base, model, apiKey, stream = false) {
   const cleanModel = String(model || '').trim();
   if (!cleanModel) {
     throw new Error('请先选择模型');
@@ -107,7 +107,17 @@ function smartGeminiUrl(base, model, apiKey) {
   let origin = base.replace(/\/+$/, '');
 
   // 已经包含完整路径 → 直接用
-  if (/\/v1beta\/models\/[^/]+:generateContent/i.test(origin)) {
+  const fullPattern = stream
+    ? /\/v1beta\/models\/[^/]+:streamGenerateContent/i
+    : /\/v1beta\/models\/[^/]+:generateContent/i;
+
+  if (fullPattern.test(origin)) {
+    if (apiKey) {
+      const url = new URL(origin);
+      url.searchParams.set('key', apiKey);
+      if (stream) url.searchParams.set('alt', 'sse');
+      return url.toString();
+    }
     return origin;
   }
 
@@ -117,8 +127,10 @@ function smartGeminiUrl(base, model, apiKey) {
     .replace(/\/v1beta\/?$/i, '')
     .replace(/\/+$/, '');
 
-  const url = new URL(`${origin}/v1beta/models/${encodeURIComponent(cleanModel)}:generateContent`);
+  const action = stream ? 'streamGenerateContent' : 'generateContent';
+  const url = new URL(`${origin}/v1beta/models/${encodeURIComponent(cleanModel)}:${action}`);
   if (apiKey) url.searchParams.set('key', apiKey);
+  if (stream) url.searchParams.set('alt', 'sse');
   return url.toString();
 }
 
@@ -315,6 +327,7 @@ function buildAnthropicRequestBody({ messages, systemPrompt, model, stream, temp
 
 // ───────────────────
 // Gemini Body
+// 【修复】移除 stream 字段，Gemini 通过 URL 区分流式/非流式
 // ───────────────────
 
 function toGeminiParts(content) {
@@ -353,7 +366,7 @@ function buildGeminiContents(messages = [], systemPrompt = '') {
   };
 }
 
-function buildGeminiRequestBody({ messages, systemPrompt, stream, temperature, maxTokens }) {
+function buildGeminiRequestBody({ messages, systemPrompt, temperature, maxTokens }) {
   const { systemInstruction, contents } = buildGeminiContents(messages, systemPrompt);
   const body = {
     contents,
@@ -367,7 +380,6 @@ function buildGeminiRequestBody({ messages, systemPrompt, stream, temperature, m
   if (typeof maxTokens === 'number' && Number.isFinite(maxTokens) && maxTokens > 0) {
     body.generationConfig.maxOutputTokens = maxTokens;
   }
-  if (stream) body.stream = true;
 
   return body;
 }
@@ -426,9 +438,9 @@ function buildRequestContext({ endpointConfig, model, systemPrompt, messages, st
   if (provider === 'gemini') {
     return {
       provider,
-      url: smartGeminiUrl(base, requestModel, endpointConfig.apiKey),
+      url: smartGeminiUrl(base, requestModel, endpointConfig.apiKey, stream),
       headers: buildHeaders('', provider),
-      body: buildGeminiRequestBody({ messages, systemPrompt, stream, temperature, maxTokens })
+      body: buildGeminiRequestBody({ messages, systemPrompt, temperature, maxTokens })
     };
   }
 
@@ -561,6 +573,7 @@ function extractContentFromData(data) {
 
 // ═══════════════════════════════════════
 // 【流式读取】SSE 解析
+// 【修复】增加非 SSE 响应兜底
 // ═══════════════════════════════════════
 
 function parseStreamPayload(payload) {
@@ -620,6 +633,7 @@ async function readStream(response, callbacks) {
     }
   }
 
+  // 处理剩余 buffer 中的 SSE 数据
   if (buffer.trim()) {
     const dataLines = buffer.split('\n').map((l) => l.trim()).filter((l) => l.startsWith('data:')).map((l) => l.replace(/^data:\s*/, ''));
     if (dataLines.length) {
@@ -627,6 +641,18 @@ async function readStream(response, callbacks) {
       fullContent += chunk.content || '';
       fullThinking = appendValue(fullThinking, chunk.thinking);
     }
+  }
+
+  // 【修复】兜底：如果没解析到 SSE 内容，尝试把整个 buffer 当普通 JSON 解析
+  if (!fullContent && buffer.trim()) {
+    try {
+      const parsed = JSON.parse(buffer.trim());
+      const extracted = extractContentFromData(parsed);
+      if (extracted.content) {
+        fullContent = extracted.content;
+        fullThinking = appendValue(fullThinking, extracted.thinking);
+      }
+    } catch {}
   }
 
   callbacks.onDone?.({ content: fullContent, thinking: fullThinking });
@@ -802,7 +828,34 @@ export async function fetchModels(endpointId, timeout = DEFAULT_TIMEOUT) {
   try {
     const endpointConfig = findEndpoint(endpointId);
 
-    if (endpointConfig.provider === 'gemini') return [];
+    // 【修复】Gemini 走自己的模型列表 API
+    if (endpointConfig.provider === 'gemini') {
+      let base = endpointConfig.endpoint;
+      base = base
+        .replace(/\/v1beta\/models\/?$/i, '')
+        .replace(/\/v1beta\/?$/i, '')
+        .replace(/\/+$/, '');
+
+      const url = new URL(`${base}/v1beta/models`);
+      if (endpointConfig.apiKey) url.searchParams.set('key', endpointConfig.apiKey);
+
+      const response = await fetch(url.toString(), {
+        method: 'GET',
+        signal: controller.signal
+      });
+
+      if (!response.ok) throw new Error(await parseErrorResponse(response));
+
+      const data = await response.json();
+      const models = Array.isArray(data.models) ? data.models : [];
+      return models
+        .map((m) => {
+          const name = m?.name || '';
+          return name.replace(/^models\//, '');
+        })
+        .filter(Boolean)
+        .sort((a, b) => a.localeCompare(b));
+    }
 
     const url = smartModelsUrl(endpointConfig.endpoint, endpointConfig.provider);
 
