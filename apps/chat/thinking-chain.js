@@ -62,7 +62,6 @@ export function openThinkingChainSheet(message, options = {}) {
   const titleText = getSheetTitle(message, roleName);
 
   const sheet = el('section', 'chat-thinking-sheet');
-  const handle = el('div', 'chat-thinking-sheet-handle');
 
   const header = el('div', 'chat-thinking-sheet-header');
   const title = el('div', 'chat-thinking-sheet-title', titleText);
@@ -80,7 +79,7 @@ export function openThinkingChainSheet(message, options = {}) {
     list.appendChild(item);
   });
 
-  sheet.append(handle, header, list);
+  sheet.append(header, list);
   showBottomSheet(sheet);
 }
 
@@ -96,7 +95,6 @@ export function buildThinkingSteps(message) {
   const isRunning = isMessageRunning(message);
   const hasActionSteps = toolSteps.length > 0 || memorySteps.length > 0;
 
-  // 思考步骤：thinking 有内容时生成
   if (thinkingText) {
     steps.push({
       type: 'thinking',
@@ -108,7 +106,6 @@ export function buildThinkingSteps(message) {
     });
   }
 
-  // 工具步骤
   if (toolSteps.length) {
     toolSteps.forEach((tool, index) => {
       const toolType = detectToolType(tool);
@@ -124,7 +121,6 @@ export function buildThinkingSteps(message) {
     });
   }
 
-  // 记忆步骤
   if (memorySteps.length) {
     memorySteps.forEach((memory, index) => {
       steps.push({
@@ -138,7 +134,6 @@ export function buildThinkingSteps(message) {
     });
   }
 
-  // 组织回复步骤：有任何步骤或有正文内容就生成
   const messageContent = normalizeMultiline(message?.content);
   const hasAnySteps = thinkingText || hasActionSteps;
 
@@ -157,7 +152,6 @@ export function buildThinkingSteps(message) {
     });
   }
 
-  // 完成步骤
   if (steps.length && !isRunning) {
     steps.push({
       type: 'done',
@@ -415,7 +409,7 @@ function isMessageRunning(message) {
   ).toLowerCase();
 
   if (['streaming', 'thinking', 'running', 'loading', 'pending'].includes(status)) return true;
-  if (message?.isStreaming === true || message?.streaming === true || message?.pending === true) return true;
+  if (message?.isPending === true || message?.isStreaming === true || message?.streaming === true || message?.pending === true) return true;
   return false;
 }
 
@@ -531,7 +525,7 @@ function normalizeMultiline(value) {
 }
 
 // ───────────────────
-// 详情文本：不再因 summary 相同就隐藏内容
+// 详情文本
 // ───────────────────
 
 function normalizeDetailText(step) {
@@ -638,11 +632,22 @@ function rectEl(x, y, width, height, rx = 2) {
 // ═══════════════════════════════════════
 
 function injectStyle() {
-  if (document.getElementById(THINKING_CHAIN_STYLE_ID)) return;
+  const old = document.getElementById(THINKING_CHAIN_STYLE_ID);
+  if (old) old.remove();
 
   const style = document.createElement('style');
   style.id = THINKING_CHAIN_STYLE_ID;
   style.textContent = `
+    /* ── 通用按钮重置 ── */
+    .chat-thinking-pill,
+    .chat-thinking-sheet-close,
+    .chat-thinking-chain-head {
+      border: none;
+      outline: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    /* ── 胶囊按钮 ── */
     .chat-thinking-pill {
       min-height: 30px;
       max-width: min(240px, 72vw);
@@ -651,9 +656,9 @@ function injectStyle() {
       gap: 8px;
       padding: 6px 10px;
       border-radius: 999px;
-      background: var(--surface-muted);
+      background: var(--bg-hover, var(--bg-surface));
       color: var(--text-secondary);
-      box-shadow: var(--shadow-sm);
+      box-shadow: var(--shadow-soft, 0 1px 4px rgba(0,0,0,0.04));
       font: inherit;
       font-size: 12px;
       line-height: 1.35;
@@ -675,7 +680,7 @@ function injectStyle() {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      color: var(--accent);
+      color: var(--color-primary, var(--accent));
     }
 
     .chat-thinking-pill[data-running="false"] .chat-thinking-pill-icon {
@@ -689,24 +694,15 @@ function injectStyle() {
       text-overflow: ellipsis;
     }
 
+    /* ── 底部抽屉壳 ── */
     .chat-thinking-sheet {
       min-height: min(56vh, 560px);
       max-height: min(78vh, 720px);
       display: flex;
       flex-direction: column;
       gap: 14px;
-      padding: 0 2px 8px;
+      padding: 0 2px calc(8px + env(safe-area-inset-bottom, 0px));
       color: var(--text-primary);
-    }
-
-    .chat-thinking-sheet-handle {
-      width: 48px;
-      height: 5px;
-      margin: 0 auto;
-      border-radius: 999px;
-      background: var(--text-hint);
-      opacity: 0.28;
-      flex: 0 0 auto;
     }
 
     .chat-thinking-sheet-header {
@@ -730,15 +726,15 @@ function injectStyle() {
     }
 
     .chat-thinking-sheet-close {
-      width: 40px;
-      height: 40px;
+      width: 36px;
+      height: 36px;
       display: inline-flex;
       align-items: center;
       justify-content: center;
       border-radius: 999px;
-      background: var(--bg-card);
+      background: var(--bg-hover, var(--bg-surface));
       color: var(--text-secondary);
-      box-shadow: var(--shadow-sm);
+      box-shadow: var(--shadow-soft, 0 1px 4px rgba(0,0,0,0.04));
       transition: all 200ms ease;
       touch-action: manipulation;
     }
@@ -747,6 +743,7 @@ function injectStyle() {
       transform: scale(0.96);
     }
 
+    /* ── 步骤列表滚动区 ── */
     .chat-thinking-chain-list {
       flex: 1 1 auto;
       min-height: 0;
@@ -754,8 +751,14 @@ function injectStyle() {
       padding: 2px 4px 12px;
       overscroll-behavior: contain;
       -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
     }
 
+    .chat-thinking-chain-list::-webkit-scrollbar {
+      display: none;
+    }
+
+    /* ── 单个步骤节点 ── */
     .chat-thinking-chain-item {
       position: relative;
       display: flex;
@@ -775,7 +778,7 @@ function injectStyle() {
       bottom: -2px;
       width: 2px;
       border-radius: 999px;
-      background: var(--surface-muted);
+      background: var(--bg-hover, var(--bg-surface));
       opacity: 1;
     }
 
@@ -811,9 +814,9 @@ function injectStyle() {
       align-items: center;
       justify-content: center;
       border-radius: 999px;
-      background: var(--bg-card);
-      color: var(--accent);
-      box-shadow: var(--shadow-sm);
+      background: var(--bg-surface);
+      color: var(--color-primary, var(--accent));
+      box-shadow: var(--shadow-soft, 0 1px 4px rgba(0,0,0,0.04));
       flex: 0 0 auto;
     }
 
@@ -826,7 +829,7 @@ function injectStyle() {
     }
 
     .chat-thinking-chain-item[data-type="write"] .chat-thinking-chain-marker {
-      color: var(--accent-dark, var(--accent));
+      color: var(--color-primary-deep, var(--color-primary, var(--accent)));
     }
 
     .chat-thinking-chain-body {
@@ -858,7 +861,7 @@ function injectStyle() {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      color: var(--text-hint);
+      color: var(--text-placeholder, var(--text-secondary));
       transition: all 200ms ease;
       padding-top: 6px;
     }
@@ -867,16 +870,22 @@ function injectStyle() {
       transform: rotate(90deg);
     }
 
+    /* ── 详情展开区（grid 行高过渡，不截断长内容） ── */
     .chat-thinking-chain-detail {
-      max-height: 0;
+      display: grid;
+      grid-template-rows: 0fr;
       overflow: hidden;
       opacity: 0;
       margin-left: 48px;
-      transition: all 200ms ease;
+      transition: grid-template-rows 220ms ease, opacity 200ms ease;
+    }
+
+    .chat-thinking-chain-detail > .chat-thinking-chain-detail-text {
+      min-height: 0;
     }
 
     .chat-thinking-chain-item[data-open="true"] .chat-thinking-chain-detail {
-      max-height: 360px;
+      grid-template-rows: 1fr;
       opacity: 1;
       padding-top: 8px;
     }
@@ -885,18 +894,24 @@ function injectStyle() {
       margin: 0;
       padding: 12px 14px;
       border-radius: 18px;
-      background: var(--bg-card);
+      background: var(--bg-surface);
       color: var(--text-primary);
-      box-shadow: var(--shadow-sm);
+      box-shadow: var(--shadow-soft, 0 1px 4px rgba(0,0,0,0.04));
       font-family: var(--font-main);
       font-size: 13px;
       line-height: 1.65;
       white-space: pre-wrap;
       word-break: break-word;
       overflow-y: auto;
-      max-height: 320px;
+      max-height: 400px;
+      scrollbar-width: none;
     }
 
+    .chat-thinking-chain-detail-text::-webkit-scrollbar {
+      display: none;
+    }
+
+    /* ── 图标动画 ── */
     .chat-thinking-icon-eye {
       transform-origin: center;
       animation: chatThinkingBlink 3.2s ease-in-out infinite;
@@ -931,12 +946,12 @@ function injectStyle() {
       animation: chatThinkingBounce 820ms ease;
     }
 
+    /* ── 关键帧 ── */
     @keyframes chatThinkingChainItemIn {
       from {
         opacity: 0;
         transform: translateY(8px);
       }
-
       to {
         opacity: 1;
         transform: translateY(0);
@@ -944,78 +959,38 @@ function injectStyle() {
     }
 
     @keyframes chatThinkingBlink {
-      0%, 44%, 48%, 100% {
-        transform: scaleY(1);
-      }
-
-      46% {
-        transform: scaleY(0.12);
-      }
+      0%, 44%, 48%, 100% { transform: scaleY(1); }
+      46% { transform: scaleY(0.12); }
     }
 
     @keyframes chatThinkingTwinkle {
-      0% {
-        opacity: 0.7;
-        transform: rotate(0deg) scale(0.92);
-      }
-
-      50% {
-        opacity: 1;
-        transform: rotate(180deg) scale(1.06);
-      }
-
-      100% {
-        opacity: 0.7;
-        transform: rotate(360deg) scale(0.92);
-      }
+      0% { opacity: 0.7; transform: rotate(0deg) scale(0.92); }
+      50% { opacity: 1; transform: rotate(180deg) scale(1.06); }
+      100% { opacity: 0.7; transform: rotate(360deg) scale(0.92); }
     }
 
     @keyframes chatThinkingRotate {
-      from {
-        transform: rotate(0deg);
-      }
-
-      to {
-        transform: rotate(360deg);
-      }
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
     }
 
     @keyframes chatThinkingBook {
-      0%, 100% {
-        transform: rotateY(0deg);
-        opacity: 0.9;
-      }
-
-      50% {
-        transform: rotateY(24deg);
-        opacity: 1;
-      }
+      0%, 100% { transform: rotateY(0deg); opacity: 0.9; }
+      50% { transform: rotateY(24deg); opacity: 1; }
     }
 
     @keyframes chatThinkingWrite {
-      0%, 100% {
-        transform: rotate(-4deg) translateY(0);
-      }
-
-      50% {
-        transform: rotate(4deg) translateY(1px);
-      }
+      0%, 100% { transform: rotate(-4deg) translateY(0); }
+      50% { transform: rotate(4deg) translateY(1px); }
     }
 
     @keyframes chatThinkingBounce {
-      0% {
-        transform: scale(0.82);
-      }
-
-      55% {
-        transform: scale(1.08);
-      }
-
-      100% {
-        transform: scale(1);
-      }
+      0% { transform: scale(0.82); }
+      55% { transform: scale(1.08); }
+      100% { transform: scale(1); }
     }
 
+    /* ── 移动端适配 ── */
     @media (max-width: 520px) {
       .chat-thinking-pill {
         max-width: min(220px, 74vw);
@@ -1039,6 +1014,7 @@ function injectStyle() {
       }
     }
 
+    /* ── 无障碍：减弱动效 ── */
     @media (prefers-reduced-motion: reduce) {
       .chat-thinking-chain-item,
       .chat-thinking-icon-eye,
@@ -1048,6 +1024,10 @@ function injectStyle() {
       .chat-thinking-icon-write,
       .chat-thinking-icon-bounce {
         animation: none;
+      }
+
+      .chat-thinking-chain-detail {
+        transition: none;
       }
     }
   `;
