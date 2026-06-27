@@ -1,3 +1,4 @@
+// core/storage-manager.js
 // imports:
 //   from './storage.js': getData, setData, removeData, getAllDB, setDB, clearStoreDB, generateId, getNow
 
@@ -74,7 +75,9 @@ const INDEXED_DB_STORES = [
   'punishments',
   'relationship_locks',
   'albums',
-  'memories_album'
+  'memories_album',
+  'songs',
+  'playlists'
 ];
 
 const DEFAULT_CLOUD_CONFIG = {
