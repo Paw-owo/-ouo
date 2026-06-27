@@ -1108,6 +1108,7 @@ async function deleteCharacterEverywhere(characterId) {
     deleteDB('characters', id).catch(() => null),
     deleteIndexedByCharacter('messages', 'characterId', id),
     deleteIndexedByCharacter('memories', 'characterId', id),
+    deleteIndexedByCharacter('dreams', 'characterId', id),
     deleteIndexedByCharacter('grudges', 'characterId', id),
     deleteIndexedByCharacter('punishments', 'characterId', id),
     deleteIndexedByCharacter('relationship_locks', 'characterId', id)
@@ -1927,8 +1928,8 @@ function injectStyle() {
   document.head.appendChild(style);
 }
 
-// 改了什么：confirmNewConversation 里删消息和存记忆的顺序对调，先删消息再存记忆。
-// 原来效果：先存记忆 → 再删消息 → 如果删消息失败 → 旧消息还在 + 多了一条记忆，两边都脏。
-// 现在效果：先删消息 → 再存记忆 → 删消息成功后才写记忆，不会出现两边脏的情况。
-// 会不会影响其他文件：不会。导出接口（mountChatList/unmountChatList）不变。
-// 依赖：../../core/storage.js(getData,setData,generateId,getNow,setDB,getAllDB,getByIndexDB,deleteDB)；../../core/ui.js(createIcon,showToast,showConfirm,showBottomSheet,hideBottomSheet)；./thread-ai.js(checkThreadProactiveMessages)
+// 改了什么：deleteCharacterEverywhere 里加了 deleteIndexedByCharacter('dreams', 'characterId', id)，删角色时连带清理该角色的梦境。
+// 原来效果：删角色后梦境还在，变成孤儿数据。
+// 现在效果：删角色时同步删除该角色所有梦境。
+// 会不会影响其他文件：不会。只在内部的删除函数加了一行。
+// depends: ../../core/storage.js(getData,setData,generateId,getNow,setDB,getAllDB,getByIndexDB,deleteDB)；../../core/ui.js(createIcon,showToast,showConfirm,showBottomSheet,hideBottomSheet)；./thread-ai.js(checkThreadProactiveMessages)
