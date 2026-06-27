@@ -125,6 +125,30 @@ const DESKTOP_WIDGET_LIST = [
   ['focus', '焦点小卡片', '显示桌面上的小提醒']
 ];
 
+const FREE_API_PRESETS = [
+  {
+    id: 'free_siliconflow',
+    name: '硅基流动',
+    endpoint: 'https://api.siliconflow.cn/v1',
+    model: 'Qwen/Qwen2.5-7B-Instruct',
+    description: '注册送免费额度，Qwen 系列模型'
+  },
+  {
+    id: 'free_zhipu',
+    name: '智谱清言',
+    endpoint: 'https://open.bigmodel.cn/api/paas/v4',
+    model: 'glm-4-flash',
+    description: 'GLM-4-Flash 每月免费额度'
+  },
+  {
+    id: 'free_openrouter',
+    name: 'OpenRouter',
+    endpoint: 'https://openrouter.ai/api/v1',
+    model: 'meta-llama/llama-3.1-8b-instruct:free',
+    description: '多个免费模型，注册即可用'
+  }
+];
+
 let rootEl = null;
 let route = 'home';
 let styleEl = null;
@@ -155,7 +179,7 @@ export function unmount() {
 }
 
 // ═══════════════════════════════════════
-// 【路由渲染】根据 route 分发页面 — render 改为 async 支持异步页面
+// 【路由渲染】根据 route 分发页面
 // ═══════════════════════════════════════
 
 async function render(nextRoute = route) {
@@ -184,10 +208,6 @@ function renderHeader() {
   nav.append(back, text);
   return nav;
 }
-
-// ───────────────────
-// renderBody 改为 async，await 页面函数返回值
-// ───────────────────
 
 async function renderBody() {
   const body = el('div', 'settings-content content-area');
@@ -391,77 +411,58 @@ function renderDisplayPage() {
 }
 
 // ═══════════════════════════════════════
-// 【API 页】API 端点管理 — 默认标记醒目显示
+// 【API 页】重写 — 紧凑卡片 + 免费/自建分组
 // ═══════════════════════════════════════
 
 function renderApiPage() {
   const wrap = page();
   const settings = getSettings();
+  const allApis = settings.apiEndpoints || [];
+  const freeApis = allApis.filter((api) => api.source === 'free');
+  const customApis = allApis.filter((api) => api.source !== 'free');
 
+  // 顶部卡片 + 两个按钮
   const top = card('API 小管家', '模型、Key、接口都住这里');
-  top.append(actionBtn('add', '新增 API', () => openApiEditor(null)));
+  const topButtons = el('div', 'settings-api-top-buttons');
+
+  const addBtn = el('button', 'settings-api-top-btn');
+  addBtn.type = 'button';
+  addBtn.append(safeIcon('add', 20), el('strong', '', '新增 API'), el('small', '', '自己填 Key 和地址'));
+  addBtn.addEventListener('click', () => openApiEditor(null));
+
+  const freeBtn = el('button', 'settings-api-top-btn');
+  freeBtn.type = 'button';
+  freeBtn.append(safeIcon('play', 20), el('strong', '', '免费 API'), el('small', '', '内置配置，填 Key 就能用'));
+  freeBtn.addEventListener('click', openFreeApiSelector);
+
+  topButtons.append(addBtn, freeBtn);
+  top.append(topButtons);
   wrap.append(top);
 
-  if (!settings.apiEndpoints.length) wrap.append(empty('还没有 API，先加一个吧 ᗜ ‸ ᗜ'));
+  // 空状态
+  if (!freeApis.length && !customApis.length) {
+    wrap.append(empty('还没有 API，先加一个吧 ᗜ ‸ ᗜ'));
+  }
 
-  settings.apiEndpoints.forEach((api) => {
-    const isDefault = settings.defaultApiEndpointId === api.id;
-    const item = card(api.name || '未命名 API', `${api.endpoint || '未填写地址'}\n模型：${api.model || '未选择'} · Key：${api.apiKey ? '已填写' : '未填写'}`);
+  // 免费 API 分组
+  if (freeApis.length) {
+    const groupEl = el('div', 'settings-api-group');
+    groupEl.append(el('div', 'settings-api-group-title', '免费 API'));
+    freeApis.forEach((api) => {
+      groupEl.append(compactApiCard(api, settings.defaultApiEndpointId === api.id));
+    });
+    wrap.append(groupEl);
+  }
 
-    if (isDefault) {
-      const badge = el('div', 'settings-default-badge');
-      badge.textContent = '✦ 当前默认';
-      item.append(badge);
-    }
-
-    item.append(actionRow([
-      actionBtn(isDefault ? 'check' : 'star', isDefault ? '已是默认' : '设为默认', () => {
-        if (!isDefault) setDefaultApi(api.id);
-        else showToast('这个已经是默认啦');
-      }),
-      actionBtn('refresh', '拉模型', async (e) => {
-        const btn = e?.currentTarget;
-        if (!btn || btn.dataset.loading === '1') return;
-        btn.dataset.loading = '1';
-        const span = btn.querySelector('span');
-        const orig = span?.textContent;
-        if (span) span.textContent = '拉取中...';
-        try {
-          await loadApiModels(api.id);
-        } finally {
-          if (btn) btn.dataset.loading = '0';
-          if (span) span.textContent = orig;
-        }
-      }),
-      actionBtn('check', '测试', async (e) => {
-        const btn = e?.currentTarget;
-        if (!btn || btn.dataset.loading === '1') return;
-        btn.dataset.loading = '1';
-        const span = btn.querySelector('span');
-        const orig = span?.textContent;
-        if (span) span.textContent = '测试中...';
-        try {
-          await testApi(api.id);
-        } finally {
-          if (btn) btn.dataset.loading = '0';
-          if (span) span.textContent = orig;
-        }
-      }),
-      actionBtn('edit', '编辑', () => openApiEditor(api)),
-      actionBtn('delete', '删除', () => deleteApi(api.id))
-    ]));
-
-    if (Array.isArray(api.modelList) && api.modelList.length) {
-      item.append(modelPicker({
-        models: api.modelList,
-        current: api.model,
-        emptyText: '',
-        onSelect: (model) => selectApiModel(api.id, model)
-      }));
-    }
-
-    wrap.append(item);
-  });
+  // 自建 API 分组
+  if (customApis.length) {
+    const groupEl = el('div', 'settings-api-group');
+    groupEl.append(el('div', 'settings-api-group-title', '自建 API'));
+    customApis.forEach((api) => {
+      groupEl.append(compactApiCard(api, settings.defaultApiEndpointId === api.id));
+    });
+    wrap.append(groupEl);
+  }
 
   return wrap;
 }
@@ -509,7 +510,7 @@ function renderTtsPage() {
 }
 
 // ═══════════════════════════════════════
-// 【MCP 页】工具服务器管理 — 加测试按钮
+// 【MCP 页】工具服务器管理
 // ═══════════════════════════════════════
 
 function renderMcpPage() {
@@ -674,7 +675,7 @@ function renderDesktopPage() {
 }
 
 // ═══════════════════════════════════════
-// 【小组件页】桌面小组件管理 — 背景上传存 IndexedDB + 预览异步读
+// 【小组件页】桌面小组件管理
 // ═══════════════════════════════════════
 
 async function renderWidgetsPage() {
@@ -741,7 +742,7 @@ async function renderWidgetsPage() {
 }
 
 // ═══════════════════════════════════════
-// 【图标页】应用图标管理 — 预览异步读 IndexedDB
+// 【图标页】应用图标管理
 // ═══════════════════════════════════════
 
 async function renderIconsPage() {
@@ -836,7 +837,7 @@ function saveSettings(settings) {
 }
 
 // ═══════════════════════════════════════
-// 【桌面小组件操作】开关、缩放、壁纸
+// 【桌面小组件操作】
 // ═══════════════════════════════════════
 
 function toggleDesktopWidget(key, enabled) {
@@ -879,7 +880,7 @@ function getCloud() {
 }
 
 // ═══════════════════════════════════════
-// 【API 操作】默认设置、模型选择、拉取、测试、删除、编辑器
+// 【API 操作】默认设置、模型选择、拉取、测试、删除
 // ═══════════════════════════════════════
 
 function setDefaultApi(id) {
@@ -942,11 +943,98 @@ async function deleteApi(id) {
   render('api');
 }
 
+// ═══════════════════════════════════════
+// 【免费 API】选择器和添加逻辑
+// ═══════════════════════════════════════
+
+function openFreeApiSelector() {
+  const settings = getSettings();
+  const existingPresetIds = new Set(
+    settings.apiEndpoints
+      .filter((api) => api.source === 'free' && api.presetId)
+      .map((api) => api.presetId)
+  );
+
+  const sheet = sheetBox('选择免费 API');
+
+  FREE_API_PRESETS.forEach((preset) => {
+    const isActivated = existingPresetIds.has(preset.id);
+    const presetCard = el('div', 'settings-free-preset');
+
+    const info = el('div', 'settings-free-preset-info');
+    info.append(
+      el('strong', '', preset.name),
+      el('small', '', `${preset.model} · ${preset.description}`)
+    );
+
+    const btn = actionBtn(
+      isActivated ? 'check' : 'add',
+      isActivated ? '已启用' : '启用',
+      () => {
+        if (isActivated) {
+          showToast('这个已经启用啦');
+          return;
+        }
+        addFreeApi(preset);
+      }
+    );
+
+    presetCard.append(info, btn);
+    sheet.body.append(presetCard);
+  });
+
+  showBottomSheet(sheet.root);
+}
+
+function addFreeApi(preset) {
+  const settings = getSettings();
+
+  if (settings.apiEndpoints.some((api) => api.presetId === preset.id)) {
+    showToast('这个已经启用啦');
+    return;
+  }
+
+  const newApi = {
+    id: generateId(),
+    presetId: preset.id,
+    source: 'free',
+    name: preset.name,
+    endpoint: preset.endpoint,
+    apiKey: '',
+    model: preset.model,
+    modelList: []
+  };
+
+  settings.apiEndpoints.push(newApi);
+
+  if (!settings.defaultApiEndpointId) {
+    settings.defaultApiEndpointId = newApi.id;
+    settings.defaultModel = newApi.model;
+  }
+
+  saveSettings(settings);
+  hideBottomSheet();
+  showToast(`${preset.name} 启用啦，点编辑填入 Key`);
+  render('api');
+}
+
+// ═══════════════════════════════════════
+// 【API 编辑器】新增 / 编辑 — 修复 URL 拼接
+// ═══════════════════════════════════════
+
 function openApiEditor(api) {
   const current = api || { id: generateId(), name: '', endpoint: '', apiKey: '', model: '', modelList: [] };
   let draftModelList = Array.isArray(current.modelList) ? [...current.modelList] : [];
+  const isFree = current.source === 'free';
 
-  const sheet = sheetBox(api ? '编辑 API' : '新增 API');
+  const sheet = sheetBox(api ? (isFree ? '编辑免费 API' : '编辑 API') : '新增 API');
+
+  // 免费 API 提示
+  if (isFree) {
+    const note = el('p', 'settings-free-note', '免费 API 预设，地址和模型已填好，填入 Key 就能用');
+    sheet.body.append(note);
+  }
+
   const name = inputRow('名字', current.name, '比如：主力模型');
   const endpoint = inputRow('Endpoint', current.endpoint, 'https://api.xxx.com');
   const apiKey = inputRow('API Key', current.apiKey, 'sk-...');
@@ -972,18 +1060,27 @@ function openApiEditor(api) {
   sheet.body.append(name.wrap, endpoint.wrap, apiKey.wrap, model.wrap, modelArea);
 
   let loading = false;
+
   sheet.actions.append(
+    // 拉取模型 — 修复：自动检测服务商，拼对 URL
     actionBtn('refresh', '拉取模型', async () => {
       if (loading) {
         showToast('正在拉取中，等一下哦');
         return;
       }
 
-      const base = normalizeEndpoint(endpoint.input.value);
+      const endpointValue = endpoint.input.value.trim();
       const key = apiKey.input.value.trim();
 
-      if (!base) {
+      if (!endpointValue) {
         showToast('先填 Endpoint 哦');
+        return;
+      }
+
+      const provider = detectProviderFromUrl(endpointValue);
+
+      if (provider === 'gemini') {
+        showToast('Gemini 需要手动输入模型名');
         return;
       }
 
@@ -991,18 +1088,32 @@ function openApiEditor(api) {
       showToast('正在拉取模型...');
 
       try {
-        const res = await fetch(`${base}/v1/models`, {
-          method: 'GET',
-          headers: key ? { Authorization: `Bearer ${key}` } : {},
-          cache: 'no-store'
-        });
+        let url;
+        if (provider === 'ollama') {
+          url = endpointValue.replace(/\/+$/, '') + '/api/tags';
+        } else {
+          const base = endpointValue.replace(/\/+$/, '').replace(/\/v1\/?$/, '');
+          url = base + '/v1/models';
+        }
 
+        const headers = {};
+        if (provider !== 'ollama' && key) {
+          headers['Authorization'] = `Bearer ${key}`;
+        }
+
+        const res = await fetch(url, { method: 'GET', headers, cache: 'no-store' });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
         const data = await res.json().catch(() => null);
-        const models = (data?.data || [])
-          .map((item) => typeof item === 'string' ? item : item?.id)
-          .filter(Boolean);
+        let models = [];
+
+        if (provider === 'ollama') {
+          models = (data?.models || []).map((m) => m?.name).filter(Boolean);
+        } else {
+          models = (data?.data || [])
+            .map((m) => typeof m === 'string' ? m : m?.id)
+            .filter(Boolean);
+        }
 
         if (!models.length) {
           showToast('没有找到可选模型');
@@ -1019,6 +1130,49 @@ function openApiEditor(api) {
 
       loading = false;
     }),
+
+    // 测试连接
+    actionBtn('check', '测试', async () => {
+      if (loading) return;
+      const endpointValue = endpoint.input.value.trim();
+      const key = apiKey.input.value.trim();
+
+      if (!endpointValue) {
+        showToast('先填 Endpoint 哦');
+        return;
+      }
+
+      loading = true;
+      showToast('正在测试连接...');
+
+      try {
+        const provider = detectProviderFromUrl(endpointValue);
+        let url;
+        const headers = {};
+
+        if (provider === 'gemini') {
+          let base = endpointValue.replace(/\/v1beta\/models\/?$/i, '').replace(/\/v1beta\/?$/i, '').replace(/\/+$/, '');
+          const u = new URL(`${base}/v1beta/models`);
+          if (key) u.searchParams.set('key', key);
+          url = u.toString();
+        } else if (provider === 'ollama') {
+          url = endpointValue.replace(/\/+$/, '') + '/api/tags';
+        } else {
+          const base = endpointValue.replace(/\/+$/, '').replace(/\/v1\/?$/, '');
+          url = base + '/v1/models';
+          if (key) headers['Authorization'] = `Bearer ${key}`;
+        }
+
+        const res = await fetch(url, { method: 'GET', headers, cache: 'no-store' });
+        showToast(res.ok ? '连接成功啦' : '连接失败了');
+      } catch {
+        showToast('连接失败，检查地址和 Key');
+      }
+
+      loading = false;
+    }),
+
+    // 保存
     actionBtn('check', '保存', () => {
       const settings = getSettings();
       const next = {
@@ -1027,7 +1181,8 @@ function openApiEditor(api) {
         endpoint: endpoint.input.value.trim(),
         apiKey: apiKey.input.value.trim(),
         model: model.input.value.trim(),
-        modelList: draftModelList
+        modelList: draftModelList,
+        ...(isFree ? { source: 'free', presetId: current.presetId } : {})
       };
 
       settings.apiEndpoints = [...settings.apiEndpoints.filter((item) => item.id !== current.id), next];
@@ -1199,7 +1354,7 @@ function stopTTS() {
 }
 
 // ═══════════════════════════════════════
-// 【MCP 操作】编辑器（含 apiKey）、测试、开关、删除
+// 【MCP 操作】
 // ═══════════════════════════════════════
 
 async function testMcpServer(serverId) {
@@ -1284,7 +1439,7 @@ async function deleteMcp(id) {
 }
 
 // ═══════════════════════════════════════
-// 【气泡模式】切换气泡/对话模式
+// 【气泡模式】
 // ═══════════════════════════════════════
 
 function saveBubbleMode(mode) {
@@ -1294,7 +1449,6 @@ function saveBubbleMode(mode) {
   showToast('聊天样子换好啦');
   render('display');
 }
-
 // ═══════════════════════════════════════
 // 【桌面缩放/壁纸】保存缩放、壁纸透明度、上传清除
 // ═══════════════════════════════════════
@@ -1423,7 +1577,7 @@ async function clearWidgetBg(key) {
 }
 
 // ═══════════════════════════════════════
-// 【小组件编辑器】新建/编辑自定义小组件 — 打开时从 IndexedDB 读图片
+// 【小组件编辑器】新建/编辑自定义小组件
 // ═══════════════════════════════════════
 
 async function openWidgetEditor(widget) {
@@ -1494,7 +1648,7 @@ async function deleteWidget(id) {
 }
 
 // ═══════════════════════════════════════
-// 【图标操作】重命名、上传（同时存 IndexedDB）、隐藏
+// 【图标操作】重命名、上传、隐藏
 // ═══════════════════════════════════════
 
 function renameIcon(id, fallbackName) {
@@ -1977,7 +2131,7 @@ function inputRow(label, value, placeholder) {
 
 function selectRow(label, value, options) {
   const wrap = el('label', 'settings-field');
-  const input = el('select', 'settings-input');
+  const input = el('select', 'settings-input settings-select');
 
   options.forEach(([val, text]) => {
     const option = document.createElement('option');
@@ -1986,7 +2140,7 @@ function selectRow(label, value, options) {
     input.append(option);
   });
 
-  input.value = value;
+  input.value = value || options[0]?.[0] || '';
   wrap.append(el('span', '', label), input);
   return { wrap, input };
 }
@@ -2130,6 +2284,60 @@ function emitRefresh() {
   window.dispatchEvent(new CustomEvent('app-settings-updated'));
 }
 
+// ═══════════════════════════════════════
+// 【新增辅助】服务商检测、免费API判断、紧凑卡片、图标按钮
+// ═══════════════════════════════════════
+
+function detectProviderFromUrl(endpoint) {
+  const raw = String(endpoint || '').toLowerCase();
+  if (raw.includes('anthropic.com')) return 'anthropic';
+  if (raw.includes('generativelanguage.googleapis.com')) return 'gemini';
+  if (raw.includes('localhost') || raw.includes('127.0.0.1')) return 'ollama';
+  return 'openai';
+}
+
+function isFreeApi(api) {
+  return api.source === 'free';
+}
+
+function compactApiCard(api, isDefault) {
+  const item = el('div', 'settings-api-compact');
+
+  const iconEl = el('span', 'settings-api-compact-icon');
+  iconEl.append(safeIcon(isFreeApi(api) ? 'play' : 'settings', 15));
+
+  const info = el('div', 'settings-api-compact-info');
+  info.append(el('strong', '', api.name || '未命名'));
+  if (api.model) info.append(el('small', '', api.model));
+
+  const badge = isDefault ? el('span', 'settings-api-compact-badge', '默认') : null;
+
+  const actions = el('div', 'settings-api-compact-actions');
+  actions.append(
+    compactActionBtn(isDefault ? 'check' : 'star', () => {
+      if (!isDefault) setDefaultApi(api.id);
+      else showToast('这个已经是默认啦');
+    }),
+    compactActionBtn('edit', () => openApiEditor(api)),
+    compactActionBtn('delete', () => deleteApi(api.id))
+  );
+
+  item.append(iconEl, info, ...(badge ? [badge] : []), actions);
+  return item;
+}
+
+function compactActionBtn(icon, onClick) {
+  const btn = el('button', 'settings-compact-action');
+  btn.type = 'button';
+  btn.append(safeIcon(icon, 15));
+  btn.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onClick?.();
+  });
+  return btn;
+}
+
 function safeIcon(name, size = 18) {
   try {
     const icon = createIcon(name, size);
@@ -2167,7 +2375,11 @@ function el(tag, className = '', text = '') {
 // ═══════════════════════════════════════
 
 function injectStyle() {
-  if (styleEl) return;
+  // 修复：先删旧 style 再建新的
+  if (styleEl) {
+    styleEl.remove();
+    styleEl = null;
+  }
 
   styleEl = document.createElement('style');
   styleEl.textContent = `
@@ -2269,8 +2481,18 @@ function injectStyle() {
 
     .settings-hero p,
     .settings-card-desc,
-    .settings-note {
+    .settings-note,
+    .settings-free-note {
       margin: 6px 0 0;
+    }
+
+    .settings-free-note {
+      color: var(--text-secondary);
+      font-size: var(--font-size-small);
+      line-height: 1.55;
+      padding: 8px 10px;
+      border-radius: 12px;
+      background: var(--surface-muted);
     }
 
     .settings-group {
@@ -2304,7 +2526,9 @@ function injectStyle() {
     .settings-preset:active,
     .settings-model-chip:active,
     .settings-switch-row:active,
-    .settings-nav-btn:active {
+    .settings-nav-btn:active,
+    .settings-api-top-btn:active,
+    .settings-compact-action:active {
       transform: scale(var(--press-scale));
     }
 
@@ -2570,6 +2794,17 @@ function injectStyle() {
       font-size: max(var(--font-size-base), 16px);
     }
 
+    .settings-select {
+      appearance: none;
+      -webkit-appearance: none;
+      cursor: pointer;
+      padding-right: 36px;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 10px center;
+      background-size: 18px;
+    }
+
     .settings-segment {
       display: flex;
       gap: 6px;
@@ -2689,6 +2924,169 @@ function injectStyle() {
       width: fit-content;
     }
 
+    /* ── API 紧凑布局 ── */
+
+    .settings-api-top-buttons {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .settings-api-top-btn {
+      flex: 1;
+      min-height: 52px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 3px;
+      padding: 10px;
+      border-radius: var(--radius-md);
+      background: var(--surface-muted);
+      color: var(--text-primary);
+      text-align: center;
+      transition: var(--motion);
+    }
+
+    .settings-api-top-btn strong {
+      font-size: var(--font-size-base);
+      font-weight: 600;
+      line-height: 1.2;
+    }
+
+    .settings-api-top-btn small {
+      color: var(--text-secondary);
+      font-size: 11px;
+      line-height: 1.2;
+    }
+
+    .settings-api-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .settings-api-group-title {
+      padding: 6px 0 2px;
+      color: var(--text-secondary);
+      font-size: var(--font-size-small);
+      font-weight: 600;
+    }
+
+    .settings-api-compact {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      min-height: 48px;
+      border-radius: var(--radius-md);
+      background: var(--bg-card);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .settings-api-compact-icon {
+      width: 28px;
+      height: 28px;
+      flex: 0 0 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 8px;
+      background: var(--accent-light);
+      color: var(--accent-dark);
+    }
+
+    .settings-api-compact-info {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      overflow: hidden;
+    }
+
+    .settings-api-compact-info strong {
+      font-size: var(--font-size-base);
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .settings-api-compact-info small {
+      color: var(--text-secondary);
+      font-size: var(--font-size-small);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 120px;
+      flex-shrink: 1;
+    }
+
+    .settings-api-compact-badge {
+      flex: 0 0 auto;
+      padding: 1px 8px;
+      border-radius: 999px;
+      background: var(--accent-light);
+      color: var(--accent-dark);
+      font-size: 11px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    .settings-api-compact-actions {
+      display: flex;
+      gap: 2px;
+      flex: 0 0 auto;
+    }
+
+    .settings-compact-action {
+      width: 30px;
+      height: 30px;
+      flex: 0 0 30px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 10px;
+      background: transparent;
+      color: var(--text-secondary);
+      transition: var(--motion);
+    }
+
+    /* ── 免费 API 选择器 ── */
+
+    .settings-free-preset {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px;
+      border-radius: var(--radius-md);
+      background: var(--surface-muted);
+    }
+
+    .settings-free-preset + .settings-free-preset {
+      margin-top: 8px;
+    }
+
+    .settings-free-preset-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .settings-free-preset-info strong {
+      display: block;
+      font-size: var(--font-size-base);
+      font-weight: 600;
+      margin-bottom: 2px;
+    }
+
+    .settings-free-preset-info small {
+      display: block;
+      color: var(--text-secondary);
+      font-size: var(--font-size-small);
+      line-height: 1.4;
+    }
+
     @media (max-width: 430px) {
       .settings-list-action {
         flex-wrap: wrap;
@@ -2697,6 +3095,14 @@ function injectStyle() {
       .settings-list-action .settings-actions {
         width: 100%;
         padding-left: 48px;
+      }
+
+      .settings-api-compact-info small {
+        display: none;
+      }
+
+      .settings-api-top-btn small {
+        display: none;
       }
     }
   `;
