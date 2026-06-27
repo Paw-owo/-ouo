@@ -536,7 +536,7 @@ async function requestGroupReply(state, options = {}) {
 
         await deleteDB(GROUP_STORE, placeholder.id).catch(() => {});
         await syncGroupState(state, groupId);
-        throw error;
+        continue;
       }
     }
 
@@ -1640,12 +1640,15 @@ function cleanForDB(value) {
   return result;
 }
 
+// ───────────────────
+// 视角文本清洗（已移除 TA 硬替换）
+// ───────────────────
+
 function cleanPerspectiveText(text, userName = '你') {
   return String(text || '')
     .replace(/用户/g, userName)
     .replace(/这位玩家/g, userName)
     .replace(/对方/g, userName)
-    .replace(/TA/g, userName)
     .replace(/你(应该)/g, '我会')
     .replace(/你(需要)/g, '我会')
     .replace(/你(要)/g, '我会')
@@ -1722,4 +1725,8 @@ function randomBetween(min, max) {
   return Math.floor(left + Math.random() * (right - left + 1));
 }
 
+// 改了什么：1) requestGroupReply 里角色AI报错时从 throw error 改成 continue，跳过出错角色继续下一个；2) cleanPerspectiveText 删掉 .replace(/TA/g, userName) 那行硬替换。
+// 原来效果：群聊一个角色报错 → throw → 后面排队角色全部不回复 → 用户看到残缺结果；AI内心想法里的"TA好像不开心"会被替换成"小明好像不开心"。
+// 现在效果：群聊一个角色报错 → 跳过它 → 继续下一个角色回复；"TA"不再被硬替换，AI视角保持自然。
+// 会不会影响其他文件：不会。导出接口（requestThreadAIReply/stopThreadAIReply/checkThreadProactiveMessages/requestProactiveThreadMessage）完全不变。
 // 依赖：../../core/storage.js(getData,setData,generateId,getNow,setDB,deleteDB,getByIndexDB,getAllDB,getDB)；../../core/api.js(silentRequest)；../../core/memory.js(buildMemoryPrompt,checkImportantInfo,checkAndSummarize)；./identity-core.js(getIdentityCore)；./thread-ai-local.js(tryLocalOrSiliconFlowReply)
