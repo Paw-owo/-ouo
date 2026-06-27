@@ -84,6 +84,10 @@ export function openThinkingChainSheet(message, options = {}) {
   showBottomSheet(sheet);
 }
 
+// ═══════════════════════════════════════
+// 【步骤构建】核心逻辑，决定思维链里显示什么
+// ═══════════════════════════════════════
+
 export function buildThinkingSteps(message) {
   const steps = [];
   const toolSteps = normalizeToolCalls(message?.toolCalls);
@@ -92,17 +96,19 @@ export function buildThinkingSteps(message) {
   const isRunning = isMessageRunning(message);
   const hasActionSteps = toolSteps.length > 0 || memorySteps.length > 0;
 
+  // 思考步骤：thinking 有内容时生成
   if (thinkingText) {
     steps.push({
       type: 'thinking',
       title: getThinkingTitle(message),
       summary: getThinkingSummary(message),
       detail: thinkingText,
-      running: isRunning && !toolSteps.length && !memorySteps.length,
-      done: !isRunning || hasActionSteps
+      running: false,
+      done: true
     });
   }
 
+  // 工具步骤
   if (toolSteps.length) {
     toolSteps.forEach((tool, index) => {
       const toolType = detectToolType(tool);
@@ -118,6 +124,7 @@ export function buildThinkingSteps(message) {
     });
   }
 
+  // 记忆步骤
   if (memorySteps.length) {
     memorySteps.forEach((memory, index) => {
       steps.push({
@@ -131,17 +138,26 @@ export function buildThinkingSteps(message) {
     });
   }
 
-  if (steps.length) {
+  // 组织回复步骤：有任何步骤或有正文内容就生成
+  const messageContent = normalizeMultiline(message?.content);
+  const hasAnySteps = thinkingText || hasActionSteps;
+
+  if (hasAnySteps || messageContent) {
     steps.push({
       type: 'write',
       title: isRunning ? '我在组织回复' : '我把想法写出来啦',
-      summary: isRunning ? '我在把前面的内容慢慢整理成一句句回复。' : '前面的想法已经变成现在这段回复了。',
-      detail: normalizeMultiline(message?.content) || '这一步没有更多内容。',
+      summary: isRunning
+        ? '我在把前面的内容慢慢整理成一句句回复。'
+        : (thinkingText
+            ? '前面的想法已经变成现在这段回复了。'
+            : '我把心里的话整理好写出来了。'),
+      detail: messageContent || '这一步没有更多内容。',
       running: isRunning,
       done: !isRunning
     });
   }
 
+  // 完成步骤
   if (steps.length && !isRunning) {
     steps.push({
       type: 'done',
@@ -514,12 +530,14 @@ function normalizeMultiline(value) {
   return String(value || '').trim();
 }
 
+// ───────────────────
+// 详情文本：不再因 summary 相同就隐藏内容
+// ───────────────────
+
 function normalizeDetailText(step) {
   const detail = normalizeMultiline(step?.detail);
-  const summary = normalizeMultiline(step?.summary);
 
   if (!detail) return '这里暂时没有更多细节。';
-  if (detail === summary) return '这一步没有更多展开内容。';
 
   return detail;
 }
