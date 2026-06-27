@@ -1,8 +1,11 @@
 // apps/chat/thread-tools.js
 // imports:
+//   from '../../core/ui.js': hideBottomSheet
 //   from './thread-sheets.js': openQuickReplySheet, openTransferSheet, openVoiceTextSheet, openClearContextSheet, openMcpSheet
 //   from './thread-relationship.js': openRelationshipLockSheet
-//   from './thread-actions.js': sendThreadMessage
+//   from './thread-actions.js': sendThreadMessage, sendDiceMessage, sendRpsMessage
+
+import { hideBottomSheet } from '../../core/ui.js';
 
 import {
   openQuickReplySheet,
@@ -13,7 +16,7 @@ import {
 } from './thread-sheets.js';
 
 import { openRelationshipLockSheet } from './thread-relationship.js';
-import { sendThreadMessage } from './thread-actions.js';
+import { sendThreadMessage, sendDiceMessage, sendRpsMessage } from './thread-actions.js';
 
 // ═══════════════════════════════════════
 // 【工具列表】11个工具，每页8个，滑动翻页
@@ -151,6 +154,18 @@ async function sendMessageToChat(text, options) {
 }
 
 // ═══════════════════════════════════════
+// 【关掉底部抽屉】优先用回调，兜底直接关
+// ═══════════════════════════════════════
+
+function closeToolsSheet(options) {
+  if (typeof options?.onClose === 'function') {
+    options.onClose();
+  } else {
+    hideBottomSheet();
+  }
+}
+
+// ═══════════════════════════════════════
 // 【关掉详情面板，回到工具网格】
 // ═══════════════════════════════════════
 
@@ -188,7 +203,7 @@ function openTaskSheet(state, options) {
     card.addEventListener('touchstart', function() { card.style.transform = 'scale(0.95)'; }, { passive: true });
     card.addEventListener('touchend', function() { card.style.transform = ''; });
     card.addEventListener('click', async function() {
-      if (typeof options?.onClose === 'function') options.onClose();
+      closeToolsSheet(options);
       await sendMessageToChat(p.prompt, options);
     });
     grid.appendChild(card);
@@ -209,7 +224,7 @@ function openTaskSheet(state, options) {
   sendBtn.addEventListener('click', async function() {
     var t = input.value.trim();
     if (!t) return;
-    if (typeof options?.onClose === 'function') options.onClose();
+    closeToolsSheet(options);
     await sendMessageToChat(t, options);
   });
 
@@ -259,7 +274,7 @@ function openQuizSheet(state, options) {
     card.addEventListener('touchstart', function() { card.style.transform = 'scale(0.97)'; }, { passive: true });
     card.addEventListener('touchend', function() { card.style.transform = ''; });
     card.addEventListener('click', async function() {
-      if (typeof options?.onClose === 'function') options.onClose();
+      closeToolsSheet(options);
       await sendMessageToChat(cat.prompt, options);
     });
     content.appendChild(card);
@@ -280,34 +295,34 @@ function openQuizSheet(state, options) {
 // 【工具点击处理】分发到各个sheet或回调
 // ═══════════════════════════════════════
 
-function handleToolClick(toolId, state, options) {
+async function handleToolClick(toolId, state, options) {
   switch (toolId) {
     case 'quickReply':
-      if (typeof options?.onClose === 'function') options.onClose();
+      closeToolsSheet(options);
       openQuickReplySheet(state, options);
       break;
     case 'task':
-      if (typeof options?.onClose === 'function') options.onClose();
+      closeToolsSheet(options);
       openTaskSheet(state, options);
       break;
     case 'quiz':
-      if (typeof options?.onClose === 'function') options.onClose();
+      closeToolsSheet(options);
       openQuizSheet(state, options);
       break;
     case 'transfer':
-      if (typeof options?.onClose === 'function') options.onClose();
+      closeToolsSheet(options);
       openTransferSheet(state, options);
       break;
     case 'voiceText':
-      if (typeof options?.onClose === 'function') options.onClose();
+      closeToolsSheet(options);
       openVoiceTextSheet(state, options);
       break;
     case 'clearCtx':
-      if (typeof options?.onClose === 'function') options.onClose();
+      closeToolsSheet(options);
       openClearContextSheet(state, options);
       break;
     case 'relLock':
-      if (typeof options?.onClose === 'function') options.onClose();
+      closeToolsSheet(options);
       openRelationshipLockSheet(state, options);
       break;
     case 'phone':
@@ -316,13 +331,15 @@ function handleToolClick(toolId, state, options) {
       }
       break;
     case 'dice':
-      showDiceResult();
+      closeToolsSheet(options);
+      await handleDiceClick(state);
       break;
     case 'rps':
-      showRPSResult();
+      closeToolsSheet(options);
+      await handleRpsClick(state);
       break;
     case 'mcp':
-      if (typeof options?.onClose === 'function') options.onClose();
+      closeToolsSheet(options);
       openMcpSheet(state, options);
       break;
     default:
@@ -331,50 +348,33 @@ function handleToolClick(toolId, state, options) {
 }
 
 // ═══════════════════════════════════════
-// 【骰子弹窗】随机1-6
+// 【骰子】真实写入聊天消息
 // ═══════════════════════════════════════
 
-function showDiceResult() {
-  const result = Math.floor(Math.random() * 6) + 1;
-  const el = document.createElement('div');
-  el.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) scale(0.85);background:var(--bg-surface,#fff);border-radius:var(--radius-xl,28px);box-shadow:0 8px 32px rgba(0,0,0,0.12);padding:32px 40px;text-align:center;z-index:9999;opacity:0;transition:all 0.3s cubic-bezier(0.34,1.56,0.64,1);';
-  el.innerHTML = '<svg viewBox="0 0 16 16" width="48" height="48" fill="none" stroke="var(--accent,#9F8F82)" stroke-width="1.5"><rect x="2" y="2" width="12" height="12" rx="3"/><circle cx="5" cy="5" r="1" fill="var(--accent,#9F8F82)" stroke="none"/><circle cx="11" cy="5" r="1" fill="var(--accent,#9F8F82)" stroke="none"/><circle cx="8" cy="8" r="1" fill="var(--accent,#9F8F82)" stroke="none"/><circle cx="5" cy="11" r="1" fill="var(--accent,#9F8F82)" stroke="none"/><circle cx="11" cy="11" r="1" fill="var(--accent,#9F8F82)" stroke="none"/></svg><div style="font-size:28px;font-weight:600;color:var(--text-primary,#333);margin-top:12px;">' + result + '</div><div style="font-size:13px;color:var(--text-secondary,#888);margin-top:4px;">掷出了 ' + result + ' 点</div>';
-  document.body.appendChild(el);
-  requestAnimationFrame(function() { el.style.opacity = '1'; el.style.transform = 'translate(-50%,-50%) scale(1)'; });
-  setTimeout(function() { el.style.opacity = '0'; el.style.transform = 'translate(-50%,-50%) scale(0.85)'; setTimeout(function() { el.remove(); }, 300); }, 1500);
+async function handleDiceClick(state) {
+  try {
+    await sendDiceMessage(state, { triggerAI: true });
+    if (typeof state?.reloadAndRender === 'function') {
+      await state.reloadAndRender();
+    }
+  } catch (_) {
+    // 静默
+  }
 }
 
 // ═══════════════════════════════════════
-// 【猜拳弹窗】随机石头剪刀布
+// 【猜拳】真实写入聊天消息
 // ═══════════════════════════════════════
 
-function showRPSResult() {
-  const choices = ['石头', '剪刀', '布'];
-  const aiIdx = Math.floor(Math.random() * 3);
-  const el = document.createElement('div');
-  el.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) scale(0.85);background:var(--bg-surface,#fff);border-radius:var(--radius-xl,28px);box-shadow:0 8px 32px rgba(0,0,0,0.12);padding:32px 40px;text-align:center;z-index:9999;opacity:0;transition:all 0.3s cubic-bezier(0.34,1.56,0.64,1);';
-  const svgIcons = [
-    '<svg viewBox="0 0 16 16" width="48" height="48" fill="none" stroke="var(--accent,#9F8F82)" stroke-width="2" stroke-linecap="round"><circle cx="8" cy="9" r="5"/></svg>',
-    '<svg viewBox="0 0 16 16" width="48" height="48" fill="none" stroke="var(--accent,#9F8F82)" stroke-width="2" stroke-linecap="round"><path d="M5 10L6.5 5M11 10L9.5 5M6.5 5L8 3L9.5 5"/></svg>',
-    '<svg viewBox="0 0 16 16" width="48" height="48" fill="none" stroke="var(--accent,#9F8F82)" stroke-width="2" stroke-linecap="round"><path d="M3 8C3 4 5 2 8 2C11 2 13 4 13 8V10C13 12 11 13 8 13C5 13 3 12 3 10Z"/></svg>',
-  ];
-  el.innerHTML = svgIcons[aiIdx] + '<div style="font-size:28px;font-weight:600;color:var(--text-primary,#333);margin-top:12px;">' + choices[aiIdx] + '</div><div style="font-size:13px;color:var(--text-secondary,#888);margin-top:4px;">AI 出了 ' + choices[aiIdx] + '</div>';
-  document.body.appendChild(el);
-  requestAnimationFrame(function() { el.style.opacity = '1'; el.style.transform = 'translate(-50%,-50%) scale(1)'; });
-  setTimeout(function() { el.style.opacity = '0'; el.style.transform = 'translate(-50%,-50%) scale(0.85)'; setTimeout(function() { el.remove(); }, 300); }, 1500);
-}
-
-// ═══════════════════════════════════════
-// 【MCP占位提示】
-// ═══════════════════════════════════════
-
-function showMCPNotice() {
-  const el = document.createElement('div');
-  el.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) scale(0.85);background:var(--bg-surface,#fff);border-radius:var(--radius-xl,28px);box-shadow:0 8px 32px rgba(0,0,0,0.12);padding:24px 32px;text-align:center;z-index:9999;opacity:0;transition:all 0.3s cubic-bezier(0.34,1.56,0.64,1);font-size:15px;color:var(--text-secondary,#888);';
-  el.textContent = 'MCP 功能开发中~';
-  document.body.appendChild(el);
-  requestAnimationFrame(function() { el.style.opacity = '1'; el.style.transform = 'translate(-50%,-50%) scale(1)'; });
-  setTimeout(function() { el.style.opacity = '0'; el.style.transform = 'translate(-50%,-50%) scale(0.85)'; setTimeout(function() { el.remove(); }, 300); }, 1500);
+async function handleRpsClick(state) {
+  try {
+    await sendRpsMessage(state, { triggerAI: true });
+    if (typeof state?.reloadAndRender === 'function') {
+      await state.reloadAndRender();
+    }
+  } catch (_) {
+    // 静默
+  }
 }
 
 // ═══════════════════════════════════════
@@ -410,7 +410,7 @@ export function createThreadToolsGrid(state, options = {}) {
       nameEl.className = 'tool-name';
       nameEl.textContent = tool.title;
       cell.appendChild(nameEl);
-      cell.addEventListener('click', function() { handleToolClick(tool.id, state, options); });
+      cell.addEventListener('click', async function() { await handleToolClick(tool.id, state, options); });
       pageEl.appendChild(cell);
     });
     const remaining = TOOLS_PER_PAGE - pageTools.length;
@@ -484,8 +484,8 @@ export function showToolsPanel(state, options = {}) {
       nameEl.className = 'tool-name';
       nameEl.textContent = tool.title;
       cell.appendChild(nameEl);
-      cell.addEventListener('click', function() {
-        handleToolClick(tool.id, state, options);
+      cell.addEventListener('click', async function() {
+        await handleToolClick(tool.id, state, options);
         if (tool.id !== 'phone') {
           toolsPanelEl.classList.remove('is-open');
         }
@@ -561,3 +561,9 @@ export function showToolDetail(contentEl, title) {
 // ═══════════════════════════════════════
 
 export { showToolsPanel as default };
+
+// 改了什么：新增 closeToolsSheet 工具函数（优先用 options.onClose，兜底 hideBottomSheet）；所有工具点击统一调 closeToolsSheet 关闭底部抽屉。
+// 原来效果：点任何工具按钮后底部抽屉不会自动关闭，用户得手动滑掉才能看到效果。
+// 现在效果：点任意工具 → 抽屉先关掉 → 再打开对应功能或直接操作。
+// 会不会影响其他文件：不会。导出接口不变，panels.js 调用方式不受影响。其他工具（快捷回复/转账等）的内部逻辑完全没动。
+// 依赖：../../core/ui.js(hideBottomSheet)；./thread-sheets.js(openQuickReplySheet,openTransferSheet,openVoiceTextSheet,openClearContextSheet,openMcpSheet)；./thread-relationship.js(openRelationshipLockSheet)；./thread-actions.js(sendThreadMessage,sendDiceMessage,sendRpsMessage)
