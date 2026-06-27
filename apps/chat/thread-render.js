@@ -78,10 +78,8 @@ function createMessageRow(state, message, pageEl) {
   row.dataset.messageId = message.id || '';
   row.dataset.role = role;
 
-  // ── 思维链（独立于气泡，放最上面）──
   row.append(createReasoningStack(state, message, role, mode));
 
-  // ── 气泡模式 AI消息：按空行拆段，每段独立气泡+头像+名字 ──
   if (role === 'assistant' && mode === 'bubble' && !message.isPending) {
     const chunks = splitAIBubbleChunks(message);
     if (chunks.length > 1) {
@@ -98,7 +96,6 @@ function createMessageRow(state, message, pageEl) {
     }
   }
 
-  // ── 默认：单气泡 ──
   const body = el('div', `chat-message-body role-${role}`);
   body.append(
     createMessageAuthor(state, message),
@@ -118,9 +115,7 @@ function splitAIBubbleChunks(message) {
   const raw = String(message?.content || '').trim();
   if (!raw) return [raw || ''];
 
-  if (raw.includes('```')) {
-    return [raw];
-  }
+  if (raw.includes('```')) return [raw];
 
   const MAX_CHUNKS = 10;
   const MAX_CHARS = 18;
@@ -131,9 +126,7 @@ function splitAIBubbleChunks(message) {
     paragraphs = raw.split(/\n/).map((p) => p.trim()).filter(Boolean);
   }
 
-  if (paragraphs.length <= 1) {
-    return [raw];
-  }
+  if (paragraphs.length <= 1) return [raw];
 
   const chunks = [];
   for (const paragraph of paragraphs) {
@@ -213,7 +206,7 @@ function createTimeDivider(currentTime, lastTime) {
 }
 
 // ═══════════════════════════════════════
-// 【思维链】接入新 thinking-chain 组件
+// 【思维链】接入 thinking-chain 组件
 // ═══════════════════════════════════════
 
 function createReasoningStack(state, message, role, mode = 'bubble') {
@@ -353,7 +346,7 @@ function createMessageContent(state, message) {
 }
 
 // ───────────────────
-// AI 加载动画（纯CSS圆点跳动，无定时器）
+// AI 加载动画
 // ───────────────────
 
 function createPendingLoadingCard() {
@@ -486,7 +479,7 @@ function createShopCard(message) {
 }
 
 // ───────────────────
-// 表情包内容
+// 表情包内容（对齐抽屉风格，78%留白，16px圆角）
 // ───────────────────
 
 function createStickerContent(message) {
@@ -685,14 +678,19 @@ function downloadCodeFile(code, lang) {
   showToast('代码文件已下载');
 }
 
-function previewHtmlCode(code) {
-  const sheet = el('div', 'chat-html-preview-sheet');
+// ───────────────────
+// HTML 全屏预览（全屏浮层 + 顶部关闭按钮 + ESC关闭）
+// ───────────────────
 
-  const title = el('div', 'chat-html-preview-title');
-  title.append(
-    el('span', '', 'HTML 预览'),
-    createCodeActionButton('关闭', 'x', () => hideBottomSheet())
-  );
+function previewHtmlCode(code) {
+  const overlay = el('div', 'chat-html-preview-overlay');
+  const header = el('div', 'chat-html-preview-header');
+  const title = el('span', 'chat-html-preview-title-text', 'HTML 预览');
+
+  const closeBtn = safeButton('chat-html-preview-close-btn', '关闭预览');
+  closeBtn.appendChild(createLineIcon('x'));
+
+  header.append(title, closeBtn);
 
   const frame = document.createElement('iframe');
   frame.className = 'chat-html-preview-frame';
@@ -700,15 +698,33 @@ function previewHtmlCode(code) {
   frame.setAttribute('frameborder', '0');
   frame.srcdoc = String(code || '');
 
-  sheet.append(title, frame);
-  showBottomSheet(sheet);
+  overlay.append(header, frame);
+  document.body.appendChild(overlay);
+
+  const closeFn = () => {
+    overlay.classList.remove('open');
+    overlay.addEventListener('transitionend', () => overlay.remove(), { once: true });
+    window.setTimeout(() => { if (overlay.parentNode) overlay.remove(); }, 300);
+    document.removeEventListener('keydown', escHandler);
+  };
+
+  const escHandler = (event) => {
+    if (event.key === 'Escape') { event.preventDefault(); closeFn(); }
+  };
+
+  closeBtn.addEventListener('click', closeFn);
+  overlay.addEventListener('click', (event) => { if (event.target === overlay) closeFn(); });
+  document.addEventListener('keydown', escHandler);
+
+  requestAnimationFrame(() => overlay.classList.add('open'));
 }
 
 function createQuoteBlock(text) {
   return el('section', 'chat-message-quote', String(text || ''));
 }
+
 // ═══════════════════════════════════════
-// 【操作栏】消息操作按钮和菜单（可爱圆角小按钮风格）
+// 【操作栏】消息操作按钮和菜单
 // ═══════════════════════════════════════
 
 function createMessageActions(state, message, pageEl) {
@@ -1454,7 +1470,9 @@ function el(tag, className = '', text = '') {
 // ═══════════════════════════════════════
 
 function injectStyle() {
-  if (document.getElementById(RENDER_STYLE_ID)) return;
+  if (document.getElementById(RENDER_STYLE_ID)) {
+    document.getElementById(RENDER_STYLE_ID).remove();
+  }
 
   const style = document.createElement('style');
   style.id = RENDER_STYLE_ID;
@@ -1627,13 +1645,7 @@ function injectStyle() {
       align-items: flex-start;
     }
 
-    .chat-message-bubble.sticker-bubble {
-      padding: 0;
-      background: transparent;
-      box-shadow: none;
-      color: var(--text-primary);
-    }
-
+    .chat-message-bubble.sticker-bubble,
     .chat-message-bubble.image-bubble {
       padding: 6px;
       background: var(--bg-card);
@@ -1665,6 +1677,7 @@ function injectStyle() {
       margin-left: 46px;
     }
 
+    .chat-message-row.mode-dialog .chat-message-bubble.sticker-bubble,
     .chat-message-row.mode-dialog .chat-message-bubble.image-bubble {
       padding: 0;
       background: transparent;
@@ -1727,16 +1740,16 @@ function injectStyle() {
       opacity: 0.72;
     }
 
-    /* ── 图片（微信尺寸） ── */
+    /* ── 图片 ── */
 
     .chat-message-image-frame {
-      width: min(50vw, 140px);
-      max-height: 180px;
+      width: min(58vw, 220px);
+      max-height: 280px;
       overflow: hidden;
       display: flex;
       align-items: center;
       justify-content: center;
-      border-radius: 12px;
+      border-radius: 16px;
       background: var(--surface-muted);
       box-shadow: var(--shadow-sm);
     }
@@ -1744,45 +1757,48 @@ function injectStyle() {
     .chat-message-image {
       display: block;
       width: 100%;
-      max-height: 180px;
+      max-height: 280px;
       object-fit: contain;
-      border-radius: 12px;
+      border-radius: 16px;
     }
 
-    /* ── 表情包（微信风格：纯图片，无卡片背景） ── */
+    /* ── 表情包（对齐抽屉格子风格，78%留白，16px圆角） ── */
 
     .chat-message-sticker-card {
-      width: auto;
-      max-width: 150px;
+      width: 112px;
+      max-width: 112px;
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 0;
-      background: transparent;
+      gap: 4px;
     }
 
     .chat-message-sticker-image {
-      max-width: 150px;
-      max-height: 150px;
+      width: 88px;
+      height: 88px;
       display: block;
       object-fit: contain;
+      border-radius: 16px;
+      background: var(--surface-muted);
     }
 
     .chat-message-sticker-placeholder {
-      width: 80px;
-      height: 80px;
+      width: 88px;
+      height: 88px;
       display: flex;
       align-items: center;
       justify-content: center;
-      border-radius: 12px;
+      padding: 12px;
+      border-radius: 16px;
       background: var(--surface-muted);
       color: var(--text-secondary);
+      box-shadow: var(--shadow-sm);
       font-size: 13px;
       line-height: 1.5;
       text-align: center;
     }
 
-    /* ── 引用、代码、游戏卡片、语音 ── */
+    /* ── 引用、代码、游戏卡片 ── */
 
     .chat-message-quote,
     .chat-message-code,
@@ -1983,13 +1999,15 @@ function injectStyle() {
       color: var(--text-secondary);
     }
 
-    /* ── 代码块卡片 ── */
+    /* ── 代码块卡片（窄长圆角，可折叠） ── */
 
     .chat-message-code {
-      width: min(100%, 480px);
+      width: min(100%, 280px);
       overflow: hidden;
       padding: 0;
-      border-radius: 16px;
+      border-radius: 22px;
+      background: var(--surface-muted);
+      box-shadow: var(--shadow-sm);
     }
 
     .chat-message-code-top {
@@ -1997,7 +2015,7 @@ function injectStyle() {
       justify-content: space-between;
       gap: 10px;
       align-items: center;
-      padding: 8px 14px 4px;
+      padding: 10px 16px 4px;
     }
 
     .chat-message-code-meta {
@@ -2039,9 +2057,9 @@ function injectStyle() {
       padding: 0 8px;
       border-radius: 999px;
       background: var(--bg-card);
+      color: var(--text-secondary);
       box-shadow: var(--shadow-sm);
       font-size: 11px;
-      color: var(--text-secondary);
       transition: all 200ms ease;
     }
 
@@ -2053,11 +2071,11 @@ function injectStyle() {
       max-height: none;
       overflow: auto;
       margin: 0;
-      padding: 4px 14px 14px;
+      padding: 4px 16px 16px;
       color: var(--text-primary);
       font-family: "JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
       font-size: 12px;
-      line-height: 1.7;
+      line-height: 1.85;
       white-space: pre-wrap;
       word-break: break-word;
       tab-size: 2;
@@ -2065,20 +2083,22 @@ function injectStyle() {
     }
 
     .chat-message-code[data-collapsed="true"] .chat-message-code-pre {
-      max-height: 128px;
+      max-height: 120px;
       overflow: hidden;
     }
 
     .chat-message-code-toggle {
-      margin: 2px 14px 10px;
-      min-height: 28px;
-      padding: 0 10px;
-      border-radius: 999px;
+      display: block;
+      width: calc(100% - 32px);
+      margin: 0 16px 12px;
+      min-height: 30px;
+      border-radius: 12px;
       background: var(--bg-card);
       color: var(--text-secondary);
       box-shadow: var(--shadow-sm);
       font: inherit;
       font-size: 12px;
+      text-align: center;
       transition: all 200ms ease;
     }
 
@@ -2363,7 +2383,7 @@ function injectStyle() {
       padding: 0 5px;
     }
 
-    /* ── 弹出菜单 ── */
+    /* ── 弹出菜单按钮 ── */
 
     .chat-action-sheet,
     .chat-edit-sheet {
@@ -2405,7 +2425,7 @@ function injectStyle() {
       transform: scale(0.95);
     }
 
-    /* ── 编辑弹窗 ── */
+    /* ── 编辑弹窗按钮 ── */
 
     .chat-edit-textarea {
       width: 100%;
@@ -2494,34 +2514,67 @@ function injectStyle() {
       background: var(--surface-muted);
     }
 
-    /* ── HTML 预览 ── */
+    /* ── HTML 全屏预览 ── */
 
-    .chat-html-preview-sheet {
+    .chat-html-preview-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 10030;
       display: flex;
       flex-direction: column;
-      gap: 12px;
-      height: min(70vh, 620px);
-      padding: 2px 0 8px;
+      background: var(--bg-primary);
+      opacity: 0;
+      transition: opacity 200ms ease;
+      pointer-events: none;
     }
 
-    .chat-html-preview-title {
+    .chat-html-preview-overlay.open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .chat-html-preview-header {
+      flex: 0 0 auto;
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 12px;
+      padding: 14px 20px 10px;
+      background: var(--bg-primary);
+      z-index: 1;
+    }
+
+    .chat-html-preview-title-text {
       color: var(--text-primary);
-      font-size: var(--font-size-title);
+      font-size: 17px;
       font-weight: 600;
       line-height: 1.35;
+    }
+
+    .chat-html-preview-close-btn {
+      width: 40px;
+      height: 40px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 14px;
+      background: var(--bg-card);
+      color: var(--text-primary);
+      box-shadow: var(--shadow-sm);
+      transition: all 200ms ease;
+    }
+
+    .chat-html-preview-close-btn:active {
+      transform: scale(0.92);
     }
 
     .chat-html-preview-frame {
       flex: 1;
       width: 100%;
-      min-height: 320px;
-      border-radius: 16px;
+      min-height: 0;
+      border-radius: 0;
       background: var(--bg-card);
-      box-shadow: var(--shadow-sm);
+      box-shadow: none;
     }
 
     /* ── 动画 ── */
@@ -2634,17 +2687,23 @@ function injectStyle() {
       }
 
       .chat-message-image-frame {
-        width: min(55vw, 120px);
-        max-height: 160px;
+        width: min(64vw, 200px);
+        max-height: 240px;
       }
 
       .chat-message-image {
-        max-height: 160px;
+        max-height: 240px;
       }
 
-      .chat-message-sticker-image {
-        max-width: 120px;
-        max-height: 120px;
+      .chat-message-sticker-card {
+        width: 100px;
+        max-width: 100px;
+      }
+
+      .chat-message-sticker-image,
+      .chat-message-sticker-placeholder {
+        width: 78px;
+        height: 78px;
       }
 
       .chat-voice-card {
@@ -2660,7 +2719,7 @@ function injectStyle() {
       }
 
       .chat-message-code {
-        width: min(100%, 400px);
+        width: min(100%, 240px);
       }
 
       .chat-message-code-top {
@@ -2697,8 +2756,10 @@ function injectStyle() {
       .chat-rps-card[data-flipping="true"] .chat-rps-icon,
       .chat-voice-waves i,
       .chat-pending-dot,
-      .chat-pending-text {
+      .chat-pending-text,
+      .chat-html-preview-overlay {
         animation: none;
+        transition: none;
       }
     }
   `;
