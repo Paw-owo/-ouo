@@ -870,11 +870,12 @@ async function confirmNewConversation(item, openAfter = false) {
 
   const messages = await getCharacterMessages(item.id);
 
+  await deleteMessages(messages);
+
   if (messages.length) {
     await saveConversationMemory(item, messages).catch(() => null);
   }
 
-  await deleteMessages(messages);
   clearPrivateUnread(item.id);
   clearLastRouteIfCharacter(item.id);
 
@@ -1926,4 +1927,8 @@ function injectStyle() {
   document.head.appendChild(style);
 }
 
+// 改了什么：confirmNewConversation 里删消息和存记忆的顺序对调，先删消息再存记忆。
+// 原来效果：先存记忆 → 再删消息 → 如果删消息失败 → 旧消息还在 + 多了一条记忆，两边都脏。
+// 现在效果：先删消息 → 再存记忆 → 删消息成功后才写记忆，不会出现两边脏的情况。
+// 会不会影响其他文件：不会。导出接口（mountChatList/unmountChatList）不变。
 // 依赖：../../core/storage.js(getData,setData,generateId,getNow,setDB,getAllDB,getByIndexDB,deleteDB)；../../core/ui.js(createIcon,showToast,showConfirm,showBottomSheet,hideBottomSheet)；./thread-ai.js(checkThreadProactiveMessages)
