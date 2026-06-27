@@ -13,25 +13,25 @@ const DEFAULT_MODE = 'light';
 const FONT_FALLBACK = "'PingFang SC', 'Microsoft YaHei', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
 
 // ═══════════════════════════════════════
-// 【基础变量】默认值（对应浅蓝主题）
+// 【基础变量】默认值（对应汽水蓝主题）
 // ═══════════════════════════════════════
 
 const BASE_VARIABLES = {
-  'bg-primary': '#DAE8F5',
-  'bg-secondary': '#E8F0F8',
+  'bg-primary': '#E5F3FA',
+  'bg-secondary': '#DED4E6',
   'bg-card': '#FFFFFF',
   'bg-overlay': 'rgba(0, 0, 0, 0.28)',
   'surface': '#FFFFFF',
-  'accent': '#7AACDB',
-  'accent-light': '#D4E6F5',
-  'accent-dark': '#5A8DBB',
-  'text-primary': '#1C1C1E',
-  'text-secondary': '#8A8A8E',
-  'text-hint': '#C4C4C8',
-  'bubble-user-bg': '#7AACDB',
-  'bubble-user-text': '#FFFFFF',
+  'accent': '#FAC7DA',
+  'accent-light': '#FDEEF3',
+  'accent-dark': '#E8A0BC',
+  'text-primary': '#4A4038',
+  'text-secondary': '#908880',
+  'text-hint': '#B8B0A8',
+  'bubble-user-bg': '#FAC7DA',
+  'bubble-user-text': '#4A4038',
   'bubble-ai-bg': '#FFFFFF',
-  'bubble-ai-text': '#1C1C1E',
+  'bubble-ai-text': '#4A4038',
   'bubble-radius': '18px',
   'bubble-radius-tail': '4px',
   'font-main': FONT_FALLBACK,
@@ -72,124 +72,97 @@ const DARK_SHADOWS = {
 };
 
 // ═══════════════════════════════════════
-// 【主题预设】3 浅色 + 2 夜间
+// 【主题预设】3 浅色 + 3 夜间
 // ═══════════════════════════════════════
 
 const PRESETS = {
   // ────────────────────────────────────────────
-  // 浅蓝 — 清爽蓝调，蓝天白云
+  // 汽水蓝 — 蓝底 + 粉气泡
   // ────────────────────────────────────────────
   blue: {
     id: 'blue',
-    name: '浅蓝',
+    name: '汽水蓝',
     mode: 'light',
     variables: {
-      'bg-primary': '#DAE8F5',
-      'bg-secondary': '#E8F0F8',
+      'bg-primary': '#E5F3FA',
+      'bg-secondary': '#DED4E6',
       'bg-card': '#FFFFFF',
       'bg-overlay': 'rgba(0, 0, 0, 0.28)',
       'surface': '#FFFFFF',
-      'accent': '#7AACDB',
-      'accent-light': '#D4E6F5',
-      'accent-dark': '#5A8DBB',
-      'text-primary': '#1C1C1E',
-      'text-secondary': '#8A8A8E',
-      'text-hint': '#C4C4C8',
-      'bubble-user-bg': '#7AACDB',
-      'bubble-user-text': '#FFFFFF',
+      'accent': '#FAC7DA',
+      'accent-light': '#FDEEF3',
+      'accent-dark': '#E8A0BC',
+      'text-primary': '#4A4038',
+      'text-secondary': '#908880',
+      'text-hint': '#B8B0A8',
+      'bubble-user-bg': '#FAC7DA',
+      'bubble-user-text': '#4A4038',
       'bubble-ai-bg': '#FFFFFF',
-      'bubble-ai-text': '#1C1C1E',
+      'bubble-ai-text': '#4A4038',
       ...LIGHT_SHADOWS
     }
   },
 
   // ────────────────────────────────────────────
-  // 浅粉 — 温柔粉调，蜜桃汽水
+  // 珊瑚糖 — 蓝底 + 粉底 + 米色卡片
   // ────────────────────────────────────────────
-  pink: {
-    id: 'pink',
-    name: '浅粉',
+  coral: {
+    id: 'coral',
+    name: '珊瑚糖',
     mode: 'light',
     variables: {
-      'bg-primary': '#F8DEE4',
-      'bg-secondary': '#FCE8EC',
-      'bg-card': '#FFFFFF',
+      'bg-primary': '#DDE8F6',
+      'bg-secondary': '#F5D7D6',
+      'bg-card': '#FDF4ED',
       'bg-overlay': 'rgba(0, 0, 0, 0.28)',
-      'surface': '#FFFFFF',
-      'accent': '#D4899A',
-      'accent-light': '#F3DCE1',
-      'accent-dark': '#B86B7E',
-      'text-primary': '#1C1C1E',
-      'text-secondary': '#8A8A8E',
-      'text-hint': '#C4C4C8',
-      'bubble-user-bg': '#D4899A',
+      'surface': '#FDF4ED',
+      'accent': '#9F8F82',
+      'accent-light': '#E7E3DF',
+      'accent-dark': '#786E64',
+      'text-primary': '#4A4038',
+      'text-secondary': '#908880',
+      'text-hint': '#B8B0A8',
+      'bubble-user-bg': '#9F8F82',
       'bubble-user-text': '#FFFFFF',
-      'bubble-ai-bg': '#FFFFFF',
-      'bubble-ai-text': '#1C1C1E',
+      'bubble-ai-bg': '#FDF4ED',
+      'bubble-ai-text': '#4A4038',
       ...LIGHT_SHADOWS
     }
   },
 
   // ────────────────────────────────────────────
-  // 浅黄 — 奶油暖调，奶黄包
+  // 香芋泥 — 淡紫底 + 紫气泡
   // ────────────────────────────────────────────
-  cream: {
-    id: 'cream',
-    name: '浅黄',
+  purple: {
+    id: 'purple',
+    name: '香芋泥',
     mode: 'light',
     variables: {
-      'bg-primary': '#F5EDE0',
-      'bg-secondary': '#F8F2E8',
-      'bg-card': '#FFFFFF',
+      'bg-primary': '#EDECFA',
+      'bg-secondary': '#D5CFEC',
+      'bg-card': '#F8F6FB',
       'bg-overlay': 'rgba(0, 0, 0, 0.28)',
-      'surface': '#FFFFFF',
-      'accent': '#C8A87A',
-      'accent-light': '#EDE3D4',
-      'accent-dark': '#A88858',
-      'text-primary': '#1C1C1E',
-      'text-secondary': '#8A8A8E',
-      'text-hint': '#C4C4C8',
-      'bubble-user-bg': '#C8A87A',
-      'bubble-user-text': '#FFFFFF',
-      'bubble-ai-bg': '#FFFFFF',
-      'bubble-ai-text': '#1C1C1E',
+      'surface': '#F8F6FB',
+      'accent': '#CAB7E3',
+      'accent-light': '#F0ECF6',
+      'accent-dark': '#A08EC0',
+      'text-primary': '#4A4038',
+      'text-secondary': '#908880',
+      'text-hint': '#B8B0A8',
+      'bubble-user-bg': '#CAB7E3',
+      'bubble-user-text': '#4A4038',
+      'bubble-ai-bg': '#F8F6FB',
+      'bubble-ai-text': '#4A4038',
       ...LIGHT_SHADOWS
     }
   },
 
   // ────────────────────────────────────────────
-  // 奶咖夜 — 暖棕色夜间
-  // ────────────────────────────────────────────
-  'milk-cafe': {
-    id: 'milk-cafe',
-    name: '奶咖夜',
-    mode: 'dark',
-    variables: {
-      'bg-primary': '#2A2420',
-      'bg-secondary': '#352F2A',
-      'bg-card': '#3C352F',
-      'bg-overlay': 'rgba(0, 0, 0, 0.52)',
-      'surface': '#3C352F',
-      'accent': '#C8A882',
-      'accent-light': '#4A4038',
-      'accent-dark': '#D8BC96',
-      'text-primary': '#F0E8DC',
-      'text-secondary': '#A89888',
-      'text-hint': '#786858',
-      'bubble-user-bg': '#C8A882',
-      'bubble-user-text': '#2A2420',
-      'bubble-ai-bg': '#3C352F',
-      'bubble-ai-text': '#F0E8DC',
-      ...DARK_SHADOWS
-    }
-  },
-
-  // ────────────────────────────────────────────
-  // 黑粉 — 暗夜粉调
+  // 黑粉夜 — 暗夜 + 粉强调
   // ────────────────────────────────────────────
   'rose-noir': {
     id: 'rose-noir',
-    name: '黑粉',
+    name: '黑粉夜',
     mode: 'dark',
     variables: {
       'bg-primary': '#1E1A1C',
@@ -200,13 +173,67 @@ const PRESETS = {
       'accent': '#C48A9A',
       'accent-light': '#483840',
       'accent-dark': '#D8A0AE',
-      'text-primary': '#F0E4E8',
-      'text-secondary': '#A89098',
+      'text-primary': '#E8E0E4',
+      'text-secondary': '#A09098',
       'text-hint': '#706068',
       'bubble-user-bg': '#C48A9A',
       'bubble-user-text': '#1E1A1C',
       'bubble-ai-bg': '#30282C',
-      'bubble-ai-text': '#F0E4E8',
+      'bubble-ai-text': '#E8E0E4',
+      ...DARK_SHADOWS
+    }
+  },
+
+  // ────────────────────────────────────────────
+  // 焦糖夜 — 暖棕底 + 焦糖强调
+  // ────────────────────────────────────────────
+  caramel: {
+    id: 'caramel',
+    name: '焦糖夜',
+    mode: 'dark',
+    variables: {
+      'bg-primary': '#22201C',
+      'bg-secondary': '#2C2822',
+      'bg-card': '#342E26',
+      'bg-overlay': 'rgba(0, 0, 0, 0.52)',
+      'surface': '#342E26',
+      'accent': '#C8A882',
+      'accent-light': '#443C30',
+      'accent-dark': '#DCC098',
+      'text-primary': '#E8E0D4',
+      'text-secondary': '#A09488',
+      'text-hint': '#706458',
+      'bubble-user-bg': '#C8A882',
+      'bubble-user-text': '#22201C',
+      'bubble-ai-bg': '#342E26',
+      'bubble-ai-text': '#E8E0D4',
+      ...DARK_SHADOWS
+    }
+  },
+
+  // ────────────────────────────────────────────
+  // 铅灰夜 — 冷灰底 + 灰强调
+  // ────────────────────────────────────────────
+  gray: {
+    id: 'gray',
+    name: '铅灰夜',
+    mode: 'dark',
+    variables: {
+      'bg-primary': '#1E1E22',
+      'bg-secondary': '#26262A',
+      'bg-card': '#2E2E32',
+      'bg-overlay': 'rgba(0, 0, 0, 0.52)',
+      'surface': '#2E2E32',
+      'accent': '#989898',
+      'accent-light': '#404044',
+      'accent-dark': '#B0B0B0',
+      'text-primary': '#E4E4E8',
+      'text-secondary': '#909098',
+      'text-hint': '#606064',
+      'bubble-user-bg': '#989898',
+      'bubble-user-text': '#1E1E22',
+      'bubble-ai-bg': '#2E2E32',
+      'bubble-ai-text': '#E4E4E8',
       ...DARK_SHADOWS
     }
   }
@@ -219,22 +246,25 @@ const PRESETS = {
 const LEGACY_PRESET_ALIAS = {
   default: 'blue',
   light: 'blue',
-  warm: 'cream',
+  warm: 'coral',
   sky: 'blue',
   paper: 'blue',
-  peach: 'pink',
-  berry: 'pink',
-  strawberry: 'pink',
-  dark: 'milk-cafe',
-  night: 'milk-cafe',
-  dusk: 'milk-cafe',
-  candle: 'milk-cafe',
-  milk: 'milk-cafe',
-  cocoa: 'milk-cafe',
-  'warm-gray': 'milk-cafe',
-  purple: 'blue',
-  blush: 'pink',
-  lavender: 'blue'
+  peach: 'coral',
+  berry: 'coral',
+  strawberry: 'coral',
+  pink: 'coral',
+  cream: 'coral',
+  blush: 'coral',
+  lavender: 'purple',
+  dark: 'rose-noir',
+  night: 'rose-noir',
+  dusk: 'rose-noir',
+  candle: 'caramel',
+  milk: 'caramel',
+  cocoa: 'caramel',
+  'warm-gray': 'gray',
+  'milk-cafe': 'caramel',
+  purple: 'purple'
 };
 
 let currentTheme = null;
@@ -344,12 +374,12 @@ export function setPreset(name) {
 }
 
 // ═══════════════════════════════════════
-// 【模式切换】浅色 → 浅蓝 / 夜间 → 奶咖夜
+// 【模式切换】浅色 → 汽水蓝 / 夜间 → 黑粉夜
 // ═══════════════════════════════════════
 
 export function setThemeMode(mode) {
   const safeMode = normalizeMode(mode);
-  const presetId = safeMode === 'dark' ? 'milk-cafe' : 'blue';
+  const presetId = safeMode === 'dark' ? 'rose-noir' : 'blue';
   const presetTheme = getPresetById(presetId);
 
   document.documentElement.setAttribute('data-theme', presetId);
