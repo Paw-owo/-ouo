@@ -83,11 +83,10 @@ function createMessageRow(state, message, pageEl) {
   if (role === 'assistant' && mode === 'bubble' && !message.isPending && !message.isError) {
     const chunks = splitAIBubbleChunks(message);
     if (chunks.length > 1) {
-      // 只渲染一次作者信息
-      row.appendChild(createMessageAuthor(state, message));
       chunks.forEach((chunkText, chunkIndex) => {
         const chunkBody = el('div', 'chat-message-body role-assistant');
         chunkBody.append(
+          createMessageAuthor(state, message),
           createSingleBubbleChunk(state, message, chunkText, chunkIndex === 0, chunkIndex === chunks.length - 1),
           chunkIndex === 0 ? createMessageActions(state, message, pageEl) : el('div', 'chat-message-actions-placeholder')
         );
@@ -221,7 +220,8 @@ function createReasoningStack(state, message, role, mode = 'bubble') {
   const target = getTargetInfo(state, message);
   const button = createThinkingChainButton(message, { roleName: target.name });
 
-  if (!button) {
+  // 修复：防御空值，按钮无效或没有子元素时隐藏容器，防止白屏
+  if (!button || !(button instanceof Node) || !button.childNodes.length) {
     stack.hidden = true;
     return stack;
   }
@@ -1504,7 +1504,9 @@ function el(tag, className = '', text = '') {
 // ═══════════════════════════════════════
 
 function injectStyle() {
-  if (document.getElementById(RENDER_STYLE_ID)) return; // 已注入则跳过，避免重复渲染和闪烁
+  // 修复：样式已存在则跳过，不再删除重建，避免闪烁
+  if (document.getElementById(RENDER_STYLE_ID)) return;
+
   const style = document.createElement('style');
   style.id = RENDER_STYLE_ID;
   style.textContent = `
@@ -2832,6 +2834,40 @@ function injectStyle() {
         min-height: 20px;
         min-width: 20px;
         padding: 0 5px;
+      }
+    }
+
+    /* 修复：对话模式下语音/骰子/猜拳卡片间距适配 */
+    .chat-message-row.mode-dialog .chat-voice-card,
+    .chat-message-row.mode-dialog .chat-dice-card,
+    .chat-message-row.mode-dialog .chat-rps-card {
+      margin-top: 4px;
+      margin-bottom: 4px;
+    }
+
+    .chat-message-row.mode-dialog.role-user .chat-voice-card,
+    .chat-message-row.mode-dialog.role-user .chat-dice-card,
+    .chat-message-row.mode-dialog.role-user .chat-rps-card {
+      margin-right: 46px;
+    }
+
+    .chat-message-row.mode-dialog.role-assistant .chat-voice-card,
+    .chat-message-row.mode-dialog.role-assistant .chat-dice-card,
+    .chat-message-row.mode-dialog.role-assistant .chat-rps-card {
+      margin-left: 46px;
+    }
+
+    @media (max-width: 520px) {
+      .chat-message-row.mode-dialog.role-user .chat-voice-card,
+      .chat-message-row.mode-dialog.role-user .chat-dice-card,
+      .chat-message-row.mode-dialog.role-user .chat-rps-card {
+        margin-right: 42px;
+      }
+
+      .chat-message-row.mode-dialog.role-assistant .chat-voice-card,
+      .chat-message-row.mode-dialog.role-assistant .chat-dice-card,
+      .chat-message-row.mode-dialog.role-assistant .chat-rps-card {
+        margin-left: 42px;
       }
     }
 
