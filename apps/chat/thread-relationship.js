@@ -147,7 +147,8 @@ export function openRelationshipLockSheet(state, options = {}) {
 
   const head = createMiniHead(
     lock.title || 'TA 正在闹别扭',
-    '这不是永久拉黑，只是 TA 现在还没完全消气。'
+    '这不是永久拉黑，只是 TA 现在还没完全消气。',
+    options
   );
 
   const card = el('section', 'chat-lock-card');
@@ -198,12 +199,24 @@ function getLockLeftText(lock) {
 // 【通用组件】标题、按钮和节点创建
 // ═══════════════════════════════════════
 
-function createMiniHead(title, subtitle) {
+function createMiniHead(title, subtitle, sheetOptions) {
   const head = el('div', 'chat-mini-head');
-  head.append(
+
+  if (sheetOptions?.onBackToTools) {
+    const backBtn = el('button', 'chat-sheet-back-btn');
+    backBtn.type = 'button';
+    backBtn.setAttribute('aria-label', '返回小工具箱');
+    backBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>';
+    backBtn.addEventListener('click', sheetOptions.onBackToTools);
+    head.appendChild(backBtn);
+  }
+
+  const textWrap = el('div', 'chat-mini-head-text');
+  textWrap.append(
     el('div', 'chat-mini-title', title || ''),
     el('div', 'chat-mini-subtitle', subtitle || '')
   );
+  head.append(textWrap);
   return head;
 }
 
@@ -357,7 +370,40 @@ function injectStyle() {
     }
 
     .chat-mini-head{
+      display:flex;
+      align-items:center;
+      gap:10px;
       margin-bottom:16px;
+    }
+
+    .chat-mini-head-text{
+      min-width:0;
+      flex:1;
+    }
+
+    .chat-sheet-back-btn{
+      width:36px;
+      height:36px;
+      flex:0 0 auto;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      border:none;
+      outline:none;
+      border-radius:var(--radius-md);
+      background:var(--bg-card);
+      color:var(--text-primary);
+      box-shadow:var(--shadow-sm);
+      transition:all 200ms ease;
+    }
+
+    .chat-sheet-back-btn:active{
+      transform:scale(.94);
+    }
+
+    .chat-sheet-back-btn svg{
+      width:18px;
+      height:18px;
     }
 
     .chat-mini-title{
@@ -440,7 +486,8 @@ function injectStyle() {
       }
 
       .chat-relationship-lock-action,
-      .chat-mini-btn{
+      .chat-mini-btn,
+      .chat-sheet-back-btn{
         transition:none;
       }
     }
