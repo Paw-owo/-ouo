@@ -2,7 +2,7 @@
 // imports: none
 
 const DB_NAME = 'ai_phone_db';
-const DB_VERSION = 4;
+const DB_VERSION = 5;
 
 const STORE_DEFINITIONS = [
   { name: 'characters', options: { keyPath: 'id' } },
@@ -49,6 +49,15 @@ const STORE_DEFINITIONS = [
       { name: 'characterId', keyPath: 'characterId' },
       { name: 'status', keyPath: 'status' },
       { name: 'type', keyPath: 'type' }
+    ]
+  },
+  {
+    name: 'api_pool',
+    options: { keyPath: 'id' },
+    indexes: [
+      { name: 'groupType', keyPath: 'groupType' },
+      { name: 'updatedAt', keyPath: 'updatedAt' },
+      { name: 'status', keyPath: 'status' }
     ]
   }
 ];
@@ -472,6 +481,6 @@ export async function getStorageUsage() {
   };
 }
 
-// 改了什么：数据库版本升到 4，新增 dreams 仓库（characterId + createdAt 索引），原有核心读写不动。
+// 改了什么：数据库版本升到 5，新增 api_pool 仓库（groupType + updatedAt + status 索引），原有核心读写不动。
 // 会不会影响其他文件：会影响 IndexedDB 初始化；旧库刷新后自动升级，不需要其他文件同步改导出。
 // depends: none
