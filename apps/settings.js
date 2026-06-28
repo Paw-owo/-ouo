@@ -2,7 +2,7 @@
 //   from '../core/storage.js': getData, setData, removeData, generateId, getNow, getStorageUsage, getDB, setDB, getAllDB, deleteDB, clearStoreDB
 //   from '../core/theme.js': getThemePresets, getCurrentTheme, setPreset, setThemeMode, applyTheme, saveTheme, exportTheme, importTheme
 //   from '../core/ui.js': showToast, showBottomSheet, hideBottomSheet, showConfirm, createIcon
-//   from '../core/api.js': fetchModels, smartModelsUrl, parseErrorResponse
+//   from '../core/api.js': fetchModels, smartModelsUrl, parseErrorResponse, buildHeaders
 //   from '../core/mcp.js': resetSession
 //   from '../core/tts.js': playTTS
 //   from '../core/storage-manager.js': testCloudConnection
@@ -33,7 +33,7 @@ import {
 } from '../core/theme.js';
 
 import { showToast, showBottomSheet, hideBottomSheet, showConfirm, createIcon } from '../core/ui.js';
-import { fetchModels, smartModelsUrl, parseErrorResponse } from '../core/api.js';
+import { fetchModels, smartModelsUrl, parseErrorResponse, buildHeaders } from '../core/api.js';
 import { resetSession } from '../core/mcp.js';
 import { playTTS } from '../core/tts.js';
 import { testCloudConnection } from '../core/storage-manager.js';
@@ -90,8 +90,12 @@ const DEFAULT_SETTINGS = {
   user: { name: '', avatar: '', avatarSource: '', avatarOpacity: 100 },
   widgets: { time: true, weather: true, anniversary: true, focus: true },
   chatSettings: {
-    autoTTS: false, showThinking: true, showToolCalls: true,
-    stickerPanelSize: 'normal', proactiveMode1Enabled: false, proactiveMode2Enabled: false
+    autoTTS: false,
+    showThinking: true,
+    showToolCalls: true,
+    stickerPanelSize: 'normal',
+    proactiveMode1Enabled: false,
+    proactiveMode2Enabled: false
   },
   apiEndpoints: []
 };
@@ -125,12 +129,12 @@ const DESKTOP_WIDGET_LIST = [
   ['focus', '焦点小卡片', '显示桌面上的小提醒']
 ];
 
-// 【更新】免费 API 预设 — 当前免费模型 + 固定 modelList
 const FREE_API_PRESETS = [
   {
     id: 'free_siliconflow',
     name: '硅基流动',
     endpoint: 'https://api.siliconflow.cn/v1',
+    provider: 'openai',
     model: 'Qwen/Qwen3-8B',
     modelList: ['Qwen/Qwen3-8B', 'deepseek-ai/DeepSeek-R1-Distill-Qwen-7B'],
     description: '永久免费，注册即用'
@@ -139,6 +143,7 @@ const FREE_API_PRESETS = [
     id: 'free_zhipu',
     name: '智谱清言',
     endpoint: 'https://open.bigmodel.cn/api/paas/v4',
+    provider: 'openai',
     model: 'GLM-4.7-Flash',
     modelList: ['GLM-4.7-Flash', 'GLM-4.6V-Flash'],
     description: 'GLM-4.7-Flash 永久免费'
@@ -147,6 +152,7 @@ const FREE_API_PRESETS = [
     id: 'free_openrouter',
     name: 'OpenRouter',
     endpoint: 'https://openrouter.ai/api/v1',
+    provider: 'openai',
     model: 'meta-llama/llama-3.3-70b-instruct:free',
     modelList: ['meta-llama/llama-3.3-70b-instruct:free', 'openai/gpt-oss-20b:free', 'google/gemma-4-31b-it:free', 'qwen/qwen3-coder:free'],
     description: '22个免费模型，注册即用'
@@ -155,6 +161,7 @@ const FREE_API_PRESETS = [
     id: 'free_groq',
     name: 'Groq',
     endpoint: 'https://api.groq.com/openai/v1',
+    provider: 'openai',
     model: 'llama-3.3-70b-versatile',
     modelList: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'meta-llama/llama-4-scout-17b-16e-instruct', 'qwen3-32b', 'openai/gpt-oss-120b'],
     description: '超快推理，每日1000次免费'
@@ -163,6 +170,7 @@ const FREE_API_PRESETS = [
     id: 'free_cerebras',
     name: 'Cerebras',
     endpoint: 'https://api.cerebras.ai/v1',
+    provider: 'openai',
     model: 'gpt-oss-120b',
     modelList: ['gpt-oss-120b', 'gpt-oss-20b'],
     description: '超快芯片，每日100万Token免费'
@@ -171,18 +179,19 @@ const FREE_API_PRESETS = [
     id: 'free_sambanova',
     name: 'SambaNova',
     endpoint: 'https://api.sambanova.ai/v1',
+    provider: 'openai',
     model: 'DeepSeek-V3.1',
     modelList: ['DeepSeek-V3.1', 'Meta-Llama-3.3-70B-Instruct', 'gpt-oss-120b', 'MiniMax-M2.7'],
     description: '超快RDU推理，每日20万Token免费'
   }
 ];
 
-// 【新增】匿名免Key预设 — 一键直连，不用填Key
 const ANONYMOUS_API_PRESETS = [
   {
     id: 'anon_llm7',
     name: 'LLM7',
     endpoint: 'https://api.llm7.io/v1',
+    provider: 'openai',
     model: 'gpt-4o-mini',
     modelList: ['gpt-4o-mini', 'deepseek-v3-0324', 'deepseek-r1-0528', 'gemini-2.5-flash-lite', 'qwen2.5-coder-32b', 'mistral-small-3.1-24b'],
     description: '免Key直连，30次/分钟'
@@ -191,6 +200,7 @@ const ANONYMOUS_API_PRESETS = [
     id: 'anon_ovhcloud',
     name: 'OVHcloud',
     endpoint: 'https://oai.endpoints.kepler.ai.cloud.ovh.net/v1',
+    provider: 'openai',
     model: 'Qwen/Qwen3.5-397B-A17B',
     modelList: ['Qwen/Qwen3.5-397B-A17B', 'Meta-Llama-3_3-70B-Instruct', 'Qwen/Qwen3.6-27B', 'Qwen/Qwen3-32B', 'Mistral-Small-3.1-24B-Instruct'],
     description: '免Key直连，欧盟机房'
@@ -472,7 +482,6 @@ function renderApiPage() {
   const top = card('API 小管家', '模型、Key、接口都住这里');
   const topButtons = el('div', 'settings-api-top-buttons');
 
-  // 【新增】免Key直连胶囊按钮
   const anonBtn = el('button', 'settings-api-top-btn settings-api-anon-btn');
   anonBtn.type = 'button';
   anonBtn.append(safeIcon('play', 20), el('strong', '', '免Key直连'), el('small', '', '不用填Key，点一下就能聊'));
@@ -956,7 +965,6 @@ function selectApiModel(id, model) {
   render('api');
 }
 
-// 【修复】区分 key 无效和接口不支持
 async function loadApiModels(id) {
   showToast('正在拉取模型...');
   const models = await fetchModels(id);
@@ -965,7 +973,7 @@ async function loadApiModels(id) {
     if (api && !api.apiKey && api.source !== 'anonymous') {
       showToast('没拉到模型，请先填写 API Key');
     } else {
-      showToast('没拉到模型，接口可能不支持模型列表');
+      showToast('没拉到模型也没关系，可以手填模型名保存');
     }
     return;
   }
@@ -978,14 +986,25 @@ async function loadApiModels(id) {
   render('api');
 }
 
-// 【修复】区分 key 无效和接口不支持
 async function testApi(id) {
   showToast('正在测试连接...');
-  const models = await fetchModels(id);
-  if (models.length) {
-    showToast('连接成功啦');
+  const api = getSettings().apiEndpoints.find((a) => a.id === id);
+  if (!api) {
+    showToast('这个 API 不见啦');
+    return;
   }
-  // fetchModels 内部已通过 parseErrorResponse 显示具体错误
+
+  try {
+    await testApiByChat({
+      endpoint: api.endpoint,
+      apiKey: api.apiKey,
+      provider: api.provider || detectProviderFromUrl(api.endpoint),
+      model: api.model
+    });
+    showToast('连接成功啦，可以聊天');
+  } catch (error) {
+    showToast(formatApiEditorError(error, '连接失败啦'));
+  }
 }
 
 async function deleteApi(id) {
@@ -1063,6 +1082,7 @@ function addAnonymousApi(preset) {
     name: preset.name,
     endpoint: preset.endpoint,
     apiKey: '',
+    provider: preset.provider || 'openai',
     model: preset.model,
     modelList: Array.isArray(preset.modelList) ? [...preset.modelList] : []
   };
@@ -1084,7 +1104,6 @@ function addAnonymousApi(preset) {
 // 【免费 API】选择器和添加逻辑
 // ═══════════════════════════════════════
 
-// 【修复】每个免费API显示可用免费模型列表
 function openFreeApiSelector() {
   const settings = getSettings();
   const existingPresetIds = new Set(
@@ -1142,6 +1161,7 @@ function addFreeApi(preset) {
     name: preset.name,
     endpoint: preset.endpoint,
     apiKey: '',
+    provider: preset.provider || 'openai',
     model: preset.model,
     modelList: Array.isArray(preset.modelList) ? [...preset.modelList] : []
   };
@@ -1160,11 +1180,20 @@ function addFreeApi(preset) {
 }
 
 // ═══════════════════════════════════════
-// 【API 编辑器】新增 / 编辑 — 修复：用 api.js 的 smartModelsUrl + parseErrorResponse
+// 【API 编辑器】新增 / 编辑
 // ═══════════════════════════════════════
 
 function openApiEditor(api) {
-  const current = api || { id: generateId(), name: '', endpoint: '', apiKey: '', model: '', modelList: [] };
+  const current = api || {
+    id: generateId(),
+    name: '',
+    endpoint: '',
+    apiKey: '',
+    provider: 'openai',
+    model: '',
+    modelList: []
+  };
+
   let draftModelList = Array.isArray(current.modelList) ? [...current.modelList] : [];
   const isFree = current.source === 'free';
   const isAnonymous = current.source === 'anonymous';
@@ -1177,19 +1206,26 @@ function openApiEditor(api) {
       ? '匿名免Key接口，地址和模型已填好，不用改'
       : '免费 API 预设，地址和模型已填好，填入 Key 就能用';
     sheet.body.append(el('p', 'settings-free-note', noteText));
+  } else {
+    sheet.body.append(el('p', 'settings-free-note', '小众中转站也可以用：如果拉不到模型，直接手填模型名再点“测试聊天”。'));
   }
 
   const name = inputRow('名字', current.name, '比如：主力模型');
-  const endpoint = inputRow('Endpoint', current.endpoint, 'https://api.xxx.com');
+  const endpoint = inputRow('Endpoint', current.endpoint, 'https://api.xxx.com/v1');
+  const provider = selectRow('接口类型', current.provider || detectProviderFromUrl(current.endpoint), [
+    ['openai', '通用中转 / OpenAI 格式'],
+    ['anthropic', 'Claude / Anthropic 格式'],
+    ['gemini', 'Gemini 格式'],
+    ['ollama', '本地 Ollama']
+  ]);
   const apiKey = isAnonymous ? null : inputRow('API Key', current.apiKey, 'sk-...');
 
-  // 【修复】免费/匿名：显示固定免费模型列表；自建：正常输入
   let modelInput = null;
   let modelArea = null;
 
   if (isPreset) {
-    // 免费/匿名：固定模型列表
     modelArea = el('div', 'settings-editor-model-area');
+
     function renderFixedModels() {
       modelArea.innerHTML = '';
       modelArea.append(modelPicker({
@@ -1203,12 +1239,12 @@ function openApiEditor(api) {
         }
       }));
     }
+
     renderFixedModels();
-    sheet.body.append(name.wrap, endpoint.wrap, ...(apiKey ? [apiKey.wrap] : []), modelArea);
-    sheet.body.append(el('p', 'settings-free-note', '想用其他模型？请返回选择"新增 API"自行填写'));
+    sheet.body.append(name.wrap, endpoint.wrap, provider.wrap, ...(apiKey ? [apiKey.wrap] : []), modelArea);
+    sheet.body.append(el('p', 'settings-free-note', '想用其他模型？请返回选择“新增 API”自行填写'));
   } else {
-    // 自建：正常输入 + 拉取
-    const model = inputRow('当前模型', current.model, '先拉取模型，再点选');
+    const model = inputRow('当前模型', current.model, '例如 gpt-4o-mini / deepseek-chat');
     modelInput = model;
     modelArea = el('div', 'settings-editor-model-area');
 
@@ -1217,7 +1253,7 @@ function openApiEditor(api) {
       modelArea.append(modelPicker({
         models: draftModelList,
         current: model.input.value.trim(),
-        emptyText: '还没有模型，点下面"拉取模型"就会出现啦',
+        emptyText: '还没有模型。小众站不支持拉取时，手填模型名也能保存',
         onSelect: (value) => {
           model.input.value = value;
           renderEditorModels();
@@ -1227,15 +1263,13 @@ function openApiEditor(api) {
     }
 
     renderEditorModels();
-    sheet.body.append(name.wrap, endpoint.wrap, apiKey.wrap, model.wrap, modelArea);
+    sheet.body.append(name.wrap, endpoint.wrap, provider.wrap, apiKey.wrap, model.wrap, modelArea);
   }
 
   let loading = false;
 
-  // 【修复】免费/匿名不显示拉取按钮，只显示保存；自建显示拉取+测试+保存
   if (!isPreset) {
     sheet.actions.append(
-      // 【修复】拉取模型：用 api.js 的 smartModelsUrl + parseErrorResponse，不再手动拼URL
       actionBtn('refresh', '拉取模型', async () => {
         if (loading) {
           showToast('正在拉取中，等一下哦');
@@ -1244,6 +1278,7 @@ function openApiEditor(api) {
 
         const endpointValue = endpoint.input.value.trim();
         const key = apiKey.input.value.trim();
+        const providerValue = provider.input.value || detectProviderFromUrl(endpointValue);
 
         if (!endpointValue) {
           showToast('先填 Endpoint 哦');
@@ -1254,64 +1289,120 @@ function openApiEditor(api) {
         showToast('正在拉取模型...');
 
         try {
-          const provider = detectProviderFromUrl(endpointValue);
-          const url = smartModelsUrl(endpointValue, provider);
-          const headers = {};
-          if (provider !== 'ollama' && key) headers['Authorization'] = `Bearer ${key}`;
+          const url = buildModelsUrlForSettings(endpointValue, providerValue);
+          const headers = buildHeaders(key, providerValue);
           const res = await fetch(url, { method: 'GET', headers, cache: 'no-store' });
+
           if (!res.ok) throw new Error(await parseErrorResponse(res));
 
           const data = await res.json().catch(() => null);
-          let models = [];
-
-          if (provider === 'ollama') {
-            models = (data?.models || []).map((m) => m?.name).filter(Boolean);
-          } else {
-            models = (data?.data || [])
-              .map((m) => typeof m === 'string' ? m : m?.id)
-              .filter(Boolean);
-          }
+          const models = extractModelList(data, providerValue);
 
           if (!models.length) {
-            showToast('接口正常但没找到模型，请检查模型名或联系服务商');
+            showToast('没找到模型也没关系，可以手填模型名保存');
             loading = false;
             return;
           }
 
           draftModelList = [...new Set(models)];
-          renderEditorModels();
+          modelArea.innerHTML = '';
+          modelArea.append(modelPicker({
+            models: draftModelList,
+            current: modelInput.input.value.trim(),
+            emptyText: '还没有模型',
+            onSelect: (value) => {
+              modelInput.input.value = value;
+              showToast(`已选择：${value}`);
+              modelArea.innerHTML = '';
+              modelArea.append(modelPicker({
+                models: draftModelList,
+                current: value,
+                emptyText: '还没有模型',
+                onSelect: (nextValue) => {
+                  modelInput.input.value = nextValue;
+                  showToast(`已选择：${nextValue}`);
+                }
+              }));
+            }
+          }));
+
           showToast(`拉到 ${draftModelList.length} 个模型啦，自己挑一个`);
         } catch (err) {
-          showToast(err.message || '模型拉取失败');
+          showToast(formatApiEditorError(err, '模型拉取失败，可以手填模型名'));
         }
 
         loading = false;
       }),
 
-      // 【修复】测试：用 api.js 的 smartModelsUrl + parseErrorResponse，不再手动拼URL
-      actionBtn('check', '测试', async () => {
+      actionBtn('check', '测试聊天', async () => {
         if (loading) return;
+
         const endpointValue = endpoint.input.value.trim();
         const key = apiKey.input.value.trim();
+        const providerValue = provider.input.value || detectProviderFromUrl(endpointValue);
+        const modelValue = modelInput.input.value.trim();
 
         if (!endpointValue) {
           showToast('先填 Endpoint 哦');
           return;
         }
 
+        if (providerValue !== 'gemini' && !modelValue) {
+          showToast('先填模型名哦，小众站一般要手填');
+          return;
+        }
+
         loading = true;
-        showToast('正在测试连接...');
+        showToast('正在发一条小测试...');
 
         try {
-          const provider = detectProviderFromUrl(endpointValue);
-          const url = smartModelsUrl(endpointValue, provider);
-          const headers = {};
-          if (provider !== 'ollama' && key) headers['Authorization'] = `Bearer ${key}`;
-          const res = await fetch(url, { method: 'GET', headers, cache: 'no-store' });
-          if (!res.ok) throw new Error(await parseErrorResponse(res));
-          showToast('连接成功啦');
+          await testApiByChat({
+            endpoint: endpointValue,
+            apiKey: key,
+            provider: providerValue,
+            model: modelValue
+          });
+          showToast('连接成功啦，可以聊天');
         } catch (err) {
-          showToast(err.message || '连接失败');
+          showToast(formatApiEditorError(err, '测试失败啦'));
+        }
+
+        loading = false;
+      })
+    );
+  } else if (!isAnonymous) {
+    sheet.actions.append(
+      actionBtn('check', '测试聊天', async () => {
+        if (loading) return;
+
+        const endpointValue = endpoint.input.value.trim();
+        const key = apiKey.input.value.trim();
+        const providerValue = provider.input.value || detectProviderFromUrl(endpointValue);
+        const modelValue = current.model;
+
+        if (!endpointValue) {
+          showToast('先填 Endpoint 哦');
+          return;
+        }
+
+        if (!key) {
+          showToast('先填 Key 哦');
+          return;
+        }
+
+        loading = true;
+        showToast('正在发一条小测试...');
+
+        try {
+          await testApiByChat({
+            endpoint: endpointValue,
+            apiKey: key,
+            provider: providerValue,
+            model: modelValue
+          });
+          showToast('连接成功啦，可以聊天');
+        } catch (err) {
+          showToast(formatApiEditorError(err, '测试失败啦'));
         }
 
         loading = false;
@@ -1319,22 +1410,37 @@ function openApiEditor(api) {
     );
   }
 
-  // 保存按钮（所有类型都有）
   sheet.actions.append(
     actionBtn('check', '保存', () => {
       const settings = getSettings();
+      const endpointValue = endpoint.input.value.trim();
+      const providerValue = provider.input.value || detectProviderFromUrl(endpointValue);
+      const modelValue = isPreset ? current.model : (modelInput ? modelInput.input.value.trim() : current.model);
+
+      if (!endpointValue) {
+        showToast('Endpoint 还没填哦');
+        return;
+      }
+
+      if (!modelValue && providerValue !== 'gemini') {
+        showToast('模型名也要填一下哦');
+        return;
+      }
+
       const next = {
         id: current.id,
-        name: name.input.value.trim(),
-        endpoint: endpoint.input.value.trim(),
+        name: name.input.value.trim() || '未命名 API',
+        endpoint: endpointValue,
         apiKey: apiKey ? apiKey.input.value.trim() : '',
-        model: isPreset ? current.model : (modelInput ? modelInput.input.value.trim() : current.model),
+        provider: providerValue,
+        model: modelValue,
         modelList: draftModelList,
         ...(isFree ? { source: 'free', presetId: current.presetId } : {}),
         ...(isAnonymous ? { source: 'anonymous', presetId: current.presetId } : {})
       };
 
       settings.apiEndpoints = [...settings.apiEndpoints.filter((item) => item.id !== current.id), next];
+
       if (!settings.defaultApiEndpointId) settings.defaultApiEndpointId = next.id;
       if (!settings.defaultModel && next.model) settings.defaultModel = next.model;
 
@@ -1346,6 +1452,149 @@ function openApiEditor(api) {
   );
 
   showBottomSheet(sheet.root);
+}
+// ═══════════════════════════════════════
+// 【API 测试辅助】真实发一条聊天测试，兼容小众中转站
+// ═══════════════════════════════════════
+
+function buildChatUrlForSettings(endpoint, provider) {
+  const base = String(endpoint || '').trim().replace(/\/+$/, '');
+
+  if (provider === 'anthropic') {
+    if (/\/messages$/i.test(base)) return base;
+    if (/\/v1$/i.test(base)) return `${base}/messages`;
+    return `${base}/v1/messages`;
+  }
+
+  if (provider === 'ollama') {
+    if (/\/api\/chat$/i.test(base)) return base;
+    return `${base}/api/chat`;
+  }
+
+  if (provider === 'gemini') {
+    return base;
+  }
+
+  if (/\/chat\/completions$/i.test(base)) return base;
+  if (/\/v1$/i.test(base)) return `${base}/chat/completions`;
+  return `${base}/v1/chat/completions`;
+}
+
+function buildModelsUrlForSettings(endpoint, provider) {
+  const base = String(endpoint || '').trim().replace(/\/+$/, '');
+
+  if (provider === 'gemini') {
+    return base
+      .replace(/\/v1beta\/models\/[^/]+:generateContent$/i, '/v1beta/models')
+      .replace(/\/v1beta\/models\/[^/]+:streamGenerateContent$/i, '/v1beta/models')
+      .replace(/\/v1beta\/?$/i, '/v1beta/models');
+  }
+
+  return smartModelsUrl(base, provider);
+}
+
+function extractModelList(data, provider) {
+  if (provider === 'ollama') {
+    return (data?.models || []).map((m) => m?.name).filter(Boolean);
+  }
+
+  if (provider === 'gemini') {
+    return (data?.models || [])
+      .map((m) => String(m?.name || '').replace(/^models\//, ''))
+      .filter(Boolean);
+  }
+
+  return (data?.data || [])
+    .map((m) => typeof m === 'string' ? m : m?.id)
+    .filter(Boolean);
+}
+
+function buildTestBody({ provider, model }) {
+  if (provider === 'anthropic') {
+    return {
+      model: model || 'claude-3-haiku-20240307',
+      max_tokens: 32,
+      messages: [
+        { role: 'user', content: '请回复：连接成功' }
+      ]
+    };
+  }
+
+  if (provider === 'gemini') {
+    return {
+      contents: [
+        { role: 'user', parts: [{ text: '请回复：连接成功' }] }
+      ]
+    };
+  }
+
+  if (provider === 'ollama') {
+    return {
+      model: model || 'llama3',
+      stream: false,
+      messages: [
+        { role: 'user', content: '请回复：连接成功' }
+      ]
+    };
+  }
+
+  return {
+    model,
+    stream: false,
+    messages: [
+      { role: 'user', content: '请回复：连接成功' }
+    ]
+  };
+}
+
+async function testApiByChat({ endpoint, apiKey, provider, model }) {
+  const endpointValue = String(endpoint || '').trim();
+  const providerValue = provider || detectProviderFromUrl(endpointValue);
+
+  if (!endpointValue) throw new Error('Endpoint 还没填哦');
+
+  let url = buildChatUrlForSettings(endpointValue, providerValue);
+  const headers = buildHeaders(apiKey, providerValue);
+  const body = buildTestBody({ provider: providerValue, model });
+
+  if (providerValue === 'gemini') {
+    const cleanModel = model || 'gemini-1.5-flash';
+    let base = endpointValue
+      .replace(/\/v1beta\/models\/[^/]+:generateContent$/i, '')
+      .replace(/\/v1beta\/models\/[^/]+:streamGenerateContent$/i, '')
+      .replace(/\/v1beta\/models\/?$/i, '')
+      .replace(/\/v1beta\/?$/i, '')
+      .replace(/\/+$/, '');
+
+    const geminiUrl = new URL(`${base}/v1beta/models/${encodeURIComponent(cleanModel)}:generateContent`);
+    if (apiKey) geminiUrl.searchParams.set('key', apiKey);
+    url = geminiUrl.toString();
+  }
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers,
+    cache: 'no-store',
+    body: JSON.stringify(body)
+  });
+
+  if (!res.ok) throw new Error(await parseErrorResponse(res));
+
+  return true;
+}
+
+function formatApiEditorError(error, fallback) {
+  const message = String(error?.message || '').trim();
+
+  if (!message) return fallback;
+  if (/failed to fetch|load failed|networkerror|cors/i.test(message)) {
+    return '这个中转站被浏览器拦住啦，可能没开放网页直连';
+  }
+
+  return message
+    .replace(/^HTTP\s*\d+\s*[｜|]\s*/i, '')
+    .replace(/^Error:\s*/i, '')
+    .trim() || fallback;
 }
 
 // ═══════════════════════════════════════
@@ -2435,7 +2684,7 @@ function emitRefresh() {
 }
 
 // ═══════════════════════════════════════
-// 【新增辅助】服务商检测、紧凑卡片、图标按钮
+// 【服务商检测、紧凑卡片、图标按钮】
 // ═══════════════════════════════════════
 
 function detectProviderFromUrl(endpoint) {
@@ -2446,7 +2695,6 @@ function detectProviderFromUrl(endpoint) {
   return 'openai';
 }
 
-// 【修复】同时识别 free 和 anonymous 两种 source
 function isFreeApi(api) {
   return api.source === 'free' || api.source === 'anonymous';
 }
@@ -2470,6 +2718,7 @@ function compactApiCard(api, isDefault) {
       else showToast('这个已经是默认啦');
     }),
     compactActionBtn('edit', () => openApiEditor(api)),
+    compactActionBtn('check', () => testApi(api.id)),
     compactActionBtn('delete', () => deleteApi(api.id))
   );
 
@@ -2949,7 +3198,6 @@ function injectStyle() {
       -webkit-appearance: none;
       cursor: pointer;
       padding-right: 36px;
-      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
       background-repeat: no-repeat;
       background-position: right 10px center;
       background-size: 18px;
@@ -3059,23 +3307,6 @@ function injectStyle() {
       gap: 2px;
     }
 
-    .settings-default-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      padding: 3px 10px;
-      margin-top: 8px;
-      border-radius: 999px;
-      background: var(--accent-light);
-      color: var(--accent-dark);
-      font-size: var(--font-size-small);
-      font-weight: 600;
-      line-height: 1.3;
-      width: fit-content;
-    }
-
-    /* ── API 紧凑布局 ── */
-
     .settings-api-top-buttons {
       display: flex;
       flex-wrap: wrap;
@@ -3101,7 +3332,6 @@ function injectStyle() {
       transition: var(--motion);
     }
 
-    /* 【新增】免Key直连按钮强调色 */
     .settings-api-anon-btn {
       background: var(--accent-light);
       color: var(--accent-dark);
@@ -3218,8 +3448,6 @@ function injectStyle() {
       transition: var(--motion);
     }
 
-    /* ── 免费 API 选择器 ── */
-
     .settings-free-preset {
       display: flex;
       align-items: center;
@@ -3252,7 +3480,6 @@ function injectStyle() {
       line-height: 1.4;
     }
 
-    /* 【修复】移动端三个按钮变两行 */
     @media (max-width: 600px) {
       .settings-list-action {
         flex-wrap: wrap;
@@ -3284,4 +3511,4 @@ function injectStyle() {
   document.head.appendChild(styleEl);
 }
 
-// depends: ../core/storage.js(getData,setData,removeData,generateId,getNow,getStorageUsage,getDB,setDB,getAllDB,deleteDB,clearStoreDB)；../core/theme.js(getThemePresets,getCurrentTheme,setPreset,setThemeMode,applyTheme,saveTheme,exportTheme,importTheme)；../core/ui.js(showToast,showBottomSheet,hideBottomSheet,showConfirm,createIcon)；../core/api.js(fetchModels,smartModelsUrl,parseErrorResponse)；../core/mcp.js(resetSession)；../core/tts.js(playTTS)；../core/storage-manager.js(testCloudConnection)
+// depends: ../core/storage.js(getData,setData,removeData,generateId,getNow,getStorageUsage,getDB,setDB,getAllDB,deleteDB,clearStoreDB)；../core/theme.js(getThemePresets,getCurrentTheme,setPreset,setThemeMode,applyTheme,saveTheme,exportTheme,importTheme)；../core/ui.js(showToast,showBottomSheet,hideBottomSheet,showConfirm,createIcon)；../core/api.js(fetchModels,smartModelsUrl,parseErrorResponse,buildHeaders)；../core/mcp.js(resetSession)；../core/tts.js(playTTS)；../core/storage-manager.js(testCloudConnection)
