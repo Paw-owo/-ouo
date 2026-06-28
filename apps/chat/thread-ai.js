@@ -658,7 +658,7 @@ async function generateInnerMonologue({
       signal: AbortSignal.timeout(12000)
     });
 
-    const monologue = parseInnerMonologueResult(result);
+    const monologue = parseInnerMonologueResult(result, userName);
     if (!monologue) return;
 
     const existing = await getDB(store, messageId).catch(() => null);
@@ -686,7 +686,7 @@ async function generateInnerMonologue({
   }
 }
 
-function parseInnerMonologueResult(result) {
+function parseInnerMonologueResult(result, userName) {
   let text = '';
 
   if (typeof result === 'string') {
@@ -718,6 +718,9 @@ function parseInnerMonologueResult(result) {
   text = text.replace(/^内心独白[:：]?\s*/i, '').trim();
   text = text.replace(/^独白[:：]?\s*/i, '').trim();
   text = text.replace(/^想法[:：]?\s*/i, '').trim();
+
+  // 修复：清洗视角，让独白像角色自己在想
+  text = cleanPerspectiveText(text, userName);
 
   return stripEmoji(text);
 }
@@ -1207,7 +1210,7 @@ async function requestAITextDirect(promptMessages, signal) {
     const msgs = [];
     if (systemPrompt) msgs.push({ role: 'system', content: systemPrompt });
     msgs.push(...chatMessages.filter((m) => m.role && m.content));
-    body = { model: requestModel, messages: msgs, stream: false, temperature: 0.85 };
+    body = { model: requestModel, messages: msgs, stream: false, temperature: Number(settings.temperature ?? 0.85) };
   }
 
   // 带超时的 fetch
@@ -1313,10 +1316,7 @@ function normalizeAIResult(result, userName = '你') {
     return {
       content: stripEmoji(parsed.content),
       thinking: stripEmoji(thinking),
-      thinkingSummary: cleanPerspectiveText(
-        result.thinkingSummary || result.thinking_summary || summarizeText(thinking, 28),
-        userName
-      ),
+      thinkingSummary: summarizeText(thinking, 28),
       toolCalls: normalizeToolCalls(result.toolCalls || result.tools || result.choices?.[0]?.message?.tool_calls || [])
     };
   }
@@ -2104,18 +2104,6 @@ function clampNumber(value, min, max) {
   const number = Number(value);
   if (!Number.isFinite(number)) return min;
   return Math.max(min, Math.min(max, Math.floor(number)));
-}
-
-function clampChance(value) {
-  const number = Number(value);
-  if (!Number.isFinite(number)) return 0;
-  return Math.max(0, Math.min(1, number));
-}
-
-function randomBetween(min, max) {
-  const left = Number(min);
-  const right = Number(max);
-  return Math.floor(left + Math.random() * (right - left + 1));
 }
 
 // 改了什么：1) 新增 getFriendlyErrorMessage 按HTTP状态码返回可爱报错文案；2) 新增 requestAITextDirect 直接调API能捕获状态码；3) requestPrivateReply/requestGroupReply 的catch块改为用可爱文案更新AI气泡（markMessageError + isError:true）；4) 新增 markMessageError 函数。
