@@ -18,9 +18,9 @@ import { mountThreadSettings, unmountThreadSettings } from './thread-settings.js
 import { mountThreadCall, unmountThreadCall } from './thread-call.js';
 import { sendThreadMessage } from './thread-actions.js';
 
-const STYLE_ID = 'chat-thread-panels-style';
+var STYLE_ID = 'chat-thread-panels-style';
 
-const panelState = {
+var panelState = {
   toolsSheetEl: null,
   settingsSheetEl: null,
   callMounted: false,
@@ -31,7 +31,8 @@ const panelState = {
 // 【工具面板】打开工具宫格和关闭工具面板
 // ═══════════════════════════════════════
 
-export function openThreadToolsPanel(state, options = {}) {
+export function openThreadToolsPanel(state, options) {
+  if (!options) options = {};
   injectStyle();
   panelState.lastState = state || null;
 
@@ -39,26 +40,36 @@ export function openThreadToolsPanel(state, options = {}) {
   closeThreadCallPanel();
   closeThreadToolsPanel();
 
-  const sheet = el('div', 'chat-thread-tools-sheet');
-  const head = el('div', 'chat-thread-tools-head');
+  function refreshToolsSheet() {
+    if (panelState.toolsSheetEl) {
+      hideBottomSheet();
+      panelState.toolsSheetEl = null;
+    }
+    showToolsSheet(state, options);
+  }
 
-  head.append(
-    el('div', 'chat-thread-tools-title', '小工具箱')
-  );
+  showToolsSheet(state, options);
+}
 
-  // ───────────────────
-  // 给工具详情页补上发送回调
-  // ───────────────────
+function showToolsSheet(state, options) {
+  var sheet = document.createElement('div');
+  sheet.className = 'chat-thread-tools-sheet';
 
-  const toolOptions = {
+  var head = document.createElement('div');
+  head.className = 'chat-thread-tools-head';
+  head.appendChild(document.createElement('div'));
+  head.lastChild.className = 'chat-thread-tools-title';
+  head.lastChild.textContent = '小工具箱';
+
+  var toolOptions = {
     ...options,
-    onPick: async (item, nextState) => {
+    onPick: async function(item, nextState) {
       if (typeof options.onPick === 'function') {
-        const handled = await options.onPick(item, nextState);
+        var handled = await options.onPick(item, nextState);
         if (handled) return true;
       }
 
-      if (item?.id === 'call') {
+      if (item?.id === 'call' || item?.id === 'phone') {
         closeThreadToolsPanel();
         await openThreadCallPanel(nextState || state, options);
         return true;
@@ -66,23 +77,34 @@ export function openThreadToolsPanel(state, options = {}) {
 
       return false;
     },
-    onCloseCall: () => closeThreadCallPanel(),
-    onRejectCall: () => closeThreadCallPanel(),
-    onSend: async (text) => {
+    onCloseCall: function() { closeThreadCallPanel(); },
+    onRejectCall: function() { closeThreadCallPanel(); },
+    onSend: async function(text) {
       await sendThreadMessage(state, text);
     },
-    onTransfer: async ({ amount, note }) => {
-      const text = note ? `转了 ${amount}，${note}` : `转了 ${amount}`;
+    onTransfer: async function(payload) {
+      var text = payload.note ? '转了 ' + payload.amount + '，' + payload.note : '转了 ' + payload.amount;
       await sendThreadMessage(state, text);
     },
-    onVoiceText: async (text) => {
+    onVoiceText: async function(text) {
       await sendThreadMessage(state, text);
+    },
+    onClose: function() {
+      closeThreadToolsPanel();
+    },
+    onBackToTools: function() {
+      if (panelState.toolsSheetEl) {
+        hideBottomSheet();
+        panelState.toolsSheetEl = null;
+      }
+      showToolsSheet(state, options);
     }
   };
 
-  const grid = createThreadToolsGrid(state, toolOptions);
+  var grid = createThreadToolsGrid(state, toolOptions);
 
-  sheet.append(head, grid);
+  sheet.appendChild(head);
+  sheet.appendChild(grid);
 
   panelState.toolsSheetEl = sheet;
   showBottomSheet(sheet);
@@ -99,7 +121,8 @@ export function closeThreadToolsPanel() {
 // 【设置面板】打开聊天设置和关闭设置面板
 // ═══════════════════════════════════════
 
-export function openThreadSettingsPanel(state, options = {}) {
+export function openThreadSettingsPanel(state, options) {
+  if (!options) options = {};
   injectStyle();
   panelState.lastState = state || null;
 
@@ -117,19 +140,25 @@ export function openThreadSettingsPanel(state, options = {}) {
   closeThreadCallPanel();
   closeThreadSettingsPanel();
 
-  const sheet = el('div', 'chat-settings-sheet');
-  const top = el('div', 'chat-settings-sheet-top');
+  var sheet = document.createElement('div');
+  sheet.className = 'chat-settings-sheet';
+  var top = document.createElement('div');
+  top.className = 'chat-settings-sheet-top';
 
-  const close = buttonIcon('close', '关闭设置');
-  close.addEventListener('click', () => closeThreadSettingsPanel());
+  var close = buttonIcon('close', '关闭设置');
+  close.addEventListener('click', function() { closeThreadSettingsPanel(); });
 
-  top.append(
-    close,
-    el('div', 'chat-settings-sheet-title', '聊天设置'),
-    el('div', 'chat-settings-sheet-spacer')
-  );
+  var title = document.createElement('div');
+  title.className = 'chat-settings-sheet-title';
+  title.textContent = '聊天设置';
 
-  const host = el('div', 'chat-settings-host');
+  var spacer = document.createElement('div');
+  spacer.className = 'chat-settings-sheet-spacer';
+
+  top.append(close, title, spacer);
+
+  var host = document.createElement('div');
+  host.className = 'chat-settings-host';
   sheet.append(top, host);
 
   panelState.settingsSheetEl = sheet;
@@ -154,7 +183,8 @@ export function closeThreadSettingsPanel() {
 // 【电话面板】打开电话和关闭电话面板
 // ═══════════════════════════════════════
 
-export async function openThreadCallPanel(state, options = {}) {
+export async function openThreadCallPanel(state, options) {
+  if (!options) options = {};
   injectStyle();
   panelState.lastState = state || null;
 
@@ -172,16 +202,16 @@ export async function openThreadCallPanel(state, options = {}) {
   closeThreadSettingsPanel();
   closeThreadCallPanel();
 
-  const target = options.containerEl || document.body;
+  var target = options.containerEl || document.body;
 
   try {
     await mountThreadCall(target, {
-      state,
+      state: state,
       character: state?.character || null,
       characterId: state?.characterId || '',
       incoming: Boolean(options.incoming),
-      close: () => closeThreadCallPanel(),
-      onReject: () => closeThreadCallPanel()
+      close: function() { closeThreadCallPanel(); },
+      onReject: function() { closeThreadCallPanel(); }
     });
 
     panelState.callMounted = true;
@@ -214,17 +244,18 @@ export function closeThreadPanels() {
 // ═══════════════════════════════════════
 
 function buttonIcon(iconName, label) {
-  const button = el('button', 'chat-panel-icon-btn');
+  var button = document.createElement('button');
   button.type = 'button';
+  button.className = 'chat-panel-icon-btn';
   button.setAttribute('aria-label', label || iconName);
   button.appendChild(createIcon(iconName, 18));
   return button;
 }
 
-function el(tag, className = '', text = '') {
-  const node = document.createElement(tag);
+function el(tag, className, text) {
+  var node = document.createElement(tag);
   if (className) node.className = className;
-  if (text !== '') node.textContent = text;
+  if (text !== undefined && text !== '') node.textContent = text;
   return node;
 }
 
@@ -235,7 +266,7 @@ function el(tag, className = '', text = '') {
 function injectStyle() {
   if (document.getElementById(STYLE_ID)) return;
 
-  const style = document.createElement('style');
+  var style = document.createElement('style');
   style.id = STYLE_ID;
   style.textContent = `
     .chat-thread-tools-sheet,
@@ -308,5 +339,3 @@ function injectStyle() {
 
   document.head.appendChild(style);
 }
-
-// 依赖：../../core/ui.js(showBottomSheet,hideBottomSheet,showToast,createIcon)；./thread-tools.js(createThreadToolsGrid)；./thread-settings.js(mountThreadSettings,unmountThreadSettings)；./thread-call.js(mountThreadCall,unmountThreadCall)；./thread-actions.js(sendThreadMessage)
