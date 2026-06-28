@@ -40,14 +40,6 @@ export function openThreadToolsPanel(state, options) {
   closeThreadCallPanel();
   closeThreadToolsPanel();
 
-  function refreshToolsSheet() {
-    if (panelState.toolsSheetEl) {
-      hideBottomSheet();
-      panelState.toolsSheetEl = null;
-    }
-    showToolsSheet(state, options);
-  }
-
   showToolsSheet(state, options);
 }
 
@@ -92,12 +84,9 @@ function showToolsSheet(state, options) {
     onClose: function() {
       closeThreadToolsPanel();
     },
+    // 返回按钮：直接关抽屉回消息
     onBackToTools: function() {
-      if (panelState.toolsSheetEl) {
-        hideBottomSheet();
-        panelState.toolsSheetEl = null;
-      }
-      showToolsSheet(state, options);
+      closeThreadToolsPanel();
     }
   };
 
