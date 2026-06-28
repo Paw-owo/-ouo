@@ -1,18 +1,3 @@
-只修两点。
-
----
-
-修复说明
-
-1. 标题缺失：openTaskSheet 和 openQuizSheet 在创建内容容器时，最前面加一个标题元素（复用 chat-action-sheet-title 类，和底部抽屉标题风格一致），让用户知道当前抽屉是什么功能。
-2. 重复关闭：去掉了两个函数内部所有显式额外调用的 hideBottomSheet()，因为 closeToolsSheet 已经负责关闭所有抽屉，不再重复关闭。
-
-其他代码完全不动。
-
----
-
-修复后完整文件
-
 ```javascript
 // apps/chat/thread-tools.js
 // imports:
