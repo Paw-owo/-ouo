@@ -81,10 +81,22 @@ function renderEditableSheet(state, options, config) {
   const sheet = el('div', 'thread-sheet-wrap');
 
   const head = el('div', 'thread-sheet-head');
-  head.append(
+
+  if (options.onBackToTools) {
+    const backBtn = el('button', 'thread-sheet-back-btn');
+    backBtn.type = 'button';
+    backBtn.setAttribute('aria-label', '返回小工具箱');
+    backBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>';
+    backBtn.addEventListener('click', options.onBackToTools);
+    head.appendChild(backBtn);
+  }
+
+  const headText = el('div', 'thread-sheet-head-text');
+  headText.append(
     el('div', 'thread-sheet-title', title),
     el('div', 'thread-sheet-desc', desc)
   );
+  head.append(headText);
   sheet.append(head);
 
   const toolbar = el('div', 'editable-toolbar');
@@ -414,7 +426,7 @@ export function openTransferSheet(state, options = {}) {
   );
 
   sheet.append(
-    createSheetHead('转账', '发一张会进聊天里的小卡片。'),
+    createSheetHead('转账', '发一张会进聊天里的小卡片。', options),
     form
   );
 
@@ -484,7 +496,7 @@ export function openClearContextSheet(state, options = {}) {
 
   actions.append(cancel, save);
   wrap.append(slider, valueText, actions);
-  sheet.append(createSheetHead('清上下文', '把聊天缩短一点。'), wrap);
+  sheet.append(createSheetHead('清上下文', '把聊天缩短一点。', options), wrap);
 
   renderSheet(sheet, options.containerEl);
 }
@@ -500,7 +512,7 @@ export function openMcpSheet(state, options = {}) {
   const list = normalizeArray(options.items || getData('chat_mcp_tools') || []);
 
   sheet.append(
-    createSheetHead('MCP', '这里放外部工具入口。'),
+    createSheetHead('MCP', '这里放外部工具入口。', options),
     list.length
       ? createChipGrid(list.map((item) => ({
           title: String(item.title || item.name || '工具').trim(),
@@ -566,7 +578,7 @@ export function openVoiceTextSheet(state, options = {}) {
   form.append(textInputEl.wrap, noteInput.wrap, actions);
 
   sheet.append(
-    createSheetHead('语音文字', '先写成文字发出去，之后再看要不要做成语音。'),
+    createSheetHead('语音文字', '先写成文字发出去，之后再看要不要做成语音。', options),
     form
   );
 
@@ -601,12 +613,24 @@ function renderSheet(sheet, containerEl) {
 // 【公共工具】标题、输入、卡片和按钮
 // ═══════════════════════════════════════
 
-function createSheetHead(title, desc) {
+function createSheetHead(title, desc, sheetOptions) {
   const head = el('div', 'thread-sheet-head');
-  head.append(
+
+  if (sheetOptions?.onBackToTools) {
+    const backBtn = el('button', 'thread-sheet-back-btn');
+    backBtn.type = 'button';
+    backBtn.setAttribute('aria-label', '返回小工具箱');
+    backBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>';
+    backBtn.addEventListener('click', sheetOptions.onBackToTools);
+    head.appendChild(backBtn);
+  }
+
+  const headText = el('div', 'thread-sheet-head-text');
+  headText.append(
     el('div', 'thread-sheet-title', title || ''),
     el('div', 'thread-sheet-desc', desc || '')
   );
+  head.append(headText);
   return head;
 }
 
@@ -728,7 +752,11 @@ function injectStyle() {
   style.id = SHEET_STYLE_ID;
   style.textContent = `
     .thread-sheet-wrap{padding:6px 20px 20px;color:var(--text-primary)}
-    .thread-sheet-head{margin-bottom:16px}
+    .thread-sheet-head{display:flex;align-items:center;gap:10px;margin-bottom:16px}
+    .thread-sheet-head-text{min-width:0;flex:1}
+    .thread-sheet-back-btn{width:36px;height:36px;flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;border:none;outline:none;border-radius:var(--radius-md);background:var(--bg-card);color:var(--text-primary);box-shadow:var(--shadow-sm);transition:all 200ms ease}
+    .thread-sheet-back-btn:active{transform:scale(.94)}
+    .thread-sheet-back-btn svg{width:18px;height:18px}
     .thread-sheet-title{color:var(--text-primary);font-size:17px;font-weight:600;line-height:1.35}
     .thread-sheet-desc{margin-top:4px;color:var(--text-secondary);font-size:13px;line-height:1.55}
     .thread-sheet-card,.thread-sheet-form{padding:14px;border-radius:24px;background:var(--bg-card);box-shadow:var(--shadow-sm)}
@@ -767,7 +795,7 @@ function injectStyle() {
     .editable-card-del{position:absolute;left:10px;top:50%;transform:translateY(-50%);width:24px;height:24px;border-radius:50%;background:rgba(255,80,80,0.12);color:rgb(255,80,80);display:flex;align-items:center;justify-content:center;border:none;cursor:pointer;transition:all 0.2s ease}
     .editable-card-del:active{transform:translateY(-50%) scale(0.9)}
     @media(max-width:430px){.thread-chip-grid{grid-template-columns:1fr}.thread-sheet-actions{grid-template-columns:1fr}}
-    @media(prefers-reduced-motion:reduce){.thread-chip-card,.thread-sheet-btn,.editable-card,.editable-toolbar-btn{transition:none}}
+    @media(prefers-reduced-motion:reduce){.thread-chip-card,.thread-sheet-btn,.thread-sheet-back-btn,.editable-card,.editable-toolbar-btn{transition:none}}
   `;
   document.head.appendChild(style);
 }
