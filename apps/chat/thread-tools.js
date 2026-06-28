@@ -1,10 +1,9 @@
-```javascript
 // apps/chat/thread-tools.js
 // imports:
 //   from '../../core/ui.js': showBottomSheet, hideBottomSheet
 //   from './thread-sheets.js': openQuickReplySheet, openTransferSheet, openVoiceTextSheet, openClearContextSheet, openMcpSheet
 //   from './thread-relationship.js': openRelationshipLockSheet
-//   from './thread-actions.js': sendThreadMessage, sendDiceMessage, sendRpsMessage
+//   from './thread-actions.js': sendDiceMessage, sendRpsMessage
 
 import { showBottomSheet, hideBottomSheet } from '../../core/ui.js';
 
@@ -17,7 +16,7 @@ import {
 } from './thread-sheets.js';
 
 import { openRelationshipLockSheet } from './thread-relationship.js';
-import { sendThreadMessage, sendDiceMessage, sendRpsMessage } from './thread-actions.js';
+import { sendDiceMessage, sendRpsMessage } from './thread-actions.js';
 
 // ═══════════════════════════════════════
 // 【工具列表】11个工具，每页8个，滑动翻页
@@ -74,28 +73,31 @@ function createToolIcon(type) {
 // ═══════════════════════════════════════
 
 function injectToolsCSS() {
-  if (document.getElementById('thread-tools-style')) return;
-  const style = document.createElement('style');
+  var old = document.getElementById('thread-tools-style');
+  if (old) old.remove();
+
+  var style = document.createElement('style');
   style.id = 'thread-tools-style';
   style.textContent = `
-    .thread-tools-panel{position:absolute;inset:0;z-index:100;display:flex;flex-direction:column;background:var(--bg-base,#faf5f0);opacity:0;transform:translateY(100%);transition:all 0.3s cubic-bezier(0.34,1.56,0.64,1);pointer-events:none}
+    .thread-tools-panel{position:absolute;inset:0;z-index:100;display:flex;flex-direction:column;background:var(--bg-primary);opacity:0;transform:translateY(100%);transition:all 0.3s cubic-bezier(0.34,1.56,0.64,1);pointer-events:none}
     .thread-tools-panel.is-open{opacity:1;transform:translateY(0);pointer-events:auto}
-    .tools-carousel-wrap{flex:1;overflow:hidden;position:relative}
+    .tools-carousel-wrap{flex:1;overflow:hidden;position:relative;overscroll-behavior:contain;touch-action:pan-x}
     .tools-carousel{display:flex;transition:transform 0.35s cubic-bezier(0.25,0.46,0.45,0.94);height:100%;will-change:transform}
     .tools-page{min-width:100%;display:grid;grid-template-columns:repeat(4,1fr);grid-template-rows:repeat(2,1fr);gap:12px;padding:12px 16px;align-content:center;justify-items:center}
-    .tool-cell{width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:14px 2px;border-radius:var(--radius-lg,20px);background:var(--bg-surface,#fff);box-shadow:0 2px 10px rgba(0,0,0,0.05);cursor:pointer;transition:all 0.2s cubic-bezier(0.34,1.56,0.64,1);-webkit-tap-highlight-color:transparent;user-select:none}
-    .tool-cell:active{transform:scale(0.92);box-shadow:inset 0 2px 6px rgba(0,0,0,0.06)}
-    .tool-icon-wrap{width:36px;height:36px;display:flex;align-items:center;justify-content:center;color:var(--accent,#9F8F82);background:var(--bg-base,#faf5f0);border-radius:12px;padding:4px}
+    .tool-cell{width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:14px 2px;border:none;outline:none;border-radius:var(--radius-lg);background:var(--bg-surface);box-shadow:var(--shadow-sm);cursor:pointer;transition:all 0.2s cubic-bezier(0.34,1.56,0.64,1);-webkit-tap-highlight-color:transparent;user-select:none}
+    .tool-cell:active{transform:scale(0.92)}
+    .tool-icon-wrap{width:36px;height:36px;display:flex;align-items:center;justify-content:center;color:var(--accent);background:var(--bg-card);border-radius:var(--radius-md);padding:4px}
     .tool-icon-wrap svg{width:100%;height:100%}
-    .tool-name{font-size:11px;font-weight:500;color:var(--text-secondary,#888);line-height:1.2;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;padding:0 2px}
+    .tool-name{font-size:11px;font-weight:500;color:var(--text-secondary);line-height:1.2;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;padding:0 2px}
     .tools-dots{display:flex;justify-content:center;align-items:center;gap:6px;padding:6px 0 18px;flex-shrink:0}
-    .tools-dot{width:6px;height:6px;border-radius:50%;background:var(--text-placeholder,#ccc);transition:all 0.3s ease}
-    .tools-dot.is-active{width:18px;border-radius:3px;background:var(--accent,#9F8F82)}
-    .thread-tools-detail-header{display:flex;align-items:center;padding:14px 16px;gap:12px;flex-shrink:0}
-    .thread-tools-detail-header .back-btn{width:34px;height:34px;border-radius:50%;background:var(--bg-surface,#fff);box-shadow:0 2px 8px rgba(0,0,0,0.06);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text-secondary,#888);border:none;transition:all 0.2s ease;-webkit-tap-highlight-color:transparent}
-    .thread-tools-detail-header .back-btn:active{transform:scale(0.92)}
-    .thread-tools-detail-header .back-btn svg{width:18px;height:18px}
-    .thread-tools-detail-header .detail-title{font-size:17px;font-weight:600;color:var(--text-primary,#333)}
+    .tools-dot{width:6px;height:6px;border-radius:999px;background:var(--text-placeholder);transition:all 0.3s ease}
+    .tools-dot.is-active{width:18px;background:var(--accent)}
+    .thread-tools-detail-header{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:10px;margin:0 0 14px}
+    .thread-tools-back-btn{width:38px;height:38px;display:inline-flex;align-items:center;justify-content:center;border:none;outline:none;border-radius:var(--radius-md);background:var(--bg-card);color:var(--text-primary);box-shadow:var(--shadow-sm);transition:all 200ms ease}
+    .thread-tools-back-btn:active{transform:scale(.94)}
+    .thread-tools-back-btn svg{width:18px;height:18px}
+    .thread-tools-detail-title{min-width:0;color:var(--text-primary);font-size:var(--font-size-title);font-weight:600;line-height:1.35}
+    .thread-tools-detail-spacer{width:38px;height:38px}
   `;
   document.head.appendChild(style);
 }
@@ -104,33 +106,37 @@ function injectToolsCSS() {
 // 【翻页触摸滑动】丝滑跟手+边界阻尼
 // ═══════════════════════════════════════
 
-let currentPage = 0;
-let totalPages = 1;
-let touchStartX = 0;
-let touchDeltaX = 0;
-let isSwiping = false;
+var currentPage = 0;
+var totalPages = 1;
+var touchStartX = 0;
+var touchDeltaX = 0;
+var isSwiping = false;
+var toolsPanelEl = null;
 
 function setupSwipe(carousel, dotsContainer) {
-  const wrap = carousel.parentElement;
-  wrap.addEventListener('touchstart', (e) => {
+  var wrap = carousel.parentElement;
+  wrap.addEventListener('touchstart', function(e) {
     touchStartX = e.touches[0].clientX;
     touchDeltaX = 0;
     isSwiping = true;
     carousel.style.transition = 'none';
   }, { passive: true });
-  wrap.addEventListener('touchmove', (e) => {
+  wrap.addEventListener('touchmove', function(e) {
     if (!isSwiping) return;
     touchDeltaX = e.touches[0].clientX - touchStartX;
-    const atStart = currentPage === 0 && touchDeltaX > 0;
-    const atEnd = currentPage === totalPages - 1 && touchDeltaX < 0;
-    const damped = (atStart || atEnd) ? touchDeltaX * 0.3 : touchDeltaX;
+    if (Math.abs(touchDeltaX) > 8 && e.cancelable) {
+      e.preventDefault();
+    }
+    var atStart = currentPage === 0 && touchDeltaX > 0;
+    var atEnd = currentPage === totalPages - 1 && touchDeltaX < 0;
+    var damped = (atStart || atEnd) ? touchDeltaX * 0.3 : touchDeltaX;
     carousel.style.transform = 'translateX(calc(' + (-currentPage * 100) + '% + ' + damped + 'px))';
-  }, { passive: true });
-  wrap.addEventListener('touchend', () => {
+  }, { passive: false });
+  wrap.addEventListener('touchend', function() {
     if (!isSwiping) return;
     isSwiping = false;
     carousel.style.transition = 'transform 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94)';
-    const threshold = wrap.clientWidth * 0.2;
+    var threshold = wrap.clientWidth * 0.2;
     if (touchDeltaX < -threshold && currentPage < totalPages - 1) currentPage++;
     else if (touchDeltaX > threshold && currentPage > 0) currentPage--;
     carousel.style.transform = 'translateX(' + (-currentPage * 100) + '%)';
@@ -140,22 +146,23 @@ function setupSwipe(carousel, dotsContainer) {
 
 function updateDots(container) {
   if (!container) return;
-  container.querySelectorAll('.tools-dot').forEach((d, i) => d.classList.toggle('is-active', i === currentPage));
+  container.querySelectorAll('.tools-dot').forEach(function(d, i) {
+    d.classList.toggle('is-active', i === currentPage);
+  });
 }
 
 // ═══════════════════════════════════════
-// 【发送消息到聊天】通过回调或直接调用
+// 【发送消息到聊天】通过回调
 // ═══════════════════════════════════════
 
 async function sendMessageToChat(text, options) {
   if (typeof options?.onSend === 'function') {
     await options.onSend(text);
-    return;
   }
 }
 
 // ═══════════════════════════════════════
-// 【关掉底部抽屉】优先用回调，兜底直接关
+// 【关掉工具箱】优先回调，兜底关抽屉
 // ═══════════════════════════════════════
 
 function closeToolsSheet(options) {
@@ -164,10 +171,42 @@ function closeToolsSheet(options) {
   } else {
     hideBottomSheet();
   }
-  // 同时关闭全屏工具箱面板，避免详情页背后残留
+
   if (toolsPanelEl && toolsPanelEl.classList.contains('is-open')) {
     toolsPanelEl.classList.remove('is-open');
   }
+}
+
+// ═══════════════════════════════════════
+// 【返回按钮头部】带返回到工具选择的按钮
+// ═══════════════════════════════════════
+
+function createBackHeader(title, options) {
+  var header = document.createElement('div');
+  header.className = 'thread-tools-detail-header';
+
+  var back = document.createElement('button');
+  back.type = 'button';
+  back.className = 'thread-tools-back-btn';
+  back.setAttribute('aria-label', '返回小工具箱');
+  back.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>';
+  back.addEventListener('click', function() {
+    if (typeof options?.onBackToTools === 'function') {
+      options.onBackToTools();
+    } else {
+      hideBottomSheet();
+    }
+  });
+
+  var titleEl = document.createElement('div');
+  titleEl.className = 'thread-tools-detail-title';
+  titleEl.textContent = title || '小工具';
+
+  var spacer = document.createElement('div');
+  spacer.className = 'thread-tools-detail-spacer';
+
+  header.append(back, titleEl, spacer);
+  return header;
 }
 
 // ═══════════════════════════════════════
@@ -175,19 +214,14 @@ function closeToolsSheet(options) {
 // ═══════════════════════════════════════
 
 function openTaskSheet(state, options) {
-  const content = document.createElement('div');
-  content.style.cssText = 'display:flex;flex-direction:column;gap:14px;padding-top:8px;';
+  var content = document.createElement('div');
+  content.style.cssText = 'display:flex;flex-direction:column;gap:14px;padding-top:4px;';
+  content.appendChild(createBackHeader('小任务', options));
 
-  // 加标题
-  const titleEl = document.createElement('div');
-  titleEl.className = 'chat-action-sheet-title';
-  titleEl.textContent = '小任务';
-  content.appendChild(titleEl);
-
-  const grid = document.createElement('div');
+  var grid = document.createElement('div');
   grid.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:10px;';
 
-  const presets = [
+  var presets = [
     { text: '提醒我喝水', prompt: '提醒我要多喝水，关心一下我~' },
     { text: '帮我记件事', prompt: '帮我记一件重要的事，我接下来要跟你说~' },
     { text: '讲个小故事', prompt: '给我讲一个温馨可爱的小故事吧~' },
@@ -197,11 +231,10 @@ function openTaskSheet(state, options) {
   ];
 
   presets.forEach(function(p) {
-    const card = document.createElement('div');
-    card.style.cssText = 'padding:16px 12px;border-radius:var(--radius-lg,16px);background:var(--bg-surface,#fff);box-shadow:0 2px 8px rgba(0,0,0,0.05);cursor:pointer;transition:all 0.2s cubic-bezier(0.34,1.56,0.64,1);text-align:center;font-size:14px;color:var(--text-primary,#333);font-weight:500;-webkit-tap-highlight-color:transparent;';
+    var card = document.createElement('button');
+    card.type = 'button';
+    card.style.cssText = 'padding:16px 12px;border:none;outline:none;border-radius:var(--radius-lg);background:var(--bg-surface);box-shadow:var(--shadow-sm);cursor:pointer;transition:all 0.2s cubic-bezier(0.34,1.56,0.64,1);text-align:center;font-size:14px;color:var(--text-primary);font-weight:500;-webkit-tap-highlight-color:transparent;';
     card.textContent = p.text;
-    card.addEventListener('touchstart', function() { card.style.transform = 'scale(0.95)'; }, { passive: true });
-    card.addEventListener('touchend', function() { card.style.transform = ''; });
     card.addEventListener('click', async function() {
       closeToolsSheet(options);
       await sendMessageToChat(p.prompt, options);
@@ -211,16 +244,17 @@ function openTaskSheet(state, options) {
 
   content.appendChild(grid);
 
-  const inputWrap = document.createElement('div');
+  var inputWrap = document.createElement('div');
   inputWrap.style.cssText = 'display:flex;gap:8px;margin-top:4px;';
 
-  const input = document.createElement('textarea');
+  var input = document.createElement('textarea');
   input.placeholder = '或者自己输入任务...';
-  input.style.cssText = 'flex:1;padding:12px;border-radius:var(--radius-md,12px);background:var(--bg-surface,#fff);box-shadow:0 2px 8px rgba(0,0,0,0.05);font-size:14px;color:var(--text-primary,#333);resize:none;height:44px;outline:none;border:none;font-family:inherit;';
+  input.style.cssText = 'flex:1;padding:12px;border-radius:var(--radius-md);background:var(--bg-surface);box-shadow:var(--shadow-sm);font-size:14px;color:var(--text-primary);resize:none;height:44px;outline:none;border:none;font-family:inherit;';
 
-  const sendBtn = document.createElement('button');
+  var sendBtn = document.createElement('button');
+  sendBtn.type = 'button';
   sendBtn.textContent = '发送';
-  sendBtn.style.cssText = 'padding:0 20px;height:44px;border-radius:var(--radius-md,12px);background:var(--accent,#9F8F82);color:#fff;font-size:14px;font-weight:500;border:none;cursor:pointer;white-space:nowrap;transition:all 0.2s ease;';
+  sendBtn.style.cssText = 'padding:0 20px;height:44px;border-radius:var(--radius-md);background:var(--accent);color:var(--bubble-user-text);font-size:14px;font-weight:500;border:none;outline:none;cursor:pointer;white-space:nowrap;transition:all 0.2s ease;';
   sendBtn.addEventListener('click', async function() {
     var t = input.value.trim();
     if (!t) return;
@@ -232,8 +266,7 @@ function openTaskSheet(state, options) {
   inputWrap.appendChild(sendBtn);
   content.appendChild(inputWrap);
 
-  // 改为抽屉卡片
-  showBottomSheet(content, '小任务');
+  showBottomSheet(content);
 }
 
 // ═══════════════════════════════════════
@@ -241,16 +274,11 @@ function openTaskSheet(state, options) {
 // ═══════════════════════════════════════
 
 function openQuizSheet(state, options) {
-  const content = document.createElement('div');
-  content.style.cssText = 'display:flex;flex-direction:column;gap:10px;padding-top:8px;';
+  var content = document.createElement('div');
+  content.style.cssText = 'display:flex;flex-direction:column;gap:10px;padding-top:4px;';
+  content.appendChild(createBackHeader('默契问答', options));
 
-  // 加标题
-  const titleEl = document.createElement('div');
-  titleEl.className = 'chat-action-sheet-title';
-  titleEl.textContent = '默契问答';
-  content.appendChild(titleEl);
-
-  const categories = [
+  var categories = [
     { title: '你有多了解我', desc: 'AI出题考你，看它对你了解多少', prompt: '我们来玩默契问答吧~你来出题考考我，看你对我有多了解！问我一些关于我的喜好的问题，我来回答~' },
     { title: '我有多了解你', desc: '你来答题，看对AI了解多少', prompt: '我们来玩默契问答吧~我来出题考考你，看我对你有多了解！问我一些关于你的问题，看你记不记得~' },
     { title: '生活小测验', desc: '聊聊日常生活里的小事', prompt: '我们来玩默契问答吧~聊一聊日常生活的小事，你问我一些关于生活习惯、喜好的问题~' },
@@ -260,18 +288,17 @@ function openQuizSheet(state, options) {
   ];
 
   categories.forEach(function(cat) {
-    const card = document.createElement('div');
-    card.style.cssText = 'padding:16px;border-radius:var(--radius-lg,16px);background:var(--bg-surface,#fff);box-shadow:0 2px 8px rgba(0,0,0,0.05);cursor:pointer;transition:all 0.2s cubic-bezier(0.34,1.56,0.64,1);-webkit-tap-highlight-color:transparent;';
+    var card = document.createElement('button');
+    card.type = 'button';
+    card.style.cssText = 'width:100%;padding:16px;border:none;outline:none;border-radius:var(--radius-lg);background:var(--bg-surface);box-shadow:var(--shadow-sm);cursor:pointer;transition:all 0.2s cubic-bezier(0.34,1.56,0.64,1);-webkit-tap-highlight-color:transparent;text-align:left;';
     var titleDiv = document.createElement('div');
-    titleDiv.style.cssText = 'font-size:15px;color:var(--text-primary,#333);font-weight:500;';
+    titleDiv.style.cssText = 'font-size:15px;color:var(--text-primary);font-weight:500;';
     titleDiv.textContent = cat.title;
     var descDiv = document.createElement('div');
-    descDiv.style.cssText = 'font-size:12px;color:var(--text-secondary,#888);margin-top:4px;';
+    descDiv.style.cssText = 'font-size:12px;color:var(--text-secondary);margin-top:4px;';
     descDiv.textContent = cat.desc;
     card.appendChild(titleDiv);
     card.appendChild(descDiv);
-    card.addEventListener('touchstart', function() { card.style.transform = 'scale(0.97)'; }, { passive: true });
-    card.addEventListener('touchend', function() { card.style.transform = ''; });
     card.addEventListener('click', async function() {
       closeToolsSheet(options);
       await sendMessageToChat(cat.prompt, options);
@@ -279,8 +306,7 @@ function openQuizSheet(state, options) {
     content.appendChild(card);
   });
 
-  // 改为抽屉卡片
-  showBottomSheet(content, '默契问答');
+  showBottomSheet(content);
 }
 
 // ═══════════════════════════════════════
@@ -294,11 +320,9 @@ async function handleToolClick(toolId, state, options) {
       openQuickReplySheet(state, options);
       break;
     case 'task':
-      closeToolsSheet(options);
       openTaskSheet(state, options);
       break;
     case 'quiz':
-      closeToolsSheet(options);
       openQuizSheet(state, options);
       break;
     case 'transfer':
@@ -318,6 +342,7 @@ async function handleToolClick(toolId, state, options) {
       openRelationshipLockSheet(state, options);
       break;
     case 'phone':
+      closeToolsSheet(options);
       if (typeof options?.onPick === 'function') {
         options.onPick({ id: 'phone' });
       }
@@ -377,37 +402,38 @@ export function createThreadToolsGrid(state, options = {}) {
   injectToolsCSS();
   currentPage = 0;
 
-  const pages = [];
-  for (let i = 0; i < DEFAULT_TOOLS.length; i += TOOLS_PER_PAGE) {
+  var pages = [];
+  for (var i = 0; i < DEFAULT_TOOLS.length; i += TOOLS_PER_PAGE) {
     pages.push(DEFAULT_TOOLS.slice(i, i + TOOLS_PER_PAGE));
   }
   totalPages = pages.length;
 
-  const wrap = document.createElement('div');
+  var wrap = document.createElement('div');
   wrap.style.cssText = 'display:flex;flex-direction:column;flex:1;min-height:0;';
 
-  const carouselWrap = document.createElement('div');
+  var carouselWrap = document.createElement('div');
   carouselWrap.className = 'tools-carousel-wrap';
-  const carousel = document.createElement('div');
+  var carousel = document.createElement('div');
   carousel.className = 'tools-carousel';
 
   pages.forEach(function(pageTools) {
-    const pageEl = document.createElement('div');
+    var pageEl = document.createElement('div');
     pageEl.className = 'tools-page';
     pageTools.forEach(function(tool) {
-      const cell = document.createElement('div');
+      var cell = document.createElement('button');
+      cell.type = 'button';
       cell.className = 'tool-cell';
       cell.appendChild(createToolIcon(tool.icon));
-      const nameEl = document.createElement('div');
+      var nameEl = document.createElement('div');
       nameEl.className = 'tool-name';
       nameEl.textContent = tool.title;
       cell.appendChild(nameEl);
       cell.addEventListener('click', async function() { await handleToolClick(tool.id, state, options); });
       pageEl.appendChild(cell);
     });
-    const remaining = TOOLS_PER_PAGE - pageTools.length;
-    for (let i = 0; i < remaining; i++) {
-      const empty = document.createElement('div');
+    var remaining = TOOLS_PER_PAGE - pageTools.length;
+    for (var j = 0; j < remaining; j++) {
+      var empty = document.createElement('div');
       empty.className = 'tool-cell';
       empty.style.visibility = 'hidden';
       pageEl.appendChild(empty);
@@ -419,11 +445,11 @@ export function createThreadToolsGrid(state, options = {}) {
   wrap.appendChild(carouselWrap);
 
   if (totalPages > 1) {
-    const dotsEl = document.createElement('div');
+    var dotsEl = document.createElement('div');
     dotsEl.className = 'tools-dots';
-    for (let i = 0; i < totalPages; i++) {
-      const dot = document.createElement('div');
-      dot.className = 'tools-dot' + (i === 0 ? ' is-active' : '');
+    for (var k = 0; k < totalPages; k++) {
+      var dot = document.createElement('div');
+      dot.className = 'tools-dot' + (k === 0 ? ' is-active' : '');
       dotsEl.appendChild(dot);
     }
     wrap.appendChild(dotsEl);
@@ -434,118 +460,58 @@ export function createThreadToolsGrid(state, options = {}) {
 }
 
 // ═══════════════════════════════════════
-// 【独立面板】直接打开工具全屏面板（非抽屉模式）
+// 【独立面板】抽屉模式打开工具箱
 // ═══════════════════════════════════════
 
-let toolsPanelEl = null;
-
 export function showToolsPanel(state, options = {}) {
-  injectToolsCSS();
+  var sheet = document.createElement('div');
+  sheet.style.cssText = 'display:flex;flex-direction:column;gap:0;padding:6px 20px 20px;';
 
-  if (!toolsPanelEl) {
-    toolsPanelEl = document.createElement('div');
-    toolsPanelEl.className = 'thread-tools-panel';
-  }
-  if (toolsPanelEl._isAnimating) return;
-  toolsPanelEl._isAnimating = true;
-  setTimeout(function() { toolsPanelEl._isAnimating = false; }, 400);
-
-  currentPage = 0;
-
-  const pages = [];
-  for (let i = 0; i < DEFAULT_TOOLS.length; i += TOOLS_PER_PAGE) {
-    pages.push(DEFAULT_TOOLS.slice(i, i + TOOLS_PER_PAGE));
-  }
-  totalPages = pages.length;
-
-  toolsPanelEl.innerHTML = '';
-
-  const carouselWrap = document.createElement('div');
-  carouselWrap.className = 'tools-carousel-wrap';
-  const carousel = document.createElement('div');
-  carousel.className = 'tools-carousel';
-
-  pages.forEach(function(pageTools) {
-    const pageEl = document.createElement('div');
-    pageEl.className = 'tools-page';
-    pageTools.forEach(function(tool) {
-      const cell = document.createElement('div');
-      cell.className = 'tool-cell';
-      cell.appendChild(createToolIcon(tool.icon));
-      const nameEl = document.createElement('div');
-      nameEl.className = 'tool-name';
-      nameEl.textContent = tool.title;
-      cell.appendChild(nameEl);
-      cell.addEventListener('click', async function() {
-        await handleToolClick(tool.id, state, options);
-        if (tool.id !== 'phone') {
-          toolsPanelEl.classList.remove('is-open');
-        }
-      });
-      pageEl.appendChild(cell);
-    });
-    const remaining = TOOLS_PER_PAGE - pageTools.length;
-    for (let i = 0; i < remaining; i++) {
-      const empty = document.createElement('div');
-      empty.className = 'tool-cell';
-      empty.style.visibility = 'hidden';
-      pageEl.appendChild(empty);
+  var head = document.createElement('div');
+  head.style.cssText = 'margin-bottom:14px;';
+  head.appendChild(createBackHeader('小工具箱', { onBackToTools: function() {
+    if (typeof options.onBackToTools === 'function') {
+      options.onBackToTools();
+    } else {
+      hideBottomSheet();
     }
-    carousel.appendChild(pageEl);
-  });
+  }}));
+  sheet.appendChild(head);
 
-  carouselWrap.appendChild(carousel);
-  toolsPanelEl.appendChild(carouselWrap);
+  var grid = createThreadToolsGrid(state, options);
+  sheet.appendChild(grid);
 
-  if (totalPages > 1) {
-    const dotsEl = document.createElement('div');
-    dotsEl.className = 'tools-dots';
-    for (let i = 0; i < totalPages; i++) {
-      const dot = document.createElement('div');
-      dot.className = 'tools-dot' + (i === 0 ? ' is-active' : '');
-      dotsEl.appendChild(dot);
-    }
-    toolsPanelEl.appendChild(dotsEl);
-    setupSwipe(carousel, dotsEl);
-  }
-
-  document.body.appendChild(toolsPanelEl);
-  requestAnimationFrame(function() { toolsPanelEl.classList.add('is-open'); });
+  showBottomSheet(sheet);
 }
 
 // ═══════════════════════════════════════
-// 【工具详情页】从右侧弹入
+// 【工具详情页】抽屉模式
 // ═══════════════════════════════════════
 
 export function showToolDetail(contentEl, title) {
-  const panel = document.createElement('div');
-  panel.className = 'thread-tools-panel is-open';
+  var content = document.createElement('div');
+  content.style.cssText = 'display:flex;flex-direction:column;gap:12px;padding-top:4px;';
 
-  const header = document.createElement('div');
+  var header = document.createElement('div');
   header.className = 'thread-tools-detail-header';
 
-  const backBtn = document.createElement('button');
-  backBtn.className = 'back-btn';
-  backBtn.innerHTML = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3L5 8L10 13"/></svg>';
-  backBtn.addEventListener('click', function() { panel.classList.remove('is-open'); setTimeout(function() { panel.remove(); }, 300); });
+  var spacerLeft = document.createElement('div');
+  spacerLeft.className = 'thread-tools-detail-spacer';
 
-  const titleEl = document.createElement('div');
-  titleEl.className = 'detail-title';
+  var titleEl = document.createElement('div');
+  titleEl.className = 'thread-tools-detail-title';
   titleEl.textContent = title || '工具';
 
-  header.appendChild(backBtn);
-  header.appendChild(titleEl);
-  panel.appendChild(header);
+  var spacerRight = document.createElement('div');
+  spacerRight.className = 'thread-tools-detail-spacer';
 
-  const contentWrap = document.createElement('div');
-  contentWrap.style.cssText = 'flex:1;overflow-y:auto;padding:0 16px 24px;';
-  if (contentEl) contentWrap.appendChild(contentEl);
-  panel.appendChild(contentWrap);
+  header.append(spacerLeft, titleEl, spacerRight);
+  content.appendChild(header);
 
-  document.body.appendChild(panel);
-  requestAnimationFrame(function() { panel.classList.add('is-open'); });
+  if (contentEl) content.appendChild(contentEl);
+  showBottomSheet(content);
 
-  return panel;
+  return content;
 }
 
 // ═══════════════════════════════════════
@@ -553,10 +519,3 @@ export function showToolDetail(contentEl, title) {
 // ═══════════════════════════════════════
 
 export { showToolsPanel as default };
-
-// 改了什么：1) openTaskSheet 和 openQuizSheet 内部添加标题元素；2) 移除冗余的 hideBottomSheet 调用。
-// 原来效果：小任务/默契问答抽屉没有标题，且点击选项时重复调用 hideBottomSheet。
-// 现在效果：抽屉有标题，关闭逻辑干净，不重复调用。
-// 会不会影响其他文件：不会。
-// 依赖：../../core/ui.js(showBottomSheet,hideBottomSheet)；./thread-sheets.js(openQuickReplySheet,openTransferSheet,openVoiceTextSheet,openClearContextSheet,openMcpSheet)；./thread-relationship.js(openRelationshipLockSheet)；./thread-actions.js(sendThreadMessage,sendDiceMessage,sendRpsMessage)
-```
