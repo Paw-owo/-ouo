@@ -83,10 +83,11 @@ function createMessageRow(state, message, pageEl) {
   if (role === 'assistant' && mode === 'bubble' && !message.isPending && !message.isError) {
     const chunks = splitAIBubbleChunks(message);
     if (chunks.length > 1) {
+      // 只渲染一次作者信息
+      row.appendChild(createMessageAuthor(state, message));
       chunks.forEach((chunkText, chunkIndex) => {
         const chunkBody = el('div', 'chat-message-body role-assistant');
         chunkBody.append(
-          createMessageAuthor(state, message),
           createSingleBubbleChunk(state, message, chunkText, chunkIndex === 0, chunkIndex === chunks.length - 1),
           chunkIndex === 0 ? createMessageActions(state, message, pageEl) : el('div', 'chat-message-actions-placeholder')
         );
@@ -1503,10 +1504,7 @@ function el(tag, className = '', text = '') {
 // ═══════════════════════════════════════
 
 function injectStyle() {
-  if (document.getElementById(RENDER_STYLE_ID)) {
-    document.getElementById(RENDER_STYLE_ID).remove();
-  }
-
+  if (document.getElementById(RENDER_STYLE_ID)) return; // 已注入则跳过，避免重复渲染和闪烁
   const style = document.createElement('style');
   style.id = RENDER_STYLE_ID;
   style.textContent = `
