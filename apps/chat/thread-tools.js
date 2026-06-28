@@ -163,6 +163,10 @@ function closeToolsSheet(options) {
   } else {
     hideBottomSheet();
   }
+  // 同时关闭全屏工具箱面板，避免详情页背后残留
+  if (toolsPanelEl && toolsPanelEl.classList.contains('is-open')) {
+    toolsPanelEl.classList.remove('is-open');
+  }
 }
 
 // ═══════════════════════════════════════
@@ -232,15 +236,8 @@ function openTaskSheet(state, options) {
   inputWrap.appendChild(sendBtn);
   content.appendChild(inputWrap);
 
-  const panel = showToolDetail(content, '小任务');
-  if (panel) {
-    var backBtn = panel.querySelector('.back-btn');
-    if (backBtn) {
-      backBtn.replaceWith(backBtn.cloneNode(true));
-      var freshBtn = panel.querySelector('.back-btn');
-      freshBtn.addEventListener('click', function() { closeDetailAndShowGrid(panel); });
-    }
-  }
+  showToolDetail(content, '小任务');
+  // 不再做多余的按钮克隆替换，直接使用 showToolDetail 创建的返回按钮
 }
 
 // ═══════════════════════════════════════
@@ -280,15 +277,8 @@ function openQuizSheet(state, options) {
     content.appendChild(card);
   });
 
-  const panel = showToolDetail(content, '默契问答');
-  if (panel) {
-    var backBtn = panel.querySelector('.back-btn');
-    if (backBtn) {
-      backBtn.replaceWith(backBtn.cloneNode(true));
-      var freshBtn = panel.querySelector('.back-btn');
-      freshBtn.addEventListener('click', function() { closeDetailAndShowGrid(panel); });
-    }
-  }
+  showToolDetail(content, '默契问答');
+  // 不再做多余的按钮克隆替换，直接使用 showToolDetail 创建的返回按钮
 }
 
 // ═══════════════════════════════════════
@@ -562,8 +552,8 @@ export function showToolDetail(contentEl, title) {
 
 export { showToolsPanel as default };
 
-// 改了什么：新增 closeToolsSheet 工具函数（优先用 options.onClose，兜底 hideBottomSheet）；所有工具点击统一调 closeToolsSheet 关闭底部抽屉。
-// 原来效果：点任何工具按钮后底部抽屉不会自动关闭，用户得手动滑掉才能看到效果。
-// 现在效果：点任意工具 → 抽屉先关掉 → 再打开对应功能或直接操作。
-// 会不会影响其他文件：不会。导出接口不变，panels.js 调用方式不受影响。其他工具（快捷回复/转账等）的内部逻辑完全没动。
+// 改了什么：1) closeToolsSheet 里追加关闭全屏工具箱面板 toolsPanelEl；2) openTaskSheet / openQuizSheet 移除多余的返回按钮克隆替换。
+// 原来效果：点击小任务/默契问答后返回按钮可能无效，或退出详情后工具箱还盖在页面上。
+// 现在效果：返回按钮正常工作，退出详情后直接回到聊天页。
+// 会不会影响其他文件：不会。导出接口不变，其他功能（骰子/猜拳等）逻辑完全没动。
 // 依赖：../../core/ui.js(hideBottomSheet)；./thread-sheets.js(openQuickReplySheet,openTransferSheet,openVoiceTextSheet,openClearContextSheet,openMcpSheet)；./thread-relationship.js(openRelationshipLockSheet)；./thread-actions.js(sendThreadMessage,sendDiceMessage,sendRpsMessage)
