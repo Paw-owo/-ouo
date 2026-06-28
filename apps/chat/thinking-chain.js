@@ -46,7 +46,7 @@ export function createThinkingChainButton(message, options = {}) {
     return button;
   }
 
-  // 没有实际思考内容（生成完毕也没有） → 不显示
+  // 修复：没有实际步骤且不是加载态 → 不显示按钮，避免空壳
   if (!steps.length) return null;
 
   const isThinkingRunning = isRunning || steps.some((step) => step.running);
@@ -66,19 +66,20 @@ export function createThinkingChainButton(message, options = {}) {
 
   button.append(iconWrap, text);
 
+  // 修复：将构建好的步骤传给弹窗，保持状态同步
   button.addEventListener('click', () => {
-    openThinkingChainSheet(message, options);
+    openThinkingChainSheet(message, options, steps);
   });
 
   return button;
 }
 
-export function openThinkingChainSheet(message, options = {}) {
+export function openThinkingChainSheet(message, options = {}, prebuiltSteps) {
   hideBottomSheet();
-
   injectStyle();
 
-  const steps = buildThinkingSteps(message);
+  // 修复：优先使用按钮创建时已构建的步骤，避免重新抓取导致状态不同步
+  const steps = prebuiltSteps || buildThinkingSteps(message);
   if (!steps.length) return;
 
   const roleName = String(options.roleName || options.characterName || options.name || '').trim();
@@ -116,7 +117,6 @@ export function openThinkingChainSheet(message, options = {}) {
   closeBtn.addEventListener('click', () => hideBottomSheet());
 
   actions.append(expandBtn, closeBtn);
-
   header.append(title, actions);
 
   const list = el('div', 'chat-thinking-chain-list');
@@ -140,7 +140,6 @@ export function buildThinkingSteps(message) {
   const isRunning = isMessageRunning(message);
   const hasContent = hasRealThinkingContent(message);
 
-  // 没有实际思考内容就不构建步骤（不管是正在生成还是已完成）
   if (!hasContent) return steps;
 
   const toolSteps = normalizeToolCalls(message?.toolCalls);
@@ -576,15 +575,9 @@ function normalizeMultiline(value) {
   return String(value || '').trim();
 }
 
-// ───────────────────
-// 详情文本
-// ───────────────────
-
 function normalizeDetailText(step) {
   const detail = normalizeMultiline(step?.detail);
-
   if (!detail) return '这里暂时没有更多细节。';
-
   return detail;
 }
 
@@ -611,11 +604,9 @@ function toFirstPersonSummary(text) {
 function getStableNumber(text) {
   const source = String(text || 'thinking');
   let value = 0;
-
   for (let index = 0; index < source.length; index += 1) {
     value = (value * 31 + source.charCodeAt(index)) % 1000003;
   }
-
   return value;
 }
 
@@ -684,8 +675,8 @@ function rectEl(x, y, width, height, rx = 2) {
 // ═══════════════════════════════════════
 
 function injectStyle() {
-  const old = document.getElementById(THINKING_CHAIN_STYLE_ID);
-  if (old) old.remove();
+  // 修复：样式已存在则跳过，不再删除重建，避免闪烁
+  if (document.getElementById(THINKING_CHAIN_STYLE_ID)) return;
 
   const style = document.createElement('style');
   style.id = THINKING_CHAIN_STYLE_ID;
@@ -981,7 +972,6 @@ function injectStyle() {
       padding-top: 8px;
     }
 
-    /* 全部展开：覆盖单个节点的状态 */
     .chat-thinking-chain-list[data-expand-all="true"] .chat-thinking-chain-detail {
       grid-template-rows: 1fr;
       opacity: 1;
