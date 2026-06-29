@@ -348,12 +348,29 @@ async function requestPrivateReply(state, options = {}) {
       return null;
     }
 
+    const memoryMessages = [...messages, placeholder];
+
+    const memoryResult = await runMemoryTasks(characterId, memoryMessages, {
+      character,
+      userProfile,
+      callName: userName
+    });
+
+    const grudge = await maybeWriteGrudge({
+      character,
+      sourceMessage: userMessage,
+      aiText: parsed.content || '',
+      activeLock
+    });
+
     const finalMessage = cleanForDB({
       ...placeholder,
       content: parsed.content || '我刚刚有点卡住了，可以再说一遍吗？',
       thinking: parsed.thinking || placeholder.thinking,
       thinkingSummary: parsed.thinkingSummary || summarizeText(parsed.thinking || placeholder.thinking, 28),
       toolCalls: parsed.toolCalls,
+      memoryWrites: memoryResult.memoryWrites || [],
+      grudgeWrites: grudge ? [grudge] : [],
       proactive: Boolean(options.proactive),
       proactiveReason: options.proactiveReason || '',
       relationshipLockId: activeLock?.id || '',
@@ -364,23 +381,6 @@ async function requestPrivateReply(state, options = {}) {
     });
 
     await safeSetMessage(PRIVATE_STORE, finalMessage);
-
-    const memoryMessages = [...messages, finalMessage];
-
-    if (!options.proactive) {
-      await runMemoryTasks(characterId, memoryMessages, {
-        character,
-        userProfile,
-        callName: userName
-      });
-
-      await maybeWriteGrudge({
-        character,
-        sourceMessage: userMessage,
-        aiText: finalMessage.content,
-        activeLock
-      });
-    }
 
     // 后台生成内心独白（不阻塞主回复）
     if (!parsed.thinking) {
@@ -541,12 +541,31 @@ async function requestGroupReply(state, options = {}) {
           continue;
         }
 
+        const memoryMessages = [...groupMessages, placeholder];
+
+        const memoryResult = await runMemoryTasks(character.id, memoryMessages, {
+          character,
+          userProfile,
+          callName: userName
+        });
+
+        const characterLock = await getActiveRelationshipLock(character.id);
+
+        const grudge = await maybeWriteGrudge({
+          character,
+          sourceMessage: userMessage,
+          aiText: parsed.content || '',
+          activeLock: characterLock
+        });
+
         const finalMessage = cleanForDB({
           ...placeholder,
           content: parsed.content || '我先听你们说。',
           thinking: parsed.thinking || placeholder.thinking,
           thinkingSummary: parsed.thinkingSummary || summarizeText(parsed.thinking || placeholder.thinking, 28),
           toolCalls: parsed.toolCalls,
+          memoryWrites: memoryResult.memoryWrites || [],
+          grudgeWrites: grudge ? [grudge] : [],
           characterName: character.name || 'TA',
           characterAvatar: character.avatar || '',
           isPending: false,
@@ -556,12 +575,6 @@ async function requestGroupReply(state, options = {}) {
         });
 
         await safeSetMessage(GROUP_STORE, finalMessage);
-
-        await runMemoryTasks(character.id, [...groupMessages, finalMessage], {
-          character,
-          userProfile,
-          callName: userName
-        });
 
         // 后台生成内心独白（不阻塞群聊回复）
         if (!parsed.thinking) {
@@ -596,7 +609,6 @@ async function requestGroupReply(state, options = {}) {
     finishAIJob(state, job);
   }
 }
-
 // ═══════════════════════════════════════
 // 【内心独白】后台生成角色思考过程
 // ═══════════════════════════════════════
@@ -1035,8 +1047,8 @@ function buildModePrompt(mode, group, character, options, userName, userProfile 
     `- 我不会称呼对方为"用户"，我会叫"${callName}"或按关系自然称呼。`,
     genderHint ? `- 我用第三人称提到对方时，会优先按小档案写成"${genderHint}"，也可以直接用名字或关系称呼。` : '- 我用第三人称提到对方时，会优先用名字或关系称呼，拿不准就不硬写性别。',
     '- 我会根据自己的人设、世界书、长期记忆、当前时间和最近上下文来回应。',
-    '- 每次正式回复前，我会先在<think>和</think>之间写出内心想法，然后再输出正文。',
-    '- <think>里的内容只写一句简短回应思路，不写长篇推理，不写分析报告。',
+    '- 每次正式回复前，我会先在 <thinking> 和 </thinking> 之间写出内心想法，然后再输出正文。',
+    '- <thinking> 里的内容只写一句简短回应思路，不写长篇推理，不写分析报告。',
     '- 正文优先像手机聊天，不机械总结，不官方，不教育腔。'
   ];
 
@@ -1367,27 +1379,46 @@ function normalizeToolCalls(value) {
 // ═══════════════════════════════════════
 
 async function runMemoryTasks(characterId, messages, options = {}) {
-  if (!characterId) return;
+  if (!characterId) return { memoryWrites: [] };
 
   const character = options.character || await getDB('characters', characterId).catch(() => null);
   const userProfile = options.userProfile || loadUserProfileForCharacter(character);
   const callName = options.callName || getUserDisplayName(userProfile);
 
-  await checkImportantInfo(characterId, messages, {
-    character,
-    userProfile,
-    callName
-  }).catch((error) => {
-    console.warn('[chat-thread-ai] checkImportantInfo failed:', error);
-  });
+  const memoryWrites = [];
 
-  await checkAndSummarize(characterId, {
-    character,
-    userProfile,
-    callName
-  }).catch((error) => {
+  try {
+    const infoResult = await checkImportantInfo(characterId, messages, {
+      character,
+      userProfile,
+      callName
+    });
+
+    if (Array.isArray(infoResult)) {
+      infoResult.forEach((item) => {
+        memoryWrites.push({
+          title: item.title || '记下一件事',
+          content: item.content || item.text || item.summary || '',
+          action: item.action || 'add',
+          timestamp: getNow()
+        });
+      });
+    }
+  } catch (error) {
+    console.warn('[chat-thread-ai] checkImportantInfo failed:', error);
+  }
+
+  try {
+    await checkAndSummarize(characterId, {
+      character,
+      userProfile,
+      callName
+    });
+  } catch (error) {
     console.warn('[chat-thread-ai] checkAndSummarize failed:', error);
-  });
+  }
+
+  return { memoryWrites };
 }
 
 function buildMemoryQueryText(messages, userName) {
@@ -1396,111 +1427,61 @@ function buildMemoryQueryText(messages, userName) {
     .map((message) => formatMessageForPrompt(message, 'private', userName))
     .join('\n');
 }
-
 // ═══════════════════════════════════════
-// 【占位消息】AI回复前先插一条空消息
-// ═══════════════════════════════════════
-
-function createAssistantPlaceholder({
-  characterId,
-  groupId,
-  character,
-  content,
-  thinking,
-  thinkingSummary,
-  toolCalls,
-  isPending = false,
-  status = ''
-}) {
-  const now = getNow();
-
-  return cleanForDB({
-    id: generateId('msg'),
-    role: 'assistant',
-    content: content || '',
-    type: 'text',
-    characterId: characterId || '',
-    groupId: groupId || '',
-    characterName: character?.name || '',
-    characterAvatar: character?.avatar || '',
-    thinking: thinking || '',
-    thinkingSummary: thinkingSummary || '',
-    toolCalls: Array.isArray(toolCalls) ? toolCalls : [],
-    isPending: Boolean(isPending),
-    isStopped: false,
-    isError: false,
-    status: status || (isPending ? 'pending' : ''),
-    timestamp: now,
-    createdAt: now,
-    updatedAt: now
-  });
-}
-
-// ═══════════════════════════════════════
-// 【AI任务管理】启动、停止、中止检测
+// 【记忆任务】实时检查和自动总结
 // ═══════════════════════════════════════
 
-function startAIJob(state, meta = {}) {
-  const key = getAIJobKey(state);
-  const old = activeAIJobs.get(key);
+async function runMemoryTasks(characterId, messages, options = {}) {
+  if (!characterId) return { memoryWrites: [] };
 
-  if (old) {
-    old.stopped = true;
-    try {
-      old.controller?.abort?.();
-    } catch (_) {}
+  const character = options.character || await getDB('characters', characterId).catch(() => null);
+  const userProfile = options.userProfile || loadUserProfileForCharacter(character);
+  const callName = options.callName || getUserDisplayName(userProfile);
+
+  const memoryWrites = [];
+
+  try {
+    const infoResult = await checkImportantInfo(characterId, messages, {
+      character,
+      userProfile,
+      callName
+    });
+
+    const items = Array.isArray(infoResult) ? infoResult : [];
+
+    items.forEach((item) => {
+      if (!item || typeof item !== 'object') return;
+
+      memoryWrites.push({
+        title: item.title || '记下一件事',
+        content: item.content || item.text || item.summary || '',
+        action: item.action || 'add',
+        timestamp: getNow()
+      });
+    });
+  } catch (error) {
+    console.warn('[chat-thread-ai] checkImportantInfo failed:', error);
   }
 
-  const job = {
-    key,
-    store: meta.store || (state.mode === 'group' ? GROUP_STORE : PRIVATE_STORE),
-    characterId: meta.characterId || state.characterId || '',
-    groupId: meta.groupId || state.groupId || '',
-    controller: new AbortController(),
-    placeholderIds: [],
-    stopped: false,
-    createdAt: getNow()
-  };
+  try {
+    await checkAndSummarize(characterId, {
+      character,
+      userProfile,
+      callName
+    });
+  } catch (error) {
+    console.warn('[chat-thread-ai] checkAndSummarize failed:', error);
+  }
 
-  activeAIJobs.set(key, job);
-  return job;
+  return { memoryWrites };
 }
 
-function finishAIJob(state, job) {
-  const key = job?.key || getAIJobKey(state);
-  const current = activeAIJobs.get(key);
-
-  if (current === job) activeAIJobs.delete(key);
-
-  state.aiGenerating = false;
-  state.isSending = false;
+function buildMemoryQueryText(messages, userName) {
+  return normalizeList(messages)
+    .slice(-8)
+    .map((message) => formatMessageForPrompt(message, 'private', userName))
+    .join('\n');
 }
-
-function getAIJobKey(state) {
-  if (!state) return 'unknown';
-  return state.mode === 'group'
-    ? `group:${state.groupId || ''}`
-    : `private:${state.characterId || ''}`;
-}
-
-function isJobStopped(job) {
-  return Boolean(job?.stopped || job?.controller?.signal?.aborted);
-}
-
-function isAbortError(error) {
-  const name = String(error?.name || '').toLowerCase();
-  const message = String(error?.message || '').toLowerCase();
-  return name.includes('abort') || message.includes('abort') || message.includes('aborted') || message.includes('signal');
-}
-
-async function markJobPlaceholdersStopped(job, content) {
-  if (!job?.store || !job.placeholderIds?.length) return;
-
-  await Promise.all(
-    job.placeholderIds.map((id) => markMessageStopped(job.store, id, content).catch(() => null))
-  );
-}
-
 async function markMessageStopped(store, id, content) {
   if (!store || !id) return null;
 
@@ -1798,7 +1779,6 @@ async function loadInventory() {
 function loadAnniversary() {
   return getData('anniversary_items') || getData('app_anniversary') || getData('anniversaries') || null;
 }
-
 // ═══════════════════════════════════════
 // 【用户档案】读取和规范化用户人设
 // ═══════════════════════════════════════
@@ -1988,7 +1968,9 @@ async function safeSetMessage(store, message) {
       ...clean,
       content: String(clean.content || '').slice(0, 4000),
       thinking: String(clean.thinking || '').slice(0, 1000),
-      toolCalls: []
+      toolCalls: [],
+      memoryWrites: [],
+      grudgeWrites: []
     });
 
     await setDB(store, fallback);
@@ -2106,8 +2088,13 @@ function clampNumber(value, min, max) {
   return Math.max(min, Math.min(max, Math.floor(number)));
 }
 
-// 改了什么：1) 新增 getFriendlyErrorMessage 按HTTP状态码返回可爱报错文案；2) 新增 requestAITextDirect 直接调API能捕获状态码；3) requestPrivateReply/requestGroupReply 的catch块改为用可爱文案更新AI气泡（markMessageError + isError:true）；4) 新增 markMessageError 函数。
-// 原来效果：API报错只弹toast，聊天里看不到错误，placeholder直接被删掉。
-// 现在效果：API报错时AI气泡显示可爱文案（如500→"这服务器炸了宝宝呜呜..."），不删placeholder，消息标记isError:true。
-// 会不会影响其他文件：不会。导出接口完全不变。silentRequest和requestAIText保持不动，内心独白仍用silentRequest。
+// 改了什么：
+// 1) runMemoryTasks 返回 { memoryWrites }
+// 2) requestPrivateReply / requestGroupReply 在 finalMessage 上挂 memoryWrites 和 grudgeWrites
+// 3) requestGroupReply 里查每个角色的 activeLock 并传给 maybeWriteGrudge
+// 4) createAssistantPlaceholder / safeSetMessage 降级时初始化/清空 memoryWrites 和 grudgeWrites
+// 5) maybeWriteGrudge 返回新建的 grudge 对象
+// 原来效果：群聊记仇不判断锁定期；记忆/记仇写入不显示在 thinking 工具时间线
+// 现在效果：群聊记仇和私聊一致；记忆/记仇写入会作为工具块出现在 thinking 展开区
+// 会不会影响其他文件：不会。消息对象新增两个字段，旧数据兼容。
 // depends: ../../core/storage.js(getData,setData,generateId,getNow,setDB,deleteDB,getByIndexDB,getAllDB,getDB)；../../core/api.js(silentRequest)；../../core/memory.js(buildMemoryPrompt,checkImportantInfo,checkAndSummarize)；./identity-core.js(getIdentityCore)；./thread-ai-local.js(tryLocalOrSiliconFlowReply)
