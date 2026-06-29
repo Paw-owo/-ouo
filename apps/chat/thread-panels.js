@@ -86,7 +86,8 @@ function showToolsSheet(state, options) {
     },
     // 返回按钮：直接关抽屉回消息
     onBackToTools: function() {
-      closeThreadToolsPanel();
+      hideBottomSheet();
+      panelState.toolsSheetEl = null;
     }
   };
 
