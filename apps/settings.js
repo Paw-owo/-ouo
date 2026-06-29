@@ -2,9 +2,8 @@
 //   from '../core/storage.js': getData, setData, removeData, generateId, getNow, getStorageUsage, getDB, setDB, getAllDB, deleteDB, clearStoreDB
 //   from '../core/theme.js': getThemePresets, getCurrentTheme, setPreset, setThemeMode, applyTheme, saveTheme, exportTheme, importTheme
 //   from '../core/ui.js': showToast, showBottomSheet, hideBottomSheet, showConfirm, createIcon
-//   from '../core/api.js': fetchModels, smartModelsUrl, parseErrorResponse, buildHeaders, getApiPoolItems, getPoolGroups, setPoolGroups, addPoolEndpoint, updatePoolEndpoint, deletePoolEndpoint, getMergedPoolModels, testPoolEndpoint, testAllPoolEndpoints
+//   from '../core/api.js': fetchModels, smartModelsUrl, parseErrorResponse, buildHeaders
 //   from '../core/mcp.js': resetSession
-//   from '../core/tts.js': playTTS
 //   from '../core/storage-manager.js': testCloudConnection
 
 import {
@@ -33,23 +32,8 @@ import {
 } from '../core/theme.js';
 
 import { showToast, showBottomSheet, hideBottomSheet, showConfirm, createIcon } from '../core/ui.js';
-import {
-  fetchModels,
-  smartModelsUrl,
-  parseErrorResponse,
-  buildHeaders,
-  getApiPoolItems,
-  getPoolGroups,
-  setPoolGroups,
-  addPoolEndpoint,
-  updatePoolEndpoint,
-  deletePoolEndpoint,
-  getMergedPoolModels,
-  testPoolEndpoint,
-  testAllPoolEndpoints
-} from '../core/api.js';
+import { fetchModels, smartModelsUrl, parseErrorResponse, buildHeaders } from '../core/api.js';
 import { resetSession } from '../core/mcp.js';
-import { playTTS } from '../core/tts.js';
 import { testCloudConnection } from '../core/storage-manager.js';
 
 // ═══════════════════════════════════════
@@ -128,7 +112,7 @@ const THEME_COLOR_FIELDS = [
 const APP_LIST = [
   ['chat', '消息'], ['moments', '朋友圈'], ['settings', '设置'], ['gallery', '相册'],
   ['characters', '角色'], ['worldbook', '世界书'], ['wallet', '钱包'], ['shop', '商店'],
-  ['memo', '备忘录'], ['anniversary', '纪念日'], ['games', '游戏']
+  ['memo', '备忘录'], ['anniversary', '纪念日'], ['games', '游戏'], ['music', '音乐'], ['dream', '梦境']
 ];
 
 const WIDGET_BG_LIST = [
@@ -144,91 +128,14 @@ const DESKTOP_WIDGET_LIST = [
   ['focus', '焦点小卡片', '显示桌面上的小提醒']
 ];
 
-const FREE_API_PRESETS = [
-  {
-    id: 'free_siliconflow',
-    name: '硅基流动',
-    endpoint: 'https://api.siliconflow.cn/v1',
-    provider: 'openai',
-    model: 'Qwen/Qwen3-8B',
-    modelList: ['Qwen/Qwen3-8B', 'deepseek-ai/DeepSeek-R1-Distill-Qwen-7B'],
-    description: '永久免费，注册即用'
-  },
-  {
-    id: 'free_zhipu',
-    name: '智谱清言',
-    endpoint: 'https://open.bigmodel.cn/api/paas/v4',
-    provider: 'openai',
-    model: 'GLM-4.7-Flash',
-    modelList: ['GLM-4.7-Flash', 'GLM-4.6V-Flash'],
-    description: 'GLM-4.7-Flash 永久免费'
-  },
-  {
-    id: 'free_openrouter',
-    name: 'OpenRouter',
-    endpoint: 'https://openrouter.ai/api/v1',
-    provider: 'openai',
-    model: 'meta-llama/llama-3.3-70b-instruct:free',
-    modelList: ['meta-llama/llama-3.3-70b-instruct:free', 'openai/gpt-oss-20b:free', 'google/gemma-4-31b-it:free', 'qwen/qwen3-coder:free'],
-    description: '22个免费模型，注册即用'
-  },
-  {
-    id: 'free_groq',
-    name: 'Groq',
-    endpoint: 'https://api.groq.com/openai/v1',
-    provider: 'openai',
-    model: 'llama-3.3-70b-versatile',
-    modelList: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'meta-llama/llama-4-scout-17b-16e-instruct', 'qwen3-32b', 'openai/gpt-oss-120b'],
-    description: '超快推理，每日1000次免费'
-  },
-  {
-    id: 'free_cerebras',
-    name: 'Cerebras',
-    endpoint: 'https://api.cerebras.ai/v1',
-    provider: 'openai',
-    model: 'gpt-oss-120b',
-    modelList: ['gpt-oss-120b', 'gpt-oss-20b'],
-    description: '超快芯片，每日100万Token免费'
-  },
-  {
-    id: 'free_sambanova',
-    name: 'SambaNova',
-    endpoint: 'https://api.sambanova.ai/v1',
-    provider: 'openai',
-    model: 'DeepSeek-V3.1',
-    modelList: ['DeepSeek-V3.1', 'Meta-Llama-3.3-70B-Instruct', 'gpt-oss-120b', 'MiniMax-M2.7'],
-    description: '超快RDU推理，每日20万Token免费'
-  }
-];
-
-const ANONYMOUS_API_PRESETS = [
-  {
-    id: 'anon_llm7',
-    name: 'LLM7',
-    endpoint: 'https://api.llm7.io/v1',
-    provider: 'openai',
-    model: 'gpt-4o-mini',
-    modelList: ['gpt-4o-mini', 'deepseek-v3-0324', 'deepseek-r1-0528', 'gemini-2.5-flash-lite', 'qwen2.5-coder-32b', 'mistral-small-3.1-24b'],
-    description: '免Key直连，30次/分钟'
-  },
-  {
-    id: 'anon_ovhcloud',
-    name: 'OVHcloud',
-    endpoint: 'https://oai.endpoints.kepler.ai.cloud.ovh.net/v1',
-    provider: 'openai',
-    model: 'Qwen/Qwen3.5-397B-A17B',
-    modelList: ['Qwen/Qwen3.5-397B-A17B', 'Meta-Llama-3_3-70B-Instruct', 'Qwen/Qwen3.6-27B', 'Qwen/Qwen3-32B', 'Mistral-Small-3.1-24B-Instruct'],
-    description: '免Key直连，欧盟机房'
-  }
-];
-
 let rootEl = null;
 let route = 'home';
 let styleEl = null;
-let ttsPreview = null;
 let customFontStyleEl = null;
 let cloudTesting = false;
 let colorDebounceTimer = null;
+let apiPoolModule = null;
+let ttsModule = null;
 
 // ═══════════════════════════════════════
 // 【生命周期】mount / unmount
@@ -243,7 +150,11 @@ export async function mount(containerEl) {
 }
 
 export function unmount() {
-  stopTTS();
+  hideBottomSheet();
+  if (apiPoolModule?.unmount) apiPoolModule.unmount();
+  if (ttsModule?.unmount) ttsModule.unmount();
+  apiPoolModule = null;
+  ttsModule = null;
   if (rootEl) {
     rootEl.innerHTML = '';
     rootEl.classList.remove('settings-app-shell');
@@ -290,10 +201,8 @@ async function renderBody() {
     home: renderHome,
     theme: renderThemePage,
     display: renderDisplayPage,
-    api: renderApiPage,
+    apiTest: renderApiTestPage,
     apiPool: renderApiPoolPage,
-    apiPoolTest: renderApiPoolTestPage,
-    apiPoolModels: renderApiPoolModelsPage,
     tts: renderTtsPage,
     mcp: renderMcpPage,
     cloud: renderCloudPage,
@@ -322,7 +231,8 @@ function renderHome() {
       navItem('edit', '字体与显示', '字号、字体、聊天样子轻轻调', 'display')
     ]),
     group('模型与服务', [
-      navItem('settings', 'API 小管家', '模型接口、Key、默认模型', 'api'),
+      navItem('settings', 'API 测试台', '临时测一个接口，通过后再决定怎么用', 'apiTest'),
+      navItem('settings', 'API 轮换池', '付费/免费分组、密钥、状态、测试', 'apiPool'),
       navItem('play', 'TTS 声音屋', 'AI 说话的声音住这里', 'tts'),
       navItem('settings', 'MCP 工具箱', '给 AI 接小工具用', 'mcp'),
       navItem('upload', '云服务器', '默认关闭，主动开启才使用', 'cloud')
@@ -485,1132 +395,249 @@ function renderDisplayPage() {
 
   return wrap;
 }
+
 // ═══════════════════════════════════════
-// 【API 页】
+// 【API 测试台】
 // ═══════════════════════════════════════
 
-function renderApiPage() {
+function renderApiTestPage() {
   const wrap = page();
-  const settings = getSettings();
-  const allApis = settings.apiEndpoints || [];
-  const freeApis = allApis.filter((api) => api.source === 'free' || api.source === 'anonymous');
-  const customApis = allApis.filter((api) => api.source !== 'free' && api.source !== 'anonymous');
 
-  const top = card('API 小管家', '模型、Key、接口都住这里');
-  const topButtons = el('div', 'settings-api-top-buttons');
-
-  const anonBtn = el('button', 'settings-api-top-btn settings-api-anon-btn');
-  anonBtn.type = 'button';
-  anonBtn.append(safeIcon('play', 20), el('strong', '', '免Key直连'), el('small', '', '不用填Key，点一下就能聊'));
-  anonBtn.addEventListener('click', openAnonymousSelector);
-
-  const addBtn = el('button', 'settings-api-top-btn');
-  addBtn.type = 'button';
-  addBtn.append(safeIcon('add', 20), el('strong', '', '新增 API'), el('small', '', '自己填 Key 和地址'));
-  addBtn.addEventListener('click', () => openApiEditor(null));
-
-  const freeBtn = el('button', 'settings-api-top-btn');
-  freeBtn.type = 'button';
-  freeBtn.append(safeIcon('play', 20), el('strong', '', '免费 API'), el('small', '', '填 Key 就能用免费额度'));
-  freeBtn.addEventListener('click', openFreeApiSelector);
-
-  const poolBtn = el('button', 'settings-api-top-btn');
-  poolBtn.type = 'button';
-  poolBtn.append(safeIcon('settings', 20), el('strong', '', '轮换池'), el('small', '', '分组、密钥、测试都在这里'));
-  poolBtn.addEventListener('click', () => render('apiPool'));
-
-  topButtons.append(anonBtn, addBtn, freeBtn, poolBtn);
-  top.append(topButtons);
+  const top = card('API 测试台', '临时测一个接口，通过后再决定怎么用');
+  top.append(el('p', 'settings-free-note', '测试通过后会问你：固定自用，还是丢进轮换池。测试本身不会保存任何数据。'));
   wrap.append(top);
 
-  if (!freeApis.length && !customApis.length) {
-    wrap.append(empty('还没有 API，先加一个吧 ᗜ ‸ ᗜ'));
-  }
-
-  if (freeApis.length) {
-    const groupEl = el('div', 'settings-api-group');
-    groupEl.append(el('div', 'settings-api-group-title', '免费 / 匿名 API'));
-    freeApis.forEach((api) => {
-      groupEl.append(compactApiCard(api, settings.defaultApiEndpointId === api.id));
-    });
-    wrap.append(groupEl);
-  }
-
-  if (customApis.length) {
-    const groupEl = el('div', 'settings-api-group');
-    groupEl.append(el('div', 'settings-api-group-title', '自建 API'));
-    customApis.forEach((api) => {
-      groupEl.append(compactApiCard(api, settings.defaultApiEndpointId === api.id));
-    });
-    wrap.append(groupEl);
-  }
-
-  return wrap;
-}
-
-// ═══════════════════════════════════════
-// 【旧 API 操作】
-// ═══════════════════════════════════════
-
-function setDefaultApi(id) {
-  const settings = getSettings();
-  const api = settings.apiEndpoints.find((item) => item.id === id);
-  settings.defaultApiEndpointId = id;
-  settings.defaultModel = api?.model || settings.defaultModel || '';
-  saveSettings(settings);
-  showToast('默认 API 设好啦');
-  render('api');
-}
-
-function selectApiModel(id, model) {
-  const settings = getSettings();
-  settings.apiEndpoints = settings.apiEndpoints.map((api) => api.id === id ? { ...api, model } : api);
-  if (settings.defaultApiEndpointId === id) {
-    settings.defaultModel = model;
-  }
-  saveSettings(settings);
-  showToast(`模型抱好啦：${model}`);
-  render('api');
-}
-
-async function loadApiModels(id) {
-  showToast('正在拉取模型...');
-  const models = await fetchModels(id);
-  if (!models.length) {
-    const api = getSettings().apiEndpoints.find((a) => a.id === id);
-    if (api && !api.apiKey && api.source !== 'anonymous') {
-      showToast('没拉到模型，请先填写 API Key');
-    } else {
-      showToast('没拉到模型也没关系，可以手填模型名保存');
-    }
-    return;
-  }
-  const settings = getSettings();
-  settings.apiEndpoints = settings.apiEndpoints.map((api) => api.id === id ? { ...api, modelList: models } : api);
-  saveSettings(settings);
-  showToast(`拉到 ${models.length} 个模型啦，挑一个吧`);
-  render('api');
-}
-
-async function testApi(id) {
-  showToast('正在测试连接...');
-  const api = getSettings().apiEndpoints.find((a) => a.id === id);
-  if (!api) {
-    showToast('这个 API 不见啦');
-    return;
-  }
-  try {
-    await testApiByChat({
-      endpoint: api.endpoint,
-      apiKey: api.apiKey,
-      provider: api.provider || detectProviderFromUrl(api.endpoint),
-      model: api.model
-    });
-    showToast('连接成功啦，可以聊天');
-  } catch (error) {
-    showToast(formatApiEditorError(error, '连接失败啦'));
-  }
-}
-
-async function deleteApi(id) {
-  const ok = await showConfirm('要删除这个 API 吗？');
-  if (!ok) return;
-  const settings = getSettings();
-  settings.apiEndpoints = settings.apiEndpoints.filter((api) => api.id !== id);
-  if (settings.defaultApiEndpointId === id) {
-    settings.defaultApiEndpointId = settings.apiEndpoints[0]?.id || '';
-    settings.defaultModel = settings.apiEndpoints[0]?.model || '';
-  }
-  saveSettings(settings);
-  showToast('API 删除啦');
-  render('api');
-}
-
-// ═══════════════════════════════════════
-// 【旧 API 编辑器】
-// ═══════════════════════════════════════
-
-function openApiEditor(api) {
-  const current = api || {
-    id: generateId(),
-    name: '',
-    endpoint: '',
-    apiKey: '',
-    provider: 'openai',
-    model: '',
-    modelList: []
-  };
-
-  let draftModelList = Array.isArray(current.modelList) ? [...current.modelList] : [];
-  const isFree = current.source === 'free';
-  const isAnonymous = current.source === 'anonymous';
-  const isPreset = isFree || isAnonymous;
-
-  const sheet = sheetBox(api ? (isPreset ? `编辑${isFree ? '免费' : '匿名'} API` : '编辑 API') : '新增 API');
-
-  if (isPreset) {
-    const noteText = isAnonymous
-      ? '匿名免Key接口，地址和模型已填好，不用改'
-      : '免费 API 预设，地址和模型已填好，填入 Key 就能用';
-    sheet.body.append(el('p', 'settings-free-note', noteText));
-  } else {
-    sheet.body.append(el('p', 'settings-free-note', '小众中转站也可以用：如果拉不到模型，直接手填模型名再点"测试聊天"。'));
-  }
-
-  const name = inputRow('名字', current.name, '比如：主力模型');
-  const endpoint = inputRow('Endpoint', current.endpoint, 'https://api.xxx.com/v1');
-  const provider = selectRow('接口类型', current.provider || detectProviderFromUrl(current.endpoint), [
+  const form = card('接口信息', '把地址、密钥、模型填好就行');
+  const name = inputRow('名字', '', '比如：我的主力接口');
+  const endpoint = inputRow('接口地址', '', 'https://api.xxx.com/v1');
+  const provider = selectRow('接口类型', 'openai', [
     ['openai', '通用中转 / OpenAI 格式'],
     ['anthropic', 'Claude / Anthropic 格式'],
     ['gemini', 'Gemini 格式'],
     ['ollama', '本地 Ollama']
   ]);
-  const apiKey = isAnonymous ? null : inputRow('API Key', current.apiKey, 'sk-...');
+  const apiKey = inputRow('API Key', '', 'sk-...');
+  const model = inputRow('当前模型', '', '例如 gpt-4o-mini / deepseek-chat');
 
-  let modelInput = null;
-  let modelArea = null;
+  form.append(name.wrap, endpoint.wrap, provider.wrap, apiKey.wrap, model.wrap);
 
-  if (isPreset) {
-    modelArea = el('div', 'settings-editor-model-area');
+  let draftModels = [];
+  let testing = false;
 
-    function renderFixedModels() {
-      modelArea.innerHTML = '';
-      modelArea.append(modelPicker({
-        models: draftModelList,
-        current: current.model,
-        emptyText: '暂无可用模型',
-        onSelect: (value) => {
-          current.model = value;
-          renderFixedModels();
-          showToast(`已选择：${value}`);
-        }
-      }));
-    }
-
-    renderFixedModels();
-    sheet.body.append(name.wrap, endpoint.wrap, provider.wrap, ...(apiKey ? [apiKey.wrap] : []), modelArea);
-    sheet.body.append(el('p', 'settings-free-note', '想用其他模型？请返回选择"新增 API"自行填写'));
-  } else {
-    const model = inputRow('当前模型', current.model, '例如 gpt-4o-mini / deepseek-chat');
-    modelInput = model;
-    modelArea = el('div', 'settings-editor-model-area');
-
-    function renderEditorModels() {
-      modelArea.innerHTML = '';
-      modelArea.append(modelPicker({
-        models: draftModelList,
-        current: model.input.value.trim(),
-        emptyText: '还没有模型。小众站不支持拉取时，手填模型名也能保存',
-        onSelect: (value) => {
-          model.input.value = value;
-          renderEditorModels();
-          showToast(`已选择：${value}`);
-        }
-      }));
-    }
-
-    renderEditorModels();
-    sheet.body.append(name.wrap, endpoint.wrap, provider.wrap, apiKey.wrap, model.wrap, modelArea);
-  }
-
-  let loading = false;
-
-  if (!isPreset) {
-    sheet.actions.append(
-      actionBtn('refresh', '拉取模型', async () => {
-        if (loading) {
-          showToast('正在拉取中，等一下哦');
-          return;
-        }
-        const endpointValue = endpoint.input.value.trim();
-        const key = apiKey.input.value.trim();
-        const providerValue = provider.input.value || detectProviderFromUrl(endpointValue);
-        if (!endpointValue) {
-          showToast('先填 Endpoint 哦');
-          return;
-        }
-        loading = true;
-        showToast('正在拉取模型...');
-        try {
-          const url = buildModelsUrlForSettings(endpointValue, providerValue);
-          const headers = buildHeaders(key, providerValue);
-          const res = await fetch(url, { method: 'GET', headers, cache: 'no-store' });
-          if (!res.ok) throw new Error(await parseErrorResponse(res));
-          const data = await res.json().catch(() => null);
-          const models = extractModelList(data, providerValue);
-          if (!models.length) {
-            showToast('没找到模型也没关系，可以手填模型名保存');
-            loading = false;
-            return;
-          }
-          draftModelList = [...new Set(models)];
-          modelArea.innerHTML = '';
-          modelArea.append(modelPicker({
-            models: draftModelList,
-            current: modelInput.input.value.trim(),
-            emptyText: '还没有模型',
-            onSelect: (value) => {
-              modelInput.input.value = value;
-              showToast(`已选择：${value}`);
-              modelArea.innerHTML = '';
-              modelArea.append(modelPicker({
-                models: draftModelList,
-                current: value,
-                emptyText: '还没有模型',
-                onSelect: (nextValue) => {
-                  modelInput.input.value = nextValue;
-                  showToast(`已选择：${nextValue}`);
-                }
-              }));
-            }
-          }));
-          showToast(`拉到 ${draftModelList.length} 个模型啦，自己挑一个`);
-        } catch (err) {
-          showToast(formatApiEditorError(err, '模型拉取失败，可以手填模型名'));
-        }
-        loading = false;
-      }),
-
-      actionBtn('check', '测试聊天', async () => {
-        if (loading) return;
-        const endpointValue = endpoint.input.value.trim();
-        const key = apiKey.input.value.trim();
-        const providerValue = provider.input.value || detectProviderFromUrl(endpointValue);
-        const modelValue = modelInput.input.value.trim();
-        if (!endpointValue) {
-          showToast('先填 Endpoint 哦');
-          return;
-        }
-        if (providerValue !== 'gemini' && !modelValue) {
-          showToast('先填模型名哦，小众站一般要手填');
-          return;
-        }
-        loading = true;
-        showToast('正在发一条小测试...');
-        try {
-          await testApiByChat({
-            endpoint: endpointValue,
-            apiKey: key,
-            provider: providerValue,
-            model: modelValue
-          });
-          showToast('连接成功啦，可以聊天');
-        } catch (err) {
-          showToast(formatApiEditorError(err, '测试失败啦'));
-        }
-        loading = false;
-      })
-    );
-  } else if (!isAnonymous) {
-    sheet.actions.append(
-      actionBtn('check', '测试聊天', async () => {
-        if (loading) return;
-        const endpointValue = endpoint.input.value.trim();
-        const key = apiKey.input.value.trim();
-        const providerValue = provider.input.value || detectProviderFromUrl(endpointValue);
-        const modelValue = current.model;
-        if (!endpointValue) {
-          showToast('先填 Endpoint 哦');
-          return;
-        }
-        if (!key) {
-          showToast('先填 Key 哦');
-          return;
-        }
-        loading = true;
-        showToast('正在发一条小测试...');
-        try {
-          await testApiByChat({
-            endpoint: endpointValue,
-            apiKey: key,
-            provider: providerValue,
-            model: modelValue
-          });
-          showToast('连接成功啦，可以聊天');
-        } catch (err) {
-          showToast(formatApiEditorError(err, '测试失败啦'));
-        }
-        loading = false;
-      })
-    );
-  }
-
-  sheet.actions.append(
-    actionBtn('check', '保存', () => {
-      const settings = getSettings();
-      const endpointValue = endpoint.input.value.trim();
-      const providerValue = provider.input.value || detectProviderFromUrl(endpointValue);
-      const modelValue = isPreset ? current.model : (modelInput ? modelInput.input.value.trim() : current.model);
-      if (!endpointValue) {
-        showToast('Endpoint 还没填哦');
-        return;
-      }
-      if (!modelValue && providerValue !== 'gemini') {
-        showToast('模型名也要填一下哦');
-        return;
-      }
-      const next = {
-        id: current.id,
-        name: name.input.value.trim() || '未命名 API',
-        endpoint: endpointValue,
-        apiKey: apiKey ? apiKey.input.value.trim() : '',
-        provider: providerValue,
-        model: modelValue,
-        modelList: draftModelList,
-        ...(isFree ? { source: 'free', presetId: current.presetId } : {}),
-        ...(isAnonymous ? { source: 'anonymous', presetId: current.presetId } : {})
-      };
-      settings.apiEndpoints = [...settings.apiEndpoints.filter((item) => item.id !== current.id), next];
-      if (!settings.defaultApiEndpointId) settings.defaultApiEndpointId = next.id;
-      if (!settings.defaultModel && next.model) settings.defaultModel = next.model;
-      saveSettings(settings);
-      hideBottomSheet();
-      showToast('API 存好啦');
-      render('api');
-    })
-  );
-
-  showBottomSheet(sheet.root);
-}
-
-function buildChatUrlForSettings(endpoint, provider) {
-  const base = String(endpoint || '').trim().replace(/\/+$/, '');
-  if (provider === 'anthropic') {
-    if (/\/messages$/i.test(base)) return base;
-    if (/\/v1$/i.test(base)) return `${base}/messages`;
-    return `${base}/v1/messages`;
-  }
-  if (provider === 'ollama') {
-    if (/\/api\/chat$/i.test(base)) return base;
-    return `${base}/api/chat`;
-  }
-  if (provider === 'gemini') {
-    return base;
-  }
-  if (/\/chat\/completions$/i.test(base)) return base;
-  if (/\/v1$/i.test(base)) return `${base}/chat/completions`;
-  return `${base}/v1/chat/completions`;
-}
-
-function buildModelsUrlForSettings(endpoint, provider) {
-  const base = String(endpoint || '').trim().replace(/\/+$/, '');
-  if (provider === 'gemini') {
-    return base
-      .replace(/\/v1beta\/models\/[^/]+:generateContent$/i, '/v1beta/models')
-      .replace(/\/v1beta\/models\/[^/]+:streamGenerateContent$/i, '/v1beta/models')
-      .replace(/\/v1beta\/?$/i, '/v1beta/models');
-  }
-  return smartModelsUrl(base, provider);
-}
-
-function extractModelList(data, provider) {
-  if (provider === 'ollama') {
-    return (data?.models || []).map((m) => m?.name).filter(Boolean);
-  }
-  if (provider === 'gemini') {
-    return (data?.models || [])
-      .map((m) => String(m?.name || '').replace(/^models\//, ''))
-      .filter(Boolean);
-  }
-  return (data?.data || [])
-    .map((m) => typeof m === 'string' ? m : m?.id)
-    .filter(Boolean);
-}
-
-function buildTestBody({ provider, model }) {
-  if (provider === 'anthropic') {
-    return {
-      model: model || 'claude-3-haiku-20240307',
-      max_tokens: 32,
-      messages: [{ role: 'user', content: '请回复：连接成功' }]
-    };
-  }
-  if (provider === 'gemini') {
-    return {
-      contents: [{ role: 'user', parts: [{ text: '请回复：连接成功' }] }]
-    };
-  }
-  if (provider === 'ollama') {
-    return {
-      model: model || 'llama3',
-      stream: false,
-      messages: [{ role: 'user', content: '请回复：连接成功' }]
-    };
-  }
-  return {
-    model,
-    stream: false,
-    messages: [{ role: 'user', content: '请回复：连接成功' }]
-  };
-}
-
-async function testApiByChat({ endpoint, apiKey, provider, model }) {
-  const endpointValue = String(endpoint || '').trim();
-  const providerValue = provider || detectProviderFromUrl(endpointValue);
-  if (!endpointValue) throw new Error('Endpoint 还没填哦');
-  let url = buildChatUrlForSettings(endpointValue, providerValue);
-  const headers = buildHeaders(apiKey, providerValue);
-  const body = buildTestBody({ provider: providerValue, model });
-  if (providerValue === 'gemini') {
-    const cleanModel = model || 'gemini-1.5-flash';
-    let base = endpointValue
-      .replace(/\/v1beta\/models\/[^/]+:generateContent$/i, '')
-      .replace(/\/v1beta\/models\/[^/]+:streamGenerateContent$/i, '')
-      .replace(/\/v1beta\/models\/?$/i, '')
-      .replace(/\/v1beta\/?$/i, '')
-      .replace(/\/+$/, '');
-    const geminiUrl = new URL(`${base}/v1beta/models/${encodeURIComponent(cleanModel)}:generateContent`);
-    if (apiKey) geminiUrl.searchParams.set('key', apiKey);
-    url = geminiUrl.toString();
-  }
-  const res = await fetch(url, {
-    method: 'POST',
-    headers,
-    cache: 'no-store',
-    body: JSON.stringify(body)
-  });
-  if (!res.ok) throw new Error(await parseErrorResponse(res));
-  return true;
-}
-
-function formatApiEditorError(error, fallback) {
-  const message = String(error?.message || '').trim();
-  if (!message) return fallback;
-  if (/failed to fetch|load failed|networkerror|cors/i.test(message)) {
-    return '这个中转站被浏览器拦住啦，可能没开放网页直连';
-  }
-  return message
-    .replace(/^HTTP\s*\d+\s*[｜|]\s*/i, '')
-    .replace(/^Error:\s*/i, '')
-    .trim() || fallback;
-}
-
-// ═══════════════════════════════════════
-// 【匿名免Key】选择器和添加逻辑
-// ═══════════════════════════════════════
-
-function openAnonymousSelector() {
-  const settings = getSettings();
-  const existingPresetIds = new Set(
-    settings.apiEndpoints
-      .filter((api) => api.source === 'anonymous' && api.presetId)
-      .map((api) => api.presetId)
-  );
-
-  const sheet = sheetBox('免Key直连');
-  sheet.body.append(el('p', 'settings-free-note', '不需要注册，不需要填Key，点一下就能用。请求失败会自动切换到下一个接口'));
-
-  ANONYMOUS_API_PRESETS.forEach((preset) => {
-    const isActivated = existingPresetIds.has(preset.id);
-    const presetCard = el('div', 'settings-free-preset');
-    const info = el('div', 'settings-free-preset-info');
-    info.append(
-      el('strong', '', preset.name),
-      el('small', '', `${preset.model} · ${preset.description}`)
-    );
-    const btn = actionBtn(
-      isActivated ? 'check' : 'add',
-      isActivated ? '已启用' : '启用',
-      () => {
-        if (isActivated) {
-          showToast('这个已经启用啦');
-          return;
-        }
-        addAnonymousApi(preset);
-      }
-    );
-    presetCard.append(info, btn);
-    sheet.body.append(presetCard);
-  });
-
-  showBottomSheet(sheet.root);
-}
-
-function addAnonymousApi(preset) {
-  const settings = getSettings();
-  if (settings.apiEndpoints.some((api) => api.presetId === preset.id)) {
-    showToast('这个已经启用啦');
-    return;
-  }
-  const newApi = {
-    id: generateId(),
-    presetId: preset.id,
-    source: 'anonymous',
-    name: preset.name,
-    endpoint: preset.endpoint,
-    apiKey: '',
-    provider: preset.provider || 'openai',
-    model: preset.model,
-    modelList: Array.isArray(preset.modelList) ? [...preset.modelList] : []
-  };
-  settings.apiEndpoints.push(newApi);
-  if (!settings.defaultApiEndpointId) {
-    settings.defaultApiEndpointId = newApi.id;
-    settings.defaultModel = newApi.model;
-  }
-  saveSettings(settings);
-  hideBottomSheet();
-  showToast(`${preset.name} 启用啦，不用填Key直接用`);
-  render('api');
-}
-
-// ═══════════════════════════════════════
-// 【免费 API】选择器和添加逻辑
-// ═══════════════════════════════════════
-
-function openFreeApiSelector() {
-  const settings = getSettings();
-  const existingPresetIds = new Set(
-    settings.apiEndpoints
-      .filter((api) => api.source === 'free' && api.presetId)
-      .map((api) => api.presetId)
-  );
-
-  const sheet = sheetBox('选择免费 API');
-  sheet.body.append(el('p', 'settings-free-note', '免费 API 需要自己注册拿 Key，但不花钱。每个平台都有免费额度，注册后把 Key 填进去就行'));
-
-  FREE_API_PRESETS.forEach((preset) => {
-    const isActivated = existingPresetIds.has(preset.id);
-    const presetCard = el('div', 'settings-free-preset');
-    const info = el('div', 'settings-free-preset-info');
-    const modelStr = Array.isArray(preset.modelList) ? preset.modelList.join(' / ') : preset.model;
-    info.append(
-      el('strong', '', preset.name),
-      el('small', '', `${preset.description}\n免费模型：${modelStr}`)
-    );
-    const btn = actionBtn(
-      isActivated ? 'check' : 'add',
-      isActivated ? '已启用' : '启用',
-      () => {
-        if (isActivated) {
-          showToast('这个已经启用啦');
-          return;
-        }
-        addFreeApi(preset);
-      }
-    );
-    presetCard.append(info, btn);
-    sheet.body.append(presetCard);
-  });
-
-  showBottomSheet(sheet.root);
-}
-
-function addFreeApi(preset) {
-  const settings = getSettings();
-  if (settings.apiEndpoints.some((api) => api.presetId === preset.id)) {
-    showToast('这个已经启用啦');
-    return;
-  }
-  const newApi = {
-    id: generateId(),
-    presetId: preset.id,
-    source: 'free',
-    name: preset.name,
-    endpoint: preset.endpoint,
-    apiKey: '',
-    provider: preset.provider || 'openai',
-    model: preset.model,
-    modelList: Array.isArray(preset.modelList) ? [...preset.modelList] : []
-  };
-  settings.apiEndpoints.push(newApi);
-  if (!settings.defaultApiEndpointId) {
-    settings.defaultApiEndpointId = newApi.id;
-    settings.defaultModel = newApi.model;
-  }
-  saveSettings(settings);
-  hideBottomSheet();
-  showToast(`${preset.name} 启用啦，点编辑填入 Key`);
-  render('api');
-}
-
-// ═══════════════════════════════════════
-// 【轮换池页】
-// ═══════════════════════════════════════
-
-async function renderApiPoolPage() {
-  const wrap = page();
-  const groups = getPoolGroups();
-  const items = await getApiPoolItems();
-  const paidItems = items.filter((item) => item.groupType !== 'free');
-  const freeItems = items.filter((item) => item.groupType === 'free');
-  const mergedModels = await getMergedPoolModels();
-
-  const top = card('API 轮换池', '分组、密钥、模型、状态都在这里');
-  top.append(actionRow([
-    actionBtn('add', '新增条目', () => openPoolEndpointEditor(null)),
-    actionBtn('copy', '模型总表', () => render('apiPoolModels')),
-    actionBtn('check', '测试总览', () => render('apiPoolTest'))
-  ]));
-  wrap.append(top);
-
-  const groupEditor = card('分组名字', '付费组和免费组都能改个名字');
-  const paidNameInput = inputRow('付费组名字', groups.paid?.name || '付费组', '付费组');
-  paidNameInput.wrap.dataset.groupKey = 'paid';
-  const freeNameInput = inputRow('免费组名字', groups.free?.name || '免费组', '免费组');
-  freeNameInput.wrap.dataset.groupKey = 'free';
-  groupEditor.append(paidNameInput.wrap, freeNameInput.wrap);
-  groupEditor.append(actionRow([
-    actionBtn('check', '保存分组', () => {
-      const paidWrap = groupEditor.querySelector('[data-group-key="paid"]');
-      const freeWrap = groupEditor.querySelector('[data-group-key="free"]');
-      const paidName = paidWrap?.querySelector('input')?.value?.trim() || '付费组';
-      const freeName = freeWrap?.querySelector('input')?.value?.trim() || '免费组';
-      setPoolGroups({
-        paid: { id: 'paid', name: paidName, type: 'paid' },
-        free: { id: 'free', name: freeName, type: 'free' }
-      });
-      showToast('分组名字存好啦');
-      render('apiPool');
-    })
-  ]));
-  wrap.append(groupEditor);
-
-  const stat = card('模型总览', `已合并 ${mergedModels.length} 个模型名`);
-  stat.append(actionRow([
-    actionBtn('refresh', '重新统计', () => {
-      render('apiPool');
-    })
-  ]));
-  wrap.append(stat);
-
-  const paidGroup = card(groups.paid?.name || '付费组', '失败会自动切下一个，优先记住上次成功的那条');
-  if (!paidItems.length) paidGroup.append(empty('还没有付费组接口'));
-  paidItems.forEach((item) => {
-    paidGroup.append(compactPoolCard(item, groups.paid?.name || '付费组'));
-  });
-  paidGroup.append(actionRow([
-    actionBtn('add', '加一条付费接口', () => openPoolEndpointEditor({ groupType: 'paid' }))
-  ]));
-  wrap.append(paidGroup);
-
-  const freeGroup = card(groups.free?.name || '免费组', '只试第一条，超过一分钟才提醒换模型');
-  if (!freeItems.length) freeGroup.append(empty('还没有免费组接口'));
-  freeItems.forEach((item) => {
-    freeGroup.append(compactPoolCard(item, groups.free?.name || '免费组'));
-  });
-  freeGroup.append(actionRow([
-    actionBtn('add', '加一条免费接口', () => openPoolEndpointEditor({ groupType: 'free' }))
-  ]));
-  wrap.append(freeGroup);
-
-  return wrap;
-}
-
-async function renderApiPoolTestPage() {
-  const wrap = page();
-  const items = await getApiPoolItems();
-
-  const top = card('轮换池测试', '一条条测，快慢和可用性都能看见');
-  top.append(actionRow([
-    actionBtn('refresh', '全部测试', async () => {
-      showToast('正在测试全部接口...');
-      const results = await testAllPoolEndpoints();
-      const okCount = results.filter((r) => r.ok).length;
-      showToast(`测试完啦，${okCount} 条可用，${results.length - okCount} 条异常`);
-      render('apiPoolTest');
-    }),
-    actionBtn('copy', '返回轮换池', () => render('apiPool'))
-  ]));
-  wrap.append(top);
-
-  if (!items.length) {
-    wrap.append(empty('还没有轮换池条目'));
-    return wrap;
-  }
-
-  for (const item of items) {
-    const row = card(item.name || '未命名接口', `${item.groupType === 'free' ? '免费组' : '付费组'} · ${item.endpoint || '未填写地址'}`);
-    const state = el('p', 'settings-note', `状态：${item.status === 'active' ? '可用' : item.status === 'error' ? '异常' : item.status === 'cooldown' ? '冷却中' : '停用'} · 上次成功：${item.lastSuccessAt || '还没有'} · 延迟：${item.lastLatencyMs ? `${item.lastLatencyMs}ms` : '未记录'}`);
-    row.append(state);
-    row.append(actionRow([
-      actionBtn('check', '单独测试', async () => {
-        showToast('正在测试这条接口...');
-        const result = await testPoolEndpoint(item.id);
-        if (result.ok) {
-          showToast(`连接成功啦，延迟 ${result.latencyMs}ms`);
-        } else {
-          showToast(formatApiEditorError({ message: result.message }, '测试失败啦'));
-        }
-        render('apiPoolTest');
-      }),
-      actionBtn('edit', '编辑', () => openPoolEndpointEditor(item)),
-      actionBtn('delete', '删除', async () => {
-        const ok = await showConfirm('要删除这条轮换池接口吗？');
-        if (!ok) return;
-        await deletePoolEndpoint(item.id);
-        showToast('接口删好啦');
-        render('apiPoolTest');
-      })
-    ]));
-    wrap.append(row);
-  }
-
-  return wrap;
-}
-
-async function renderApiPoolModelsPage() {
-  const wrap = page();
-  const models = await getMergedPoolModels();
-
-  const top = card('模型总表', '合并去重后的模型名都在这里');
-  top.append(actionRow([
-    actionBtn('copy', '返回轮换池', () => render('apiPool')),
-    actionBtn('refresh', '重新整理', () => render('apiPoolModels'))
-  ]));
-  wrap.append(top);
-
-  if (!models.length) {
-    wrap.append(empty('还没有可用模型'));
-    return wrap;
-  }
-
-  const list = card('去重模型', '点一下就能看它来自哪些接口');
-  models.forEach((model) => {
-    const item = el('div', 'settings-list-action');
-    const mark = el('span', 'settings-row-icon');
-    mark.append(safeIcon('star', 18));
-    const text = el('span', 'settings-row-text');
-    text.append(
-      el('strong', '', model.name || model.key || '未命名模型'),
-      el('small', '', `别名：${(model.aliases || []).join(' / ')}\n来源：${(model.sources || []).length} 条接口`)
-    );
-    const actions = actionRow([
-      actionBtn('edit', '设默认', () => {
-        const settings = getSettings();
-        settings.defaultModel = model.name || model.key || settings.defaultModel || '';
-        saveSettings(settings);
-        showToast('默认模型存好啦');
-        render('apiPoolModels');
-      })
-    ]);
-    item.append(mark, text, actions);
-    list.append(item);
-  });
-
-  wrap.append(list);
-  return wrap;
-}
-
-function compactPoolCard(api, groupName) {
-  const item = el('div', 'settings-api-compact');
-
-  const iconEl = el('span', 'settings-api-compact-icon');
-  iconEl.append(safeIcon(api.groupType === 'free' ? 'play' : 'settings', 15));
-
-  const info = el('div', 'settings-api-compact-info');
-  info.append(el('strong', '', api.name || '未命名'));
-  if (api.model) info.append(el('small', '', api.model));
-
-  const badge = el('span', 'settings-api-compact-badge', api.status === 'active' ? '可用' : api.status === 'error' ? '异常' : api.status === 'cooldown' ? '冷却' : '停用');
-
-  const actions = el('div', 'settings-api-compact-actions');
-  actions.append(
-    compactActionBtn('check', async () => {
-      showToast('正在测试这条接口...');
-      const result = await testPoolEndpoint(api.id);
-      if (result.ok) {
-        showToast(`连接成功啦，延迟 ${result.latencyMs}ms`);
-      } else {
-        showToast(formatApiEditorError({ message: result.message }, '测试失败啦'));
-      }
-      render('apiPool');
-    }),
-    compactActionBtn('edit', () => openPoolEndpointEditor(api)),
-    compactActionBtn('delete', async () => {
-      const ok = await showConfirm(`要删除这个${groupName}接口吗？`);
-      if (!ok) return;
-      await deletePoolEndpoint(api.id);
-      showToast('接口删好啦');
-      render('apiPool');
-    })
-  );
-
-  const meta = el('small', 'settings-note', `地址：${api.endpoint || '未填写'}\n密钥：${Array.isArray(api.keys) && api.keys.length ? `${api.keys.length} 个` : '没有'} · 延迟：${api.lastLatencyMs ? `${api.lastLatencyMs}ms` : '未记录'}\n上次成功：${api.lastSuccessAt || '没有'}`);
-
-  item.append(iconEl, info, badge, actions);
-  item.append(meta);
-  return item;
-}
-
-function compactActionBtn(icon, onClick) {
-  const btn = el('button', 'settings-compact-action');
-  btn.type = 'button';
-  btn.append(safeIcon(icon, 15));
-  btn.addEventListener('click', (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    onClick?.();
-  });
-  return btn;
-}
-
-// ═══════════════════════════════════════
-// 【轮换池编辑器】
-// ═══════════════════════════════════════
-
-async function openPoolEndpointEditor(poolItem) {
-  const current = poolItem || { id: generateId(), groupType: 'paid', groupName: '', name: '', endpoint: '', provider: 'openai', keys: [], model: '', models: [], source: '', status: 'active' };
-  let draftModels = Array.isArray(current.models) ? [...current.models] : [];
-
-  const groups = getPoolGroups();
-  const sheet = sheetBox(poolItem ? '编辑轮换池接口' : '新增轮换池接口');
-
-  const groupType = selectRow('分组', current.groupType === 'free' ? 'free' : 'paid', [
-    ['paid', groups.paid?.name || '付费组'],
-    ['free', groups.free?.name || '免费组']
-  ]);
-
-  const name = inputRow('名字', current.name || '', '比如：主力接口');
-  const endpoint = inputRow('地址', current.endpoint || '', 'https://api.xxx.com/v1');
-  const provider = selectRow('接口类型', current.provider || detectProviderFromUrl(current.endpoint), [
-    ['openai', '通用中转 / OpenAI 格式'],
-    ['anthropic', 'Claude / Anthropic 格式'],
-    ['gemini', 'Gemini 格式'],
-    ['ollama', '本地 Ollama']
-  ]);
-
-  const keyArea = el('div', 'settings-editor-model-area');
-  const model = inputRow('主模型', current.model || '', '例如 gpt-4o-mini / deepseek-chat');
   const modelArea = el('div', 'settings-editor-model-area');
 
-  const keyTextarea = el('textarea', 'settings-input');
-  keyTextarea.value = (Array.isArray(current.keys) ? current.keys : []).join('\n');
-  keyTextarea.rows = Math.max(3, (Array.isArray(current.keys) ? current.keys.length : 0) || 3);
-  keyTextarea.placeholder = 'sk-xxx\nsk-yyy';
-
-  const keyLabel = el('div', 'settings-field');
-  keyLabel.append(el('span', '', '密钥（一行一个）'), keyTextarea);
-  keyArea.append(keyLabel);
-
-  function renderModelList() {
+  function renderModels() {
     modelArea.innerHTML = '';
     modelArea.append(modelPicker({
       models: draftModels,
       current: model.input.value.trim(),
-      emptyText: '还没有模型，点拉取模型就会出现',
+      emptyText: '还没拉到模型，可以手填模型名',
       onSelect: (value) => {
         model.input.value = value;
-        renderModelList();
+        renderModels();
         showToast(`已选择：${value}`);
       }
     }));
   }
 
-  renderModelList();
-  sheet.body.append(groupType.wrap, name.wrap, endpoint.wrap, provider.wrap, keyArea, model.wrap, modelArea);
+  renderModels();
+  form.append(modelArea);
 
-  let loading = false;
-
-  sheet.actions.append(
+  form.append(actionRow([
     actionBtn('refresh', '拉取模型', async () => {
-      if (loading) {
-        showToast('正在拉取中，等一下哦');
-        return;
-      }
       const endpointValue = endpoint.input.value.trim();
       const providerValue = provider.input.value || detectProviderFromUrl(endpointValue);
-      const keysValue = String(keyTextarea.value || '').split('\n').map((line) => line.trim()).filter(Boolean);
-      const firstKey = keysValue[0] || '';
+      const key = apiKey.input.value.trim();
+
       if (!endpointValue) {
-        showToast('先填地址哦');
+        showToast('先填接口地址哦');
         return;
       }
-      loading = true;
+
       showToast('正在拉取模型...');
       try {
-        const url = buildModelsUrlForPool(endpointValue, providerValue);
-        const headers = buildHeaders(firstKey, providerValue);
+        const url = buildModelsUrlForSettings(endpointValue, providerValue);
+        const headers = buildHeaders(key, providerValue);
         const res = await fetch(url, { method: 'GET', headers, cache: 'no-store' });
         if (!res.ok) throw new Error(await parseErrorResponse(res));
         const data = await res.json().catch(() => null);
-        const models = extractModelListForPool(data, providerValue);
+        const models = extractModelList(data, providerValue);
         if (!models.length) {
-          showToast('没找到模型也没关系，可以手填');
-          loading = false;
+          showToast('没找到模型，可以手填模型名保存');
           return;
         }
         draftModels = [...new Set(models)];
-        renderModelList();
+        renderModels();
         showToast(`拉到 ${draftModels.length} 个模型啦`);
       } catch (err) {
         showToast(formatApiEditorError(err, '模型拉取失败，可以手填模型名'));
       }
-      loading = false;
     }),
 
-    actionBtn('play', '测试接口', async () => {
-      if (loading) return;
-      const endpointValue = endpoint.input.value.trim();
-      const providerValue = provider.input.value || detectProviderFromUrl(endpointValue);
-      const testModel = model.input.value.trim();
-      const keysValue = String(keyTextarea.value || '').split('\n').map((line) => line.trim()).filter(Boolean);
-      const firstKey = keysValue[0] || '';
-      if (!endpointValue) {
-        showToast('先填地址哦');
-        return;
-      }
-      if (providerValue !== 'gemini' && !testModel) {
-        showToast('先填主模型哦');
-        return;
-      }
-      loading = true;
-      showToast('正在测试接口...');
-      try {
-        const result = await testPoolEndpointDirect({
-          endpoint: endpointValue,
-          provider: providerValue,
-          apiKey: firstKey,
-          model: testModel
-        });
-        if (result.ok) {
-          showToast(`连接成功啦，延迟 ${result.latencyMs}ms`);
-        } else {
-          showToast(formatApiEditorError({ message: result.message }, '测试失败啦'));
-        }
-      } catch (err) {
-        showToast(formatApiEditorError(err, '测试失败啦'));
-      }
-      loading = false;
-    }),
+    actionBtn('check', '测试接口', async () => {
+      if (testing) return;
 
-    actionBtn('check', '保存', async () => {
       const endpointValue = endpoint.input.value.trim();
       const providerValue = provider.input.value || detectProviderFromUrl(endpointValue);
       const modelValue = model.input.value.trim();
-      const keysValue = String(keyTextarea.value || '').split('\n').map((line) => line.trim()).filter(Boolean);
+      const key = apiKey.input.value.trim();
+
       if (!endpointValue) {
-        showToast('地址还没填哦');
+        showToast('先填接口地址哦');
         return;
       }
-      if (!modelValue && providerValue !== 'gemini') {
-        showToast('主模型也要填一下哦');
+
+      if (providerValue !== 'gemini' && !modelValue) {
+        showToast('先填模型名哦');
         return;
       }
-      const next = {
-        id: current.id,
-        groupType: groupType.input.value === 'free' ? 'free' : 'paid',
-        groupName: groupType.input.value === 'free' ? (groups.free?.name || '免费组') : (groups.paid?.name || '付费组'),
-        name: name.input.value.trim() || '未命名接口',
-        endpoint: endpointValue,
-        provider: providerValue,
-        keys: keysValue,
-        model: modelValue,
-        models: draftModels,
-        source: current.source || '',
-        status: current.status || 'active'
+
+      testing = true;
+      showToast('正在发一条小测试...');
+
+      try {
+        await testApiByChat({
+          endpoint: endpointValue,
+          apiKey: key,
+          provider: providerValue,
+          model: modelValue
+        });
+
+        showToast('连接成功啦');
+        askAfterTest({
+          name: name.input.value.trim() || '未命名接口',
+          endpoint: endpointValue,
+          provider: providerValue,
+          apiKey: key,
+          model: modelValue,
+          modelList: draftModels
+        });
+      } catch (err) {
+        showToast(formatApiEditorError(err, '测试失败啦'));
+      } finally {
+        testing = false;
+      }
+    })
+  ]));
+
+  wrap.append(form);
+  return wrap;
+}
+
+function askAfterTest(apiData) {
+  const sheet = sheetBox('测试通过啦，想怎么用？');
+
+  sheet.body.append(
+    el('p', 'settings-free-note', '「我的自选」会固定用它，不走轮换池。\n「轮换池」会按分组自动切换，更稳。')
+  );
+
+  sheet.actions.append(
+    actionBtn('star', '设为我的自选', () => {
+      const settings = getSettings();
+      const newApi = {
+        id: generateId(),
+        name: apiData.name,
+        endpoint: apiData.endpoint,
+        apiKey: apiData.apiKey,
+        provider: apiData.provider,
+        model: apiData.model,
+        modelList: apiData.modelList
       };
-      const existed = await getApiPoolItems();
-      const hasSame = existed.some((item) => String(item.id) === String(current.id));
-      if (hasSame) await updatePoolEndpoint(current.id, next);
-      else await addPoolEndpoint(next);
+      settings.apiEndpoints = [...settings.apiEndpoints.filter((item) => item.endpoint !== apiData.endpoint), newApi];
+      settings.defaultApiEndpointId = newApi.id;
+      settings.defaultModel = newApi.model;
+      saveSettings(settings);
       hideBottomSheet();
-      showToast('轮换池存好啦');
-      render('apiPool');
+      showToast('已固定为你的自选接口');
+      render('apiTest');
+    }),
+
+    actionBtn('settings', '加入轮换池', () => {
+      hideBottomSheet();
+      openPoolGroupSelector(apiData);
     })
   );
 
   showBottomSheet(sheet.root);
 }
 
-async function testPoolEndpointDirect({ endpoint, provider, apiKey, model }) {
-  const startedAt = Date.now();
-  try {
-    const url = buildChatUrlForSettings(endpoint, provider);
-    const headers = buildHeaders(apiKey, provider);
-    const body = buildTestBody({ provider, model });
-    let finalUrl = url;
-    if (provider === 'gemini') {
-      const cleanModel = model || 'gemini-1.5-flash';
-      let base = endpoint
-        .replace(/\/v1beta\/models\/[^/]+:generateContent$/i, '')
-        .replace(/\/v1beta\/models\/[^/]+:streamGenerateContent$/i, '')
-        .replace(/\/v1beta\/models\/?$/i, '')
-        .replace(/\/v1beta\/?$/i, '')
-        .replace(/\/+$/, '');
-      const geminiUrl = new URL(`${base}/v1beta/models/${encodeURIComponent(cleanModel)}:generateContent`);
-      if (apiKey) geminiUrl.searchParams.set('key', apiKey);
-      finalUrl = geminiUrl.toString();
-    }
-    const res = await fetch(finalUrl, {
-      method: 'POST',
-      headers,
-      cache: 'no-store',
-      body: JSON.stringify(body)
-    });
-    if (!res.ok) throw new Error(await parseErrorResponse(res));
-    const latencyMs = Date.now() - startedAt;
-    return { ok: true, message: '连接成功', latencyMs };
-  } catch (error) {
-    const latencyMs = Date.now() - startedAt;
-    const message = formatApiEditorError(error, '连接失败');
-    return { ok: false, message, latencyMs };
-  }
+function openPoolGroupSelector(apiData) {
+  const sheet = sheetBox('放进哪个组？');
+
+  sheet.body.append(
+    el('p', 'settings-free-note', '免费组：免 Key 或免费额度接口，失败会安静等。\n付费组：自己的 Key 接口，失败会自动切下一条。')
+  );
+
+  sheet.actions.append(
+    actionBtn('play', '免费组', () => {
+      addToPool({ ...apiData, groupType: 'free' });
+      hideBottomSheet();
+    }),
+    actionBtn('settings', '付费组', () => {
+      addToPool({ ...apiData, groupType: 'paid' });
+      hideBottomSheet();
+    })
+  );
+
+  showBottomSheet(sheet.root);
 }
 
-function buildModelsUrlForPool(endpoint, provider) {
-  const base = String(endpoint || '').trim().replace(/\/+$/, '');
-  if (provider === 'gemini') {
-    return base
-      .replace(/\/v1beta\/models\/[^/]+:generateContent$/i, '/v1beta/models')
-      .replace(/\/v1beta\/models\/[^/]+:streamGenerateContent$/i, '/v1beta/models')
-      .replace(/\/v1beta\/?$/i, '/v1beta/models');
-  }
-  return smartModelsUrl(base, provider);
+async function addToPool(apiData) {
+  const { getPoolGroups, addPoolEndpoint } = await import('../core/api.js');
+  const groups = getPoolGroups();
+  const groupType = apiData.groupType === 'free' ? 'free' : 'paid';
+
+  await addPoolEndpoint({
+    id: generateId('pool'),
+    groupType,
+    groupName: groupType === 'free' ? (groups.free?.name || '免费组') : (groups.paid?.name || '付费组'),
+    name: apiData.name,
+    endpoint: apiData.endpoint,
+    provider: apiData.provider,
+    keys: apiData.apiKey ? [apiData.apiKey] : [],
+    model: apiData.model,
+    models: apiData.modelList || [],
+    source: '',
+    status: 'active'
+  });
+
+  showToast('已加入轮换池');
+  render('apiPool');
 }
 
-function extractModelListForPool(data, provider) {
-  if (provider === 'ollama') {
-    return (data?.models || []).map((m) => m?.name).filter(Boolean);
-  }
-  if (provider === 'gemini') {
-    return (data?.models || [])
-      .map((m) => String(m?.name || '').replace(/^models\//, ''))
-      .filter(Boolean);
-  }
-  return (data?.data || [])
-    .map((m) => typeof m === 'string' ? m : m?.id)
-    .filter(Boolean);
+// ═══════════════════════════════════════
+// 【API 轮换池页】
+// ═══════════════════════════════════════
+
+async function renderApiPoolPage() {
+  if (apiPoolModule) apiPoolModule.unmount();
+
+  const module = await import('./settings/api-pool-settings.js');
+  apiPoolModule = module;
+
+  const wrap = page();
+  const pageEl = await module.renderApiPoolSettings({
+    onBack: () => render('home')
+  });
+  wrap.append(pageEl);
+  return wrap;
 }
+
 // ═══════════════════════════════════════
 // 【TTS 页】
 // ═══════════════════════════════════════
 
-function renderTtsPage() {
+async function renderTtsPage() {
+  if (ttsModule) ttsModule.unmount();
+
+  const module = await import('./settings/tts-settings.js');
+  ttsModule = module;
+
   const wrap = page();
-  const settings = getSettings();
-  const tts = settings.ttsGlobal || DEFAULT_SETTINGS.ttsGlobal;
-
-  const status = card('声音屋状态', `${tts.provider || 'openai'} · ${tts.voice || 'alloy'} · ${tts.model || 'tts-1'}${tts.voiceId ? ` · voiceId: ${tts.voiceId}` : ''}`);
-  status.append(actionRow([
-    actionBtn('edit', '编辑声音', openTtsEditor),
-    actionBtn('refresh', '拉取模型', async (e) => {
-      const btn = e?.currentTarget;
-      if (!btn || btn.dataset.loading === '1') return;
-      btn.dataset.loading = '1';
-      const span = btn.querySelector('span');
-      const orig = span?.textContent;
-      if (span) span.textContent = '拉取中...';
-      try {
-        await fetchTtsModels();
-      } finally {
-        if (btn) btn.dataset.loading = '0';
-        if (span) span.textContent = orig;
-      }
-    }),
-    actionBtn('play', '试听', testTts)
-  ]));
-
-  if (Array.isArray(tts.modelList) && tts.modelList.length) {
-    status.append(modelPicker({
-      models: tts.modelList,
-      current: tts.model,
-      emptyText: '',
-      onSelect: selectTtsModel
-    }));
-  }
-
-  wrap.append(status);
+  const pageEl = await module.renderTtsSettings({
+    onBack: () => render('home')
+  });
+  wrap.append(pageEl);
   return wrap;
 }
 
@@ -1985,245 +1012,6 @@ function getCloud() {
 }
 
 // ═══════════════════════════════════════
-// 【TTS 操作】
-// ═══════════════════════════════════════
-
-function openTtsEditor() {
-  const settings = getSettings();
-  const tts = settings.ttsGlobal || DEFAULT_SETTINGS.ttsGlobal;
-  let draftModelList = Array.isArray(tts.modelList) ? [...tts.modelList] : [];
-
-  const sheet = sheetBox('编辑声音');
-  const provider = inputRow('服务商', tts.provider || 'openai', 'openai / miniMax / elevenlabs / azure');
-  const endpoint = inputRow('Endpoint', tts.endpoint || '', 'https://api.xxx.com');
-  const apiKey = inputRow('API Key', tts.apiKey || '', 'sk-...');
-  const voice = inputRow('Voice', tts.voice || 'alloy', '说话人名字，比如 alloy');
-  const voiceId = inputRow('Voice ID', tts.voiceId || '', '语音 ID，比如 MiniMax 的 voice_id');
-  const model = inputRow('Model', tts.model || 'tts-1', '模型名字，可以手动输入');
-
-  const modelArea = el('div', 'settings-editor-model-area');
-
-  function renderEditorModels() {
-    modelArea.innerHTML = '';
-    modelArea.append(modelPicker({
-      models: draftModelList,
-      current: model.input.value,
-      emptyText: '还没有模型，点下面"拉取模型"就会出现啦',
-      onSelect: (value) => {
-        model.input.value = value;
-        renderEditorModels();
-        showToast(`声音模型选好啦：${value}`);
-      }
-    }));
-  }
-
-  renderEditorModels();
-  sheet.body.append(provider.wrap, endpoint.wrap, apiKey.wrap, voice.wrap, voiceId.wrap, model.wrap, modelArea);
-
-  let loading = false;
-  sheet.actions.append(
-    actionBtn('refresh', '拉取模型', async () => {
-      if (loading) {
-        showToast('正在拉取中，等一下哦');
-        return;
-      }
-
-      const base = normalizeEndpoint(endpoint.input.value);
-      const key = apiKey.input.value.trim();
-
-      if (!base) {
-        showToast('先填 TTS 地址哦');
-        return;
-      }
-
-      loading = true;
-      showToast('正在拉取声音模型...');
-
-      try {
-        const res = await fetch(`${base}/v1/models`, {
-          headers: key ? { Authorization: `Bearer ${key}` } : {},
-          cache: 'no-store'
-        });
-
-        if (!res.ok) throw new Error('bad');
-
-        const data = await res.json();
-        const models = (data.data || []).map((item) => item.id).filter(Boolean);
-
-        if (!models.length) {
-          showToast('没找到模型');
-          loading = false;
-          return;
-        }
-
-        draftModelList = [...new Set(models)];
-        renderEditorModels();
-        showToast(`拉到 ${draftModelList.length} 个声音模型啦，自己挑一个`);
-      } catch {
-        showToast('TTS 模型拉取失败');
-      }
-
-      loading = false;
-    }),
-    actionBtn('check', '保存', () => {
-      const next = getSettings();
-      next.ttsGlobal = {
-        provider: provider.input.value.trim() || 'openai',
-        endpoint: endpoint.input.value.trim(),
-        apiKey: apiKey.input.value.trim(),
-        voice: voice.input.value.trim() || 'alloy',
-        voiceId: voiceId.input.value.trim(),
-        model: model.input.value.trim() || 'tts-1',
-        modelList: draftModelList
-      };
-      saveSettings(next);
-      hideBottomSheet();
-      showToast('声音保存啦');
-      emitRefresh();
-      render('tts');
-    })
-  );
-
-  showBottomSheet(sheet.root);
-}
-
-function selectTtsModel(model) {
-  const settings = getSettings();
-  settings.ttsGlobal.model = model;
-  saveSettings(settings);
-  showToast(`声音模型选好啦：${model}`);
-  render('tts');
-}
-
-async function fetchTtsModels() {
-  const settings = getSettings();
-  const tts = settings.ttsGlobal || {};
-
-  showToast('正在拉取声音模型...');
-
-  try {
-    const base = normalizeEndpoint(tts.endpoint);
-    if (!base) {
-      showToast('先填 TTS 地址哦');
-      return;
-    }
-
-    const res = await fetch(`${base}/v1/models`, { headers: tts.apiKey ? { Authorization: `Bearer ${tts.apiKey}` } : {}, cache: 'no-store' });
-    if (!res.ok) throw new Error('bad');
-
-    const data = await res.json();
-    const models = (data.data || []).map((item) => item.id).filter(Boolean);
-    if (!models.length) {
-      showToast('没找到模型');
-      return;
-    }
-
-    settings.ttsGlobal.modelList = models;
-    saveSettings(settings);
-    showToast(`TTS 拉到 ${models.length} 个声音模型啦，自己挑一个`);
-    render('tts');
-  } catch {
-    showToast('TTS 模型拉取失败');
-  }
-}
-
-function testTts() {
-  stopTTS();
-  ttsPreview = playTTS('你好呀，声音小屋已经准备好了。', getSettings().ttsGlobal);
-  showToast('开始试听啦');
-}
-
-function stopTTS() {
-  if (ttsPreview?.stop) ttsPreview.stop();
-  ttsPreview = null;
-}
-
-// ═══════════════════════════════════════
-// 【MCP 操作】
-// ═══════════════════════════════════════
-
-async function testMcpServer(serverId) {
-  const { resetSession: resetMcpSession } = await import('../core/mcp.js');
-  resetMcpSession(serverId);
-  showToast('正在测试 MCP 连接...');
-
-  const { listMcpTools } = await import('../core/mcp.js');
-
-  const settings = getSettings();
-  const server = settings.mcpServers.find(s => s.id === serverId);
-  if (!server) {
-    showToast('服务器不存在');
-    return;
-  }
-
-  if (!server.url) {
-    showToast('URL 还没填哦');
-    return;
-  }
-
-  try {
-    const tools = await listMcpTools(serverId);
-    if (tools.length) {
-      showToast(`连接成功，发现 ${tools.length} 个小工具`);
-    } else {
-      showToast('连接成功，但暂时没有工具');
-    }
-  } catch {
-    showToast('连接失败，检查 URL 和密钥');
-  }
-}
-
-function openMcpEditor(server) {
-  const current = server || { id: generateId(), name: '', url: '', apiKey: '', enabled: true };
-  const sheet = sheetBox(server ? '编辑 MCP' : '新增 MCP');
-  const name = inputRow('名字', current.name, '工具小助手');
-  const url = inputRow('URL', current.url, 'https://xxx/mcp');
-  const apiKey = inputRow('API 密钥', current.apiKey || '', '有密码就填，没有留空');
-  const enabled = switchRow('启用', current.enabled, () => {});
-
-  sheet.body.append(name.wrap, url.wrap, apiKey.wrap, enabled);
-  sheet.actions.append(actionBtn('check', '保存', () => {
-    const settings = getSettings();
-    const nextServer = {
-      id: current.id,
-      name: name.input.value.trim(),
-      url: url.input.value.trim(),
-      apiKey: apiKey.input.value.trim(),
-      enabled: enabled.dataset.value === 'true'
-    };
-    settings.mcpServers = [...settings.mcpServers.filter((item) => item.id !== current.id), nextServer];
-    saveSettings(settings);
-    resetSession(nextServer.id);
-    hideBottomSheet();
-    showToast('MCP 存好啦');
-    render('mcp');
-  }));
-
-  showBottomSheet(sheet.root);
-}
-
-function toggleMcp(id) {
-  const settings = getSettings();
-  settings.mcpServers = settings.mcpServers.map((server) => server.id === id ? { ...server, enabled: !server.enabled } : server);
-  saveSettings(settings);
-  resetSession(id);
-  showToast('工具开关切好啦');
-  render('mcp');
-}
-
-async function deleteMcp(id) {
-  const ok = await showConfirm('要删除这个 MCP 吗？');
-  if (!ok) return;
-
-  const settings = getSettings();
-  settings.mcpServers = settings.mcpServers.filter((server) => server.id !== id);
-  saveSettings(settings);
-  resetSession(id);
-  showToast('MCP 删除啦');
-  render('mcp');
-}
-
-// ═══════════════════════════════════════
 // 【气泡模式】
 // ═══════════════════════════════════════
 
@@ -2234,7 +1022,6 @@ function saveBubbleMode(mode) {
   showToast('聊天样子换好啦');
   render('display');
 }
-
 // ═══════════════════════════════════════
 // 【桌面缩放/壁纸】
 // ═══════════════════════════════════════
@@ -2732,6 +1519,122 @@ async function importThemeFile() {
 }
 
 // ═══════════════════════════════════════
+// 【API 测试台辅助】
+// ═══════════════════════════════════════
+
+function buildChatUrlForSettings(endpoint, provider) {
+  const base = String(endpoint || '').trim().replace(/\/+$/, '');
+  if (provider === 'anthropic') {
+    if (/\/messages$/i.test(base)) return base;
+    if (/\/v1$/i.test(base)) return `${base}/messages`;
+    return `${base}/v1/messages`;
+  }
+  if (provider === 'ollama') {
+    if (/\/api\/chat$/i.test(base)) return base;
+    return `${base}/api/chat`;
+  }
+  if (provider === 'gemini') {
+    return base;
+  }
+  if (/\/chat\/completions$/i.test(base)) return base;
+  if (/\/v1$/i.test(base)) return `${base}/chat/completions`;
+  return `${base}/v1/chat/completions`;
+}
+
+function buildModelsUrlForSettings(endpoint, provider) {
+  const base = String(endpoint || '').trim().replace(/\/+$/, '');
+  if (provider === 'gemini') {
+    return base
+      .replace(/\/v1beta\/models\/[^/]+:generateContent$/i, '/v1beta/models')
+      .replace(/\/v1beta\/models\/[^/]+:streamGenerateContent$/i, '/v1beta/models')
+      .replace(/\/v1beta\/?$/i, '/v1beta/models');
+  }
+  return smartModelsUrl(base, provider);
+}
+
+function extractModelList(data, provider) {
+  if (provider === 'ollama') {
+    return (data?.models || []).map((m) => m?.name).filter(Boolean);
+  }
+  if (provider === 'gemini') {
+    return (data?.models || [])
+      .map((m) => String(m?.name || '').replace(/^models\//, ''))
+      .filter(Boolean);
+  }
+  return (data?.data || [])
+    .map((m) => typeof m === 'string' ? m : m?.id)
+    .filter(Boolean);
+}
+
+function buildTestBody(provider, model) {
+  if (provider === 'anthropic') {
+    return {
+      model: model || 'claude-3-haiku-20240307',
+      max_tokens: 32,
+      messages: [{ role: 'user', content: [{ type: 'text', text: '请回复：连接成功' }] }]
+    };
+  }
+  if (provider === 'gemini') {
+    return {
+      contents: [{ role: 'user', parts: [{ text: '请回复：连接成功' }] }]
+    };
+  }
+  if (provider === 'ollama') {
+    return {
+      model: model || 'llama3',
+      stream: false,
+      messages: [{ role: 'user', content: '请回复：连接成功' }]
+    };
+  }
+  return {
+    model,
+    stream: false,
+    messages: [{ role: 'user', content: '请回复：连接成功' }]
+  };
+}
+
+async function testApiByChat({ endpoint, apiKey, provider, model }) {
+  const endpointValue = String(endpoint || '').trim();
+  const providerValue = provider || detectProviderFromUrl(endpointValue);
+  if (!endpointValue) throw new Error('Endpoint 还没填哦');
+  let url = buildChatUrlForSettings(endpointValue, providerValue);
+  const headers = buildHeaders(apiKey, providerValue);
+  const body = buildTestBody(providerValue, model);
+  if (providerValue === 'gemini') {
+    const cleanModel = model || 'gemini-1.5-flash';
+    let base = endpointValue
+      .replace(/\/v1beta\/models\/[^/]+:generateContent$/i, '')
+      .replace(/\/v1beta\/models\/[^/]+:streamGenerateContent$/i, '')
+      .replace(/\/v1beta\/models\/?$/i, '')
+      .replace(/\/v1beta\/?$/i, '')
+      .replace(/\/+$/, '');
+    const geminiUrl = new URL(`${base}/v1beta/models/${encodeURIComponent(cleanModel)}:generateContent`);
+    if (apiKey) geminiUrl.searchParams.set('key', apiKey);
+    url = geminiUrl.toString();
+  }
+  const res = await fetch(url, {
+    method: 'POST',
+    headers,
+    cache: 'no-store',
+    body: JSON.stringify(body)
+  });
+  if (!res.ok) throw new Error(await parseErrorResponse(res));
+  return true;
+}
+
+function formatApiEditorError(error, fallback) {
+  const message = String(error?.message || '').trim();
+  if (!message) return fallback;
+  if (/failed to fetch|load failed|networkerror|cors/i.test(message)) {
+    return '这个中转站被浏览器拦住啦，可能没开放网页直连';
+  }
+  return message
+    .replace(/^HTTP\s*\d+\s*[｜|]\s*/i, '')
+    .replace(/^Error:\s*/i, '')
+    .trim() || fallback;
+}
+
+// ═══════════════════════════════════════
 // 【辅助工具】
 // ═══════════════════════════════════════
 
@@ -2743,22 +1646,20 @@ function closeDesktop() {
 function getTitle(name) {
   return {
     home: '设置小窝', theme: '外观主题', display: '字体与显示',
-    api: 'API 小管家', apiPool: 'API 轮换池', apiPoolTest: '轮换池测试', apiPoolModels: '模型总表',
-    tts: 'TTS 声音屋', mcp: 'MCP 工具箱',
-    cloud: '云服务器', desktop: '桌面装扮', widgets: '小组件',
-    icons: '应用图标', data: '数据小包'
+    apiTest: 'API 测试台', apiPool: 'API 轮换池', tts: 'TTS 声音屋',
+    mcp: 'MCP 工具箱', cloud: '云服务器', desktop: '桌面装扮',
+    widgets: '小组件', icons: '应用图标', data: '数据小包'
   }[name] || '设置';
 }
 
 function getSubtitle(name) {
   return {
     home: '慢慢调，不着急 OvO', theme: '给小手机换件衣服',
-    display: '字体和聊天样子', api: '模型接口住这里',
-    apiPool: '分组轮换和测试都在这儿', apiPoolTest: '一条条看状态和延迟',
-    apiPoolModels: '去重后的模型名单',
-    tts: '让 AI 开口说话', mcp: '工具小助手集合',
-    cloud: '默认关闭，主动开启才使用', desktop: '壁纸和大小',
-    widgets: '小卡片小窝', icons: '桌面图标换装', data: '备份和清理'
+    display: '字体和聊天样子', apiTest: '临时测接口，通过再决定',
+    apiPool: '分组轮换和测试都在这儿', tts: '让 AI 开口说话',
+    mcp: '工具小助手集合', cloud: '默认关闭，主动开启才使用',
+    desktop: '壁纸和大小', widgets: '小卡片小窝',
+    icons: '桌面图标换装', data: '备份和清理'
   }[name] || '';
 }
 
@@ -3053,10 +1954,6 @@ function normalizeColor(value) {
   return '#ffffff';
 }
 
-function normalizeEndpoint(endpoint) {
-  return String(endpoint || '').trim().replace(/\/+$/, '').replace(/\/v1\/?$/, '');
-}
-
 function getPresetName(id) {
   return getThemePresets().find((preset) => preset.id === id)?.name || id || '默认主题';
 }
@@ -3083,37 +1980,6 @@ function detectProviderFromUrl(endpoint) {
   if (raw.includes('generativelanguage.googleapis.com')) return 'gemini';
   if (raw.includes('localhost') || raw.includes('127.0.0.1')) return 'ollama';
   return 'openai';
-}
-
-function isFreeApi(api) {
-  return api.source === 'free' || api.source === 'anonymous';
-}
-
-function compactApiCard(api, isDefault) {
-  const item = el('div', 'settings-api-compact');
-
-  const iconEl = el('span', 'settings-api-compact-icon');
-  iconEl.append(safeIcon(isFreeApi(api) ? 'play' : 'settings', 15));
-
-  const info = el('div', 'settings-api-compact-info');
-  info.append(el('strong', '', api.name || '未命名'));
-  if (api.model) info.append(el('small', '', api.model));
-
-  const badge = isDefault ? el('span', 'settings-api-compact-badge', '默认') : null;
-
-  const actions = el('div', 'settings-api-compact-actions');
-  actions.append(
-    compactActionBtn(isDefault ? 'check' : 'star', () => {
-      if (!isDefault) setDefaultApi(api.id);
-      else showToast('这个已经是默认啦');
-    }),
-    compactActionBtn('edit', () => openApiEditor(api)),
-    compactActionBtn('check', () => testApi(api.id)),
-    compactActionBtn('delete', () => deleteApi(api.id))
-  );
-
-  item.append(iconEl, info, ...(badge ? [badge] : []), actions);
-  return item;
 }
 
 function safeIcon(name, size = 18) {
@@ -3889,4 +2755,4 @@ function injectStyle() {
   document.head.appendChild(styleEl);
 }
 
-// depends: ../core/storage.js(getData,setData,removeData,generateId,getNow,getStorageUsage,getDB,setDB,getAllDB,deleteDB,clearStoreDB)；../core/theme.js(getThemePresets,getCurrentTheme,setPreset,setThemeMode,applyTheme,saveTheme,exportTheme,importTheme)；../core/ui.js(showToast,showBottomSheet,hideBottomSheet,showConfirm,createIcon)；../core/api.js(fetchModels,smartModelsUrl,parseErrorResponse,buildHeaders,getApiPoolItems,getPoolGroups,setPoolGroups,addPoolEndpoint,updatePoolEndpoint,deletePoolEndpoint,getMergedPoolModels,testPoolEndpoint,testAllPoolEndpoints)；../core/mcp.js(resetSession)；../core/tts.js(playTTS)；../core/storage-manager.js(testCloudConnection)
+// depends: ../core/storage.js(getData,setData,removeData,generateId,getNow,getStorageUsage,getDB,setDB,getAllDB,deleteDB,clearStoreDB)；../core/theme.js(getThemePresets,getCurrentTheme,setPreset,setThemeMode,applyTheme,saveTheme,exportTheme,importTheme)；../core/ui.js(showToast,showBottomSheet,hideBottomSheet,showConfirm,createIcon)；../core/api.js(fetchModels,smartModelsUrl,parseErrorResponse,buildHeaders)；../core/mcp.js(resetSession)；../core/storage-manager.js(testCloudConnection)；./settings/api-pool-settings.js；./settings/tts-settings.js
