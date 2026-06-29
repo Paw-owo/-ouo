@@ -85,7 +85,7 @@ function renderEditableSheet(state, options, config) {
   if (options.onBackToTools) {
     const backBtn = el('button', 'thread-sheet-back-btn');
     backBtn.type = 'button';
-    backBtn.setAttribute('aria-label', '返回小工具箱');
+    backBtn.setAttribute('aria-label', '返回消息');
     backBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>';
     backBtn.addEventListener('click', options.onBackToTools);
     head.appendChild(backBtn);
@@ -398,10 +398,10 @@ export function openTransferSheet(state, options = {}) {
 
   const send = actionButton('发出去', 'primary');
   send.addEventListener('click', async () => {
-    const amount = clampMoney(amountInput.value);
-    const note = String(noteInput.value || '').trim();
-    const title = String(titleInput.value || '').trim() || '转账小心意';
-    const description = String(descInput.value || '').trim() || note || `转账 ¥${formatAmount(amount)}`;
+    const amount = clampMoney(amountInput.input.value);
+    const note = String(noteInput.input.value || '').trim();
+    const title = String(titleInput.input.value || '').trim() || '转账小心意';
+    const description = String(descInput.input.value || '').trim() || note || `转账 ¥${formatAmount(amount)}`;
 
     if (!(amount > 0)) {
       showToast('金额要大于 0');
@@ -445,8 +445,6 @@ export function openClearContextSheet(state, options = {}) {
 
   const wrap = el('section', 'thread-sheet-card');
   wrap.append(
-    el('div', 'thread-sheet-title', '清上下文'),
-    el('div', 'thread-sheet-desc', '只保留更近的消息，页面会轻一点。'),
     el('div', 'thread-sheet-note', `当前会显示最近 ${visibleCount} 条。`)
   );
 
@@ -619,7 +617,7 @@ function createSheetHead(title, desc, sheetOptions) {
   if (sheetOptions?.onBackToTools) {
     const backBtn = el('button', 'thread-sheet-back-btn');
     backBtn.type = 'button';
-    backBtn.setAttribute('aria-label', '返回小工具箱');
+    backBtn.setAttribute('aria-label', '返回消息');
     backBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>';
     backBtn.addEventListener('click', sheetOptions.onBackToTools);
     head.appendChild(backBtn);
@@ -741,7 +739,6 @@ function el(tag, className = '', text = '') {
   if (text !== '') node.textContent = text;
   return node;
 }
-
 // ═══════════════════════════════════════
 // 【样式】底部抽屉、卡片、按钮、编辑列表
 // ═══════════════════════════════════════
