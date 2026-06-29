@@ -3,11 +3,11 @@
 //   from '../../core/storage.js': getData
 //   from '../../core/ui.js': showToast, showBottomSheet, hideBottomSheet
 //   from './thread-actions.js': copyThreadMessage, quoteThreadMessage, editThreadMessage, deleteThreadMessage, regenerateThreadMessage, resendThreadMessage, playThreadTTS, stopThreadTTS
-//   from './thinking-chain.js': createThinkingChainButton
+//   from './thinking-chain.js': createThinkingCard, hasThinkingChain
 
 import { getData } from '../../core/storage.js';
 import { showToast, showBottomSheet, hideBottomSheet } from '../../core/ui.js';
-import { createThinkingChainButton } from './thinking-chain.js';
+import { createThinkingCard, hasThinkingChain } from './thinking-chain.js';
 
 import {
   copyThreadMessage,
@@ -78,7 +78,9 @@ function createMessageRow(state, message, pageEl) {
   row.dataset.messageId = message.id || '';
   row.dataset.role = role;
 
-  row.append(createReasoningStack(state, message, role, mode));
+  if (role === 'assistant' && hasThinkingChain(message)) {
+    row.appendChild(createReasoningStack(state, message, mode));
+  }
 
   if (role === 'assistant' && mode === 'bubble' && !message.isPending && !message.isError) {
     const chunks = splitAIBubbleChunks(message);
@@ -206,27 +208,17 @@ function createTimeDivider(currentTime, lastTime) {
 }
 
 // ═══════════════════════════════════════
-// 【思维链】接入 thinking-chain 组件
+// 【思维链】接入新版 thinking-card 组件
 // ═══════════════════════════════════════
 
-function createReasoningStack(state, message, role, mode = 'bubble') {
-  const stack = el('section', `chat-reasoning-stack role-${role} mode-${mode}`);
-
-  if (role !== 'assistant') {
-    stack.hidden = true;
-    return stack;
-  }
-
+function createReasoningStack(state, message, mode = 'bubble') {
+  const stack = el('section', `chat-reasoning-stack role-assistant mode-${mode}`);
   const target = getTargetInfo(state, message);
-  const button = createThinkingChainButton(message, { roleName: target.name });
-
-  // 修复：防御空值，按钮无效或没有子元素时隐藏容器，防止白屏
-  if (!button || !(button instanceof Node) || !button.childNodes.length) {
-    stack.hidden = true;
-    return stack;
-  }
-
-  stack.appendChild(button);
+  const card = createThinkingCard(message, {
+    roleName: target.name,
+    messageId: message.id || ''
+  });
+  stack.appendChild(card);
   return stack;
 }
 
@@ -971,7 +963,7 @@ function getVisibleMessages(state) {
       message.ttsText,
       message.stickerDescription,
       message.quoteText,
-      message.thinkingSummary,
+      message.thinking,
       message.itemName,
       message.itemDesc,
       message.title,
@@ -1205,10 +1197,8 @@ function normalizeText(value) {
 
   if (value && typeof value === 'object') {
     try {
-      return JSON.stringify(value).replace(/\s+/g, ' ').trim();
-    } catch (_) {
-      return '';
-    }
+      return JSON.stringify(value).replace(/\s+/g, ' ').trim
+          }
   }
 
   return String(value || '').replace(/\s+/g, ' ').trim();
@@ -1504,8 +1494,9 @@ function el(tag, className = '', text = '') {
 // ═══════════════════════════════════════
 
 function injectStyle() {
-  // 修复：样式已存在则跳过，不再删除重建，避免闪烁
-  if (document.getElementById(RENDER_STYLE_ID)) return;
+  // 修复：样式已存在则先删除旧标签再创建新的，避免 CSS 修改不生效
+  const oldStyle = document.getElementById(RENDER_STYLE_ID);
+  if (oldStyle) oldStyle.remove();
 
   const style = document.createElement('style');
   style.id = RENDER_STYLE_ID;
@@ -2032,7 +2023,16 @@ function injectStyle() {
       max-width: 220px;
     }
 
-    .chat-reasoning-peek {
+    /* ── thinking 折叠卡片 ── */
+
+    .chat-thinking-card {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .chat-thinking-trigger {
       width: 100%;
       min-height: 34px;
       display: grid;
@@ -2040,6 +2040,8 @@ function injectStyle() {
       align-items: center;
       gap: 8px;
       padding: 7px 10px;
+      border: none;
+      outline: none;
       border-radius: 16px;
       background: var(--surface-muted);
       color: var(--text-secondary);
@@ -2050,25 +2052,238 @@ function injectStyle() {
       text-align: left;
       transition: all 200ms ease;
       touch-action: manipulation;
+      -webkit-user-select: none;
+      user-select: none;
     }
 
-    .chat-reasoning-peek:active {
+    .chat-thinking-trigger:active {
       transform: scale(0.98);
     }
 
-    .chat-reasoning-peek svg {
-      color: var(--text-hint);
+    .chat-thinking-trigger-icon {
+      width: 16px;
+      height: 16px;
       flex: 0 0 auto;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-hint);
     }
 
-    .chat-reasoning-peek-text {
+    .chat-thinking-trigger-text {
       min-width: 0;
       overflow: hidden;
       white-space: nowrap;
       text-overflow: ellipsis;
+    }
+
+    .chat-thinking-trigger-arrow {
+      width: 14px;
+      height: 14px;
+      flex: 0 0 auto;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-hint);
+      transition: transform 200ms ease;
+    }
+
+    .chat-thinking-card[data-expanded="true"] .chat-thinking-trigger-arrow {
+      transform: rotate(90deg);
+    }
+
+    .chat-thinking-body {
+      display: grid;
+      grid-template-rows: 0fr;
+      overflow: hidden;
+      opacity: 0;
+      transition: grid-template-rows 220ms ease, opacity 200ms ease;
+    }
+
+    .chat-thinking-card[data-expanded="true"] .chat-thinking-body {
+      grid-template-rows: 1fr;
+      opacity: 1;
+    }
+
+    .chat-thinking-body > * {
+      min-height: 0;
+    }
+
+    .chat-thinking-text {
+      margin: 0;
+      padding: 12px 14px;
+      border-radius: 18px;
+      background: var(--bg-card);
+      color: var(--text-primary);
+      box-shadow: var(--shadow-sm);
+      font-size: 13px;
+      line-height: 1.65;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .chat-thinking-waiting {
+      margin: 0;
+      padding: 12px 14px;
+      border-radius: 18px;
+      background: var(--bg-card);
+      color: var(--text-secondary);
+      box-shadow: var(--shadow-sm);
+      font-size: 13px;
+      line-height: 1.65;
+    }
+
+    /* ── 工具时间线 ── */
+
+    .chat-thinking-tools {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding-left: 14px;
+    }
+
+    .chat-thinking-tools::before {
+      content: "";
+      position: absolute;
+      left: 25px;
+      top: 14px;
+      bottom: 14px;
+      width: 2px;
+      border-radius: 999px;
+      background: var(--bg-hover);
+      opacity: 0.6;
+    }
+
+    .chat-thinking-tool-item {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .chat-thinking-tool-head {
+      width: 100%;
+      display: grid;
+      grid-template-columns: auto auto minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px;
+      border: none;
+      outline: none;
+      border-radius: 14px;
+      background: var(--bg-card);
+      color: var(--text-primary);
+      box-shadow: var(--shadow-sm);
+      font: inherit;
       font-size: 12px;
       line-height: 1.4;
+      text-align: left;
+      transition: all 200ms ease;
+      touch-action: manipulation;
+    }
+
+    .chat-thinking-tool-head:active {
+      transform: scale(0.98);
+    }
+
+    .chat-thinking-tool-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 999px;
+      background: var(--accent);
+      box-shadow: 0 0 0 3px var(--bg-primary);
+      z-index: 1;
+    }
+
+    .chat-thinking-tool-dot[data-status="running"] {
+      background: var(--accent);
+      animation: chatThinkingToolPulse 1.2s ease-in-out infinite;
+    }
+
+    .chat-thinking-tool-dot[data-status="error"] {
+      background: var(--text-secondary);
+    }
+
+    .chat-thinking-tool-dot[data-status="done"] {
+      background: var(--text-hint);
+    }
+
+    .chat-thinking-tool-icon {
+      width: 14px;
+      height: 14px;
+      flex: 0 0 auto;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
       color: var(--text-secondary);
+    }
+
+    .chat-thinking-tool-title {
+      min-width: 0;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      color: var(--text-secondary);
+    }
+
+    .chat-thinking-tool-arrow {
+      width: 12px;
+      height: 12px;
+      flex: 0 0 auto;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-hint);
+      transition: transform 200ms ease;
+    }
+
+    .chat-thinking-tool-item[data-open="true"] .chat-thinking-tool-arrow {
+      transform: rotate(90deg);
+    }
+
+    .chat-thinking-tool-body {
+      display: grid;
+      grid-template-rows: 0fr;
+      overflow: hidden;
+      opacity: 0;
+      padding-left: 32px;
+      transition: grid-template-rows 220ms ease, opacity 200ms ease;
+    }
+
+    .chat-thinking-tool-item[data-open="true"] .chat-thinking-tool-body {
+      grid-template-rows: 1fr;
+      opacity: 1;
+      padding-top: 4px;
+    }
+
+    .chat-thinking-tool-body > .chat-thinking-tool-detail-text {
+      min-height: 0;
+    }
+
+    .chat-thinking-tool-detail-text {
+      margin: 0;
+      padding: 10px 12px;
+      border-radius: 14px;
+      background: var(--surface-muted);
+      color: var(--text-primary);
+      box-shadow: var(--shadow-sm);
+      font-family: var(--font-main);
+      font-size: 12px;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    @keyframes chatThinkingToolPulse {
+      0%, 100% {
+        opacity: 0.55;
+        transform: scale(0.9);
+      }
+      50% {
+        opacity: 1;
+        transform: scale(1.1);
+      }
     }
 
     /* ── 代码块卡片 ── */
@@ -2835,6 +3050,14 @@ function injectStyle() {
         min-width: 20px;
         padding: 0 5px;
       }
+
+      .chat-thinking-tools::before {
+        left: 23px;
+      }
+
+      .chat-thinking-tool-body {
+        padding-left: 28px;
+      }
     }
 
     /* 修复：对话模式下语音/骰子/猜拳卡片间距适配 */
@@ -2879,7 +3102,10 @@ function injectStyle() {
       .chat-voice-waves i,
       .chat-pending-dot,
       .chat-pending-text,
-      .chat-html-preview-overlay {
+      .chat-html-preview-overlay,
+      .chat-thinking-tool-dot,
+      .chat-thinking-body,
+      .chat-thinking-tool-body {
         animation: none;
         transition: none;
       }
@@ -2889,4 +3115,4 @@ function injectStyle() {
   document.head.appendChild(style);
 }
 
-// 依赖：../../core/storage.js(getData)；../../core/ui.js(showToast,showBottomSheet,hideBottomSheet)；./thread-actions.js(copyThreadMessage,quoteThreadMessage,editThreadMessage,deleteThreadMessage,regenerateThreadMessage,resendThreadMessage,playThreadTTS,stopThreadTTS)；./thinking-chain.js(createThinkingChainButton)
+// 依赖：../../core/storage.js(getData)；../../core/ui.js(showToast,showBottomSheet,hideBottomSheet)；./thread-actions.js(copyThreadMessage,quoteThreadMessage,editThreadMessage,deleteThreadMessage,regenerateThreadMessage,resendThreadMessage,playThreadTTS,stopThreadTTS)；./thinking-chain.js(createThinkingCard,hasThinkingChain)
