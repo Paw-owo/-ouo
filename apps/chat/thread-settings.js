@@ -358,79 +358,224 @@ async function loadWallpaperPreview(el, key) {
 }
 
 // ═══════════════════════════════════════
-// 【API配置】轮换池分组、模型、温度和请求参数
+// 【API配置】入口式，点进弹窗选连接方式、分组、模型
 // ═══════════════════════════════════════
 
 function createApiSection() {
   const api = getApiConfig();
-  const section = card('模型和连接', '控制这个 AI 从轮换池的哪个组、用哪个模型连出去。');
+  const section = card('模型和连接', '控制这个 AI 怎么连到模型。');
 
-  const modeOptions = [
-    ['all', '跟随全局（付费+免费）'],
-    ['paid', '只用付费组'],
-    ['free', '只用免费组'],
-    ['fixed', '固定模型名']
-  ];
+  const statusText = api.useGlobal || api.poolGroup === 'all'
+    ? '跟随轮换池'
+    : `固定 · ${getGroupName(api.poolGroup)} · ${api.model || '未选模型'}`;
 
-  section.append(
-    selectSettingBlock('连接方式', api.poolGroup || 'all', modeOptions, async (value) => {
-      const own = { ...DEFAULT_API_CONFIG, ...(state.character?.apiConfig || {}) };
-      if (value === 'fixed') {
-        await updateCharacter({ apiConfig: { ...own, useGlobal: false, poolGroup: 'fixed', endpointId: '', model: own.model || '' } });
-      } else {
-        await updateCharacter({ apiConfig: { ...own, useGlobal: false, poolGroup: value, endpointId: '', model: '' } });
-      }
-    })
-  );
+  const entry = el('button', 'settings-nav-item api-section-entry');
+  entry.type = 'button';
 
-  if (api.poolGroup === 'fixed') {
-    const picker = modelPicker({
-      models: state.poolModels.map((m) => m.name || m.key),
-      current: api.model || '',
-      emptyText: '还没模型，可以直接手填',
-      onSelect: async (value) => {
-        await updateApiConfig({ model: value });
-      }
-    });
+  const mark = el('span', 'settings-row-icon');
+  mark.append(safeIcon('settings', 20));
 
-    section.append(labelBlock('固定模型名', inputRow('', api.model || '', '例如 gpt-4o-mini 或智谱模型', async (value) => {
-      await updateApiConfig({ model: value });
-      render();
-    })));
+  const text = el('span', 'settings-row-text');
+  text.append(el('strong', '', '连接方式'), el('small', '', statusText));
 
-    section.append(picker);
-  } else {
-    const groupName = state.poolGroups[api.poolGroup]?.name || (api.poolGroup === 'paid' ? '付费组' : '免费组');
-    section.append(el('p', 'settings-note', `现在 TA 会走${groupName}，并按轮换池规则自动切换接口。`));
-  }
+  const arrow = el('span', 'settings-arrow');
+  arrow.append(safeIcon('chevron', 18));
 
-  section.append(
-    labelBlock('温度', rangeBlock(api.temperature ?? 0.85, 0, 2, 0.05, (value) => updateApiConfig({ temperature: Number(value) }))),
-    labelBlock('发散度', rangeBlock(api.topP ?? 1, 0.1, 1, 0.05, (value) => updateApiConfig({ topP: Number(value) }))),
-    labelBlock('最大回复长度', rangeBlock(Math.round(Number(api.maxTokens || 1200) / 128), 1, 94, 1, (value) => updateApiConfig({ maxTokens: Math.round(Number(value)) * 128 }))),
-    labelBlock('新话题倾向', rangeBlock(api.presencePenalty ?? 0, -1, 1, 0.05, (value) => updateApiConfig({ presencePenalty: Number(value) }))),
-    labelBlock('重复惩罚', rangeBlock(api.frequencyPenalty ?? 0, -1, 1, 0.05, (value) => updateApiConfig({ frequencyPenalty: Number(value) }))),
-    labelBlock('等待超时', rangeBlock(Math.round(Number(api.timeout || 45000) / 1000), 10, 180, 5, (value) => updateApiConfig({ timeout: Math.round(Number(value)) * 1000 }))),
-    switchRow('流式输出', api.stream !== false, async (checked) => updateApiConfig({ stream: checked }))
-  );
+  entry.append(mark, text, arrow);
+  entry.addEventListener('click', () => openApiDetailSheet());
 
+  section.append(entry);
   return section;
+}
+
+function getGroupName(groupKey) {
+  return state.poolGroups[groupKey]?.name || (groupKey === 'paid' ? '付费组' : groupKey === 'free' ? '免费组' : '全部');
 }
 
 function getApiConfig() {
   const base = { ...DEFAULT_API_CONFIG, ...(state.character?.apiConfig || {}) };
 
-  // 旧配置迁移：有 endpointId 没 poolGroup 的，默认按有 Key 与否归到付费/固定
-  if (base.poolGroup === 'all' && base.endpointId && !base.useGlobal) {
-    return { ...base, poolGroup: 'fixed' };
+  // 旧配置迁移：有 endpointId 没 poolGroup 的，默认按有 Key 归到付费组
+  if (!base.poolGroup && base.endpointId) {
+    return { ...base, poolGroup: 'paid', useGlobal: false };
   }
 
-  // 默认跟随全局：付费 + 免费
   if (!base.poolGroup || base.useGlobal) {
     return { ...base, useGlobal: true, poolGroup: 'all' };
   }
 
   return base;
+}
+
+function openApiDetailSheet() {
+  const api = getApiConfig();
+  let mode = api.useGlobal || api.poolGroup === 'all' ? 'global' : 'fixed';
+  let poolGroup = api.poolGroup === 'all' ? 'paid' : (api.poolGroup || 'paid');
+  let model = api.model || '';
+
+  const overlay = el('div', 'settings-confirm-overlay');
+
+  const card = el('section', 'settings-confirm-card api-detail-card');
+
+  card.append(
+    el('div', 'settings-confirm-title', '模型和连接'),
+    el('div', 'settings-confirm-desc', '选完会自动保存，不会影响其他角色。')
+  );
+
+  const body = el('div', 'api-detail-body');
+
+  // 模式选择
+  const modeRow = el('div', 'api-detail-segment');
+  const globalBtn = el('button', `api-detail-pill ${mode === 'global' ? 'active' : ''}`, '跟随轮换池');
+  const fixedBtn = el('button', `api-detail-pill ${mode === 'fixed' ? 'active' : ''}`, '固定分组和模型');
+  modeRow.append(globalBtn, fixedBtn);
+  body.append(el('div', 'settings-label', '连接方式'), modeRow);
+
+  // 固定选项容器
+  const fixedBox = el('div', 'api-detail-fixed');
+  body.append(fixedBox);
+
+  function renderFixed() {
+    fixedBox.innerHTML = '';
+
+    // 分组选择
+    const groupRow = el('div', 'api-detail-segment');
+    const paidBtn = el('button', `api-detail-pill ${poolGroup === 'paid' ? 'active' : ''}`, state.poolGroups.paid?.name || '付费组');
+    const freeBtn = el('button', `api-detail-pill ${poolGroup === 'free' ? 'active' : ''}`, state.poolGroups.free?.name || '免费组');
+    groupRow.append(paidBtn, freeBtn);
+    fixedBox.append(el('div', 'settings-label', '固定分组'), groupRow);
+
+    paidBtn.addEventListener('click', () => {
+      poolGroup = 'paid';
+      model = '';
+      renderFixed();
+    });
+
+    freeBtn.addEventListener('click', () => {
+      poolGroup = 'free';
+      model = '';
+      renderFixed();
+    });
+
+    // 模型选择
+    const groupEnabled = state.poolGroups[poolGroup]?.enabled !== false;
+    if (!groupEnabled) {
+      fixedBox.append(el('p', 'settings-note', `这个分组在全局设置里被关掉了，打开后才能用哦。`));
+    }
+
+    const modelLabel = el('div', 'settings-label', '模型');
+    fixedBox.append(modelLabel);
+
+    const modelInput = el('input', 'settings-input');
+    modelInput.type = 'text';
+    modelInput.placeholder = '例如 gpt-4o-mini，也可以从下面选';
+    modelInput.value = model;
+
+    modelInput.addEventListener('change', () => {
+      model = modelInput.value.trim();
+    });
+
+    fixedBox.append(modelInput);
+
+    // 可选模型列表
+    const picker = createPoolModelPicker(model, (value) => {
+      model = value;
+      modelInput.value = value;
+    });
+
+    fixedBox.append(picker);
+  }
+
+  function renderBody() {
+    fixedBox.style.display = mode === 'fixed' ? 'flex' : 'none';
+    if (mode === 'fixed') renderFixed();
+  }
+
+  globalBtn.addEventListener('click', () => {
+    mode = 'global';
+    globalBtn.classList.add('active');
+    fixedBtn.classList.remove('active');
+    renderBody();
+  });
+
+  fixedBtn.addEventListener('click', () => {
+    mode = 'fixed';
+    fixedBtn.classList.add('active');
+    globalBtn.classList.remove('active');
+    renderBody();
+  });
+
+  renderBody();
+
+  card.append(body);
+
+  // 底部按钮
+  const actions = el('div', 'settings-confirm-actions');
+
+  const cancel = el('button', 'settings-confirm-btn ghost', '取消');
+  cancel.type = 'button';
+  cancel.addEventListener('click', () => overlay.remove());
+
+  const confirm = el('button', 'settings-confirm-btn primary', '保存');
+  confirm.type = 'button';
+  confirm.addEventListener('click', async () => {
+    confirm.disabled = true;
+    confirm.textContent = '保存中...';
+
+    const own = { ...DEFAULT_API_CONFIG, ...(state.character?.apiConfig || {}) };
+
+    if (mode === 'global') {
+      await updateCharacter({
+        apiConfig: { ...own, useGlobal: true, poolGroup: 'all', endpointId: '', model: '' }
+      });
+    } else {
+      await updateCharacter({
+        apiConfig: { ...own, useGlobal: false, poolGroup, endpointId: '', model }
+      });
+    }
+
+    overlay.remove();
+    render();
+  });
+
+  actions.append(cancel, confirm);
+  card.append(actions);
+  overlay.append(card);
+
+  overlay.addEventListener('click', (event) => {
+    if (event.target === overlay) overlay.remove();
+  });
+
+  document.body.append(overlay);
+}
+
+function createPoolModelPicker(current, onSelect) {
+  const box = el('div', 'api-pool-model-picker');
+  box.append(el('div', 'api-pool-model-title', '可选模型'));
+
+  const models = state.poolModels.map((m) => m.name || m.key).filter(Boolean);
+
+  if (!models.length) {
+    box.append(el('p', 'settings-note', '轮换池里还没模型，先去设置里加接口吧。'));
+    return box;
+  }
+
+  const list = el('div', 'api-pool-model-list');
+  models.forEach((modelName) => {
+    const btn = el('button', `api-pool-model-chip ${modelName === current ? 'active' : ''}`);
+    btn.type = 'button';
+    btn.append(el('span', '', modelName), el('small', '', modelName === current ? '正在用' : '点我选'));
+    btn.addEventListener('click', () => {
+      onSelect?.(modelName);
+      Array.from(list.children).forEach((child) => child.classList.remove('active'));
+      btn.classList.add('active');
+      btn.querySelector('small').textContent = '正在用';
+    });
+    list.append(btn);
+  });
+
+  box.append(list);
+  return box;
 }
 
 async function updateApiConfig(patch = {}) {
@@ -444,6 +589,237 @@ async function updateApiConfig(patch = {}) {
   });
 }
 
+// ═══════════════════════════════════════
+// 【API配置】入口式，点进弹窗选连接方式、分组、模型
+// ═══════════════════════════════════════
+
+function createApiSection() {
+  const api = getApiConfig();
+  const section = card('模型和连接', '控制这个 AI 怎么连到模型。');
+
+  const statusText = api.useGlobal || api.poolGroup === 'all'
+    ? '跟随轮换池'
+    : `固定 · ${getGroupName(api.poolGroup)} · ${api.model || '未选模型'}`;
+
+  const entry = el('button', 'settings-nav-item api-section-entry');
+  entry.type = 'button';
+
+  const mark = el('span', 'settings-row-icon');
+  mark.append(safeIcon('settings', 20));
+
+  const text = el('span', 'settings-row-text');
+  text.append(el('strong', '', '连接方式'), el('small', '', statusText));
+
+  const arrow = el('span', 'settings-arrow');
+  arrow.append(safeIcon('chevron', 18));
+
+  entry.append(mark, text, arrow);
+  entry.addEventListener('click', () => openApiDetailSheet());
+
+  section.append(entry);
+  return section;
+}
+
+function getGroupName(groupKey) {
+  return state.poolGroups[groupKey]?.name || (groupKey === 'paid' ? '付费组' : groupKey === 'free' ? '免费组' : '全部');
+}
+
+function getApiConfig() {
+  const base = { ...DEFAULT_API_CONFIG, ...(state.character?.apiConfig || {}) };
+
+  // 旧配置迁移：有 endpointId 没 poolGroup 的，默认按有 Key 归到付费组
+  if (!base.poolGroup && base.endpointId) {
+    return { ...base, poolGroup: 'paid', useGlobal: false };
+  }
+
+  if (!base.poolGroup || base.useGlobal) {
+    return { ...base, useGlobal: true, poolGroup: 'all' };
+  }
+
+  return base;
+}
+
+function openApiDetailSheet() {
+  const api = getApiConfig();
+  let mode = api.useGlobal || api.poolGroup === 'all' ? 'global' : 'fixed';
+  let poolGroup = api.poolGroup === 'all' ? 'paid' : (api.poolGroup || 'paid');
+  let model = api.model || '';
+
+  const overlay = el('div', 'settings-confirm-overlay');
+
+  const card = el('section', 'settings-confirm-card api-detail-card');
+
+  card.append(
+    el('div', 'settings-confirm-title', '模型和连接'),
+    el('div', 'settings-confirm-desc', '选完会自动保存，不会影响其他角色。')
+  );
+
+  const body = el('div', 'api-detail-body');
+
+  // 模式选择
+  const modeRow = el('div', 'api-detail-segment');
+  const globalBtn = el('button', `api-detail-pill ${mode === 'global' ? 'active' : ''}`, '跟随轮换池');
+  const fixedBtn = el('button', `api-detail-pill ${mode === 'fixed' ? 'active' : ''}`, '固定分组和模型');
+  modeRow.append(globalBtn, fixedBtn);
+  body.append(el('div', 'settings-label', '连接方式'), modeRow);
+
+  // 固定选项容器
+  const fixedBox = el('div', 'api-detail-fixed');
+  body.append(fixedBox);
+
+  function renderFixed() {
+    fixedBox.innerHTML = '';
+
+    // 分组选择
+    const groupRow = el('div', 'api-detail-segment');
+    const paidBtn = el('button', `api-detail-pill ${poolGroup === 'paid' ? 'active' : ''}`, state.poolGroups.paid?.name || '付费组');
+    const freeBtn = el('button', `api-detail-pill ${poolGroup === 'free' ? 'active' : ''}`, state.poolGroups.free?.name || '免费组');
+    groupRow.append(paidBtn, freeBtn);
+    fixedBox.append(el('div', 'settings-label', '固定分组'), groupRow);
+
+    paidBtn.addEventListener('click', () => {
+      poolGroup = 'paid';
+      model = '';
+      renderFixed();
+    });
+
+    freeBtn.addEventListener('click', () => {
+      poolGroup = 'free';
+      model = '';
+      renderFixed();
+    });
+
+    // 模型选择
+    const groupEnabled = state.poolGroups[poolGroup]?.enabled !== false;
+    if (!groupEnabled) {
+      fixedBox.append(el('p', 'settings-note', `这个分组在全局设置里被关掉了，打开后才能用哦。`));
+    }
+
+    const modelLabel = el('div', 'settings-label', '模型');
+    fixedBox.append(modelLabel);
+
+    const modelInput = el('input', 'settings-input');
+    modelInput.type = 'text';
+    modelInput.placeholder = '例如 gpt-4o-mini，也可以从下面选';
+    modelInput.value = model;
+
+    modelInput.addEventListener('change', () => {
+      model = modelInput.value.trim();
+    });
+
+    fixedBox.append(modelInput);
+
+    // 可选模型列表
+    const picker = createPoolModelPicker(model, (value) => {
+      model = value;
+      modelInput.value = value;
+    });
+
+    fixedBox.append(picker);
+  }
+
+  function renderBody() {
+    fixedBox.style.display = mode === 'fixed' ? 'flex' : 'none';
+    if (mode === 'fixed') renderFixed();
+  }
+
+  globalBtn.addEventListener('click', () => {
+    mode = 'global';
+    globalBtn.classList.add('active');
+    fixedBtn.classList.remove('active');
+    renderBody();
+  });
+
+  fixedBtn.addEventListener('click', () => {
+    mode = 'fixed';
+    fixedBtn.classList.add('active');
+    globalBtn.classList.remove('active');
+    renderBody();
+  });
+
+  renderBody();
+
+  card.append(body);
+
+  // 底部按钮
+  const actions = el('div', 'settings-confirm-actions');
+
+  const cancel = el('button', 'settings-confirm-btn ghost', '取消');
+  cancel.type = 'button';
+  cancel.addEventListener('click', () => overlay.remove());
+
+  const confirm = el('button', 'settings-confirm-btn primary', '保存');
+  confirm.type = 'button';
+  confirm.addEventListener('click', async () => {
+    confirm.disabled = true;
+    confirm.textContent = '保存中...';
+
+    const own = { ...DEFAULT_API_CONFIG, ...(state.character?.apiConfig || {}) };
+
+    if (mode === 'global') {
+      await updateCharacter({
+        apiConfig: { ...own, useGlobal: true, poolGroup: 'all', endpointId: '', model: '' }
+      });
+    } else {
+      await updateCharacter({
+        apiConfig: { ...own, useGlobal: false, poolGroup, endpointId: '', model }
+      });
+    }
+
+    overlay.remove();
+    render();
+  });
+
+  actions.append(cancel, confirm);
+  card.append(actions);
+  overlay.append(card);
+
+  overlay.addEventListener('click', (event) => {
+    if (event.target === overlay) overlay.remove();
+  });
+
+  document.body.append(overlay);
+}
+
+function createPoolModelPicker(current, onSelect) {
+  const box = el('div', 'api-pool-model-picker');
+  box.append(el('div', 'api-pool-model-title', '可选模型'));
+
+  const models = state.poolModels.map((m) => m.name || m.key).filter(Boolean);
+
+  if (!models.length) {
+    box.append(el('p', 'settings-note', '轮换池里还没模型，先去设置里加接口吧。'));
+    return box;
+  }
+
+  const list = el('div', 'api-pool-model-list');
+  models.forEach((modelName) => {
+    const btn = el('button', `api-pool-model-chip ${modelName === current ? 'active' : ''}`);
+    btn.type = 'button';
+    btn.append(el('span', '', modelName), el('small', '', modelName === current ? '正在用' : '点我选'));
+    btn.addEventListener('click', () => {
+      onSelect?.(modelName);
+      Array.from(list.children).forEach((child) => child.classList.remove('active'));
+      btn.classList.add('active');
+      btn.querySelector('small').textContent = '正在用';
+    });
+    list.append(btn);
+  });
+
+  box.append(list);
+  return box;
+}
+
+async function updateApiConfig(patch = {}) {
+  const own = { ...DEFAULT_API_CONFIG, ...(state.character?.apiConfig || {}) };
+  await updateCharacter({
+    apiConfig: {
+      ...own,
+      ...patch,
+      useGlobal: false
+    }
+  });
+}
 // ═══════════════════════════════════════
 // 【记忆设置】控制记忆读取和自动写入权限
 // ═══════════════════════════════════════
@@ -788,28 +1164,6 @@ function selectSettingBlock(label, value, options, onChange) {
   select.addEventListener('change', () => onChange?.(select.value));
 
   return wrap;
-}
-
-function modelPicker({ models = [], current = '', onSelect, emptyText = '还没有模型' }) {
-  const box = el('div', 'api-pool-model-picker');
-  box.append(el('div', 'api-pool-model-title', '模型小篮子'));
-
-  if (!models.length) {
-    box.append(el('p', 'settings-note', emptyText));
-    return box;
-  }
-
-  const list = el('div', 'api-pool-model-list');
-  models.forEach((model) => {
-    const btn = el('button', `api-pool-model-chip ${model === current ? 'active' : ''}`);
-    btn.type = 'button';
-    btn.append(el('span', '', model), el('small', '', model === current ? '正在用' : '点我选'));
-    btn.addEventListener('click', () => onSelect?.(model));
-    list.append(btn);
-  });
-
-  box.append(list);
-  return box;
 }
 
 function actionRow(buttons) {
@@ -1204,6 +1558,71 @@ function injectStyle() {
       white-space:pre-line;
     }
 
+    .settings-nav-item{
+      width:100%;
+      min-height:62px;
+      display:flex;
+      align-items:center;
+      gap:12px;
+      padding:10px;
+      border-radius:18px;
+      background:transparent;
+      color:var(--text-primary);
+      text-align:left;
+      transition:var(--motion);
+    }
+
+    .settings-nav-item:active{
+      transform:scale(var(--press-scale));
+    }
+
+    .api-section-entry{
+      margin-top:10px;
+      background:var(--surface-muted);
+    }
+
+    .settings-row-icon{
+      width:36px;
+      height:36px;
+      flex:0 0 36px;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      overflow:hidden;
+      border-radius:14px;
+      background:var(--accent-light);
+      color:var(--accent-dark);
+    }
+
+    .settings-row-text{
+      flex:1;
+      min-width:0;
+      display:flex;
+      flex-direction:column;
+      gap:2px;
+    }
+
+    .settings-row-text strong{
+      color:var(--text-primary);
+      font-size:var(--font-size-base);
+      font-weight:600;
+      line-height:1.35;
+    }
+
+    .settings-row-text small{
+      color:var(--text-secondary);
+      font-size:var(--font-size-small);
+      line-height:1.45;
+      overflow:hidden;
+      white-space:nowrap;
+      text-overflow:ellipsis;
+    }
+
+    .settings-arrow{
+      flex:0 0 auto;
+      color:var(--text-hint);
+    }
+
     .settings-hero-row{
       display:grid;
       grid-template-columns:auto minmax(0,1fr);
@@ -1312,6 +1731,8 @@ function injectStyle() {
       font-weight:600;
       flex:0 0 auto;
       white-space:nowrap;
+      margin-top:4px;
+      margin-bottom:4px;
     }
 
     .settings-range-row{
@@ -1433,83 +1854,141 @@ function injectStyle() {
       display:block;
     }
 
-    .api-pool-model-picker {
-      margin-top: 12px;
-      padding: 12px;
-      border-radius: 16px;
-      background: var(--surface-muted);
-      box-shadow: var(--shadow-sm);
+    .api-detail-card{
+      width:min(100%,420px);
+      max-height:min(86vh,640px);
+      display:flex;
+      flex-direction:column;
+      padding:22px 22px 18px;
+      overflow:hidden;
     }
 
-    .api-pool-model-title {
-      margin-bottom: 10px;
-      color: var(--text-secondary);
-      font-size: var(--font-size-small);
-      font-weight: 600;
+    .api-detail-body{
+      flex:1 1 auto;
+      min-height:0;
+      overflow-y:auto;
+      overflow-x:hidden;
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+      margin:14px 0 4px;
+      padding-right:4px;
     }
 
-    .api-pool-model-list {
-      display: flex;
-      gap: 8px;
-      overflow-x: auto;
-      padding: 2px 2px 8px;
-      scrollbar-width: none;
-      -webkit-overflow-scrolling: touch;
+    .api-detail-segment{
+      display:flex;
+      gap:8px;
+      margin-top:2px;
+      flex-wrap:wrap;
     }
 
-    .api-pool-model-list::-webkit-scrollbar {
-      display: none;
+    .api-detail-pill{
+      flex:1;
+      min-width:120px;
+      min-height:40px;
+      padding:8px 12px;
+      border-radius:16px;
+      background:var(--surface-muted);
+      color:var(--text-secondary);
+      font-size:var(--font-size-small);
+      font-weight:500;
+      transition:var(--motion);
     }
 
-    .api-pool-model-chip {
-      min-width: 148px;
-      max-width: 220px;
-      min-height: 58px;
-      flex: 0 0 auto;
-      display: flex;
-      flex-direction: column;
-      align-items: flex-start;
-      justify-content: center;
-      gap: 3px;
-      padding: 10px 12px;
-      border: none;
-      outline: none;
-      border-radius: 16px;
-      background: var(--bg-card);
-      color: var(--text-primary);
-      text-align: left;
-      box-shadow: var(--shadow-sm);
-      transition: var(--motion);
+    .api-detail-pill.active{
+      background:var(--accent-light);
+      color:var(--accent-dark);
+      font-weight:600;
     }
 
-    .api-pool-model-chip:active {
-      transform: scale(var(--press-scale));
+    .api-detail-pill:active{
+      transform:scale(var(--press-scale));
     }
 
-    .api-pool-model-chip.active {
-      background: var(--accent-light);
-      color: var(--accent-dark);
+    .api-detail-fixed{
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+      animation:settingsConfirmCardIn 200ms ease;
     }
 
-    .api-pool-model-chip span {
-      width: 100%;
-      overflow: hidden;
-      font-size: var(--font-size-small);
-      font-weight: 600;
-      line-height: 1.3;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+    .api-pool-model-picker{
+      margin-top:10px;
+      padding:12px;
+      border-radius:16px;
+      background:var(--surface-muted);
+      box-shadow:var(--shadow-sm);
     }
 
-    .api-pool-model-chip small {
-      color: var(--text-secondary);
-      font-size: calc(var(--font-size-small) * 0.86);
-      line-height: 1.2;
+    .api-pool-model-title{
+      margin-bottom:10px;
+      color:var(--text-secondary);
+      font-size:var(--font-size-small);
+      font-weight:600;
+    }
+
+    .api-pool-model-list{
+      display:flex;
+      gap:8px;
+      overflow-x:auto;
+      padding:2px 2px 8px;
+      scrollbar-width:none;
+      -webkit-overflow-scrolling:touch;
+    }
+
+    .api-pool-model-list::-webkit-scrollbar{
+      display:none;
+    }
+
+    .api-pool-model-chip{
+      min-width:148px;
+      max-width:220px;
+      min-height:58px;
+      flex:0 0 auto;
+      display:flex;
+      flex-direction:column;
+      align-items:flex-start;
+      justify-content:center;
+      gap:3px;
+      padding:10px 12px;
+      border:none;
+      outline:none;
+      border-radius:16px;
+      background:var(--bg-card);
+      color:var(--text-primary);
+      text-align:left;
+      box-shadow:var(--shadow-sm);
+      transition:var(--motion);
+    }
+
+    .api-pool-model-chip:active{
+      transform:scale(var(--press-scale));
+    }
+
+    .api-pool-model-chip.active{
+      background:var(--accent-light);
+      color:var(--accent-dark);
+    }
+
+    .api-pool-model-chip span{
+      width:100%;
+      overflow:hidden;
+      font-size:var(--font-size-small);
+      font-weight:600;
+      line-height:1.3;
+      text-overflow:ellipsis;
+      white-space:nowrap;
+    }
+
+    .api-pool-model-chip small{
+      color:var(--text-secondary);
+      font-size:calc(var(--font-size-small) * 0.86);
+      line-height:1.2;
     }
 
     .api-pool-model-chip.active small,
-    .api-pool-model-chip.active span {
-      color: var(--accent-dark);
+    .api-pool-model-chip.active span{
+      color:var(--accent-dark);
     }
 
     .settings-confirm-overlay{
@@ -1614,6 +2093,11 @@ function injectStyle() {
         white-space:normal;
       }
 
+      .api-detail-card{
+        width:min(100%,340px);
+        padding:18px;
+      }
+
       .settings-confirm-card{
         width:min(100%,280px);
         padding:22px 18px 16px;
@@ -1627,6 +2111,8 @@ function injectStyle() {
       .settings-switch-dot,
       .settings-switch-dot::after,
       .settings-action-btn,
+      .settings-nav-item,
+      .api-detail-pill,
       .api-pool-model-chip,
       .settings-confirm-btn,
       .settings-confirm-overlay,
