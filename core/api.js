@@ -14,8 +14,8 @@ const API_POOL_LAST_SUCCESS_KEY = 'app_api_pool_last_success';
 const API_POOL_GROUPS_KEY = 'app_api_pool_groups';
 
 const DEFAULT_GROUPS = {
-  paid: { id: 'paid', name: '付费组', type: 'paid' },
-  free: { id: 'free', name: '免费组', type: 'free' }
+  paid: { id: 'paid', name: '付费组', type: 'paid', enabled: true },
+  free: { id: 'free', name: '免费组', type: 'free', enabled: true }
 };
 
 const MODEL_ALIAS_RULES = [
@@ -235,7 +235,12 @@ export function getPoolGroups() {
 }
 
 export function setPoolGroups(groups) {
-  setData(API_POOL_GROUPS_KEY, groups || DEFAULT_GROUPS);
+  const current = getPoolGroups();
+  const next = {
+    paid: { ...DEFAULT_GROUPS.paid, ...current.paid, ...(groups?.paid || {}) },
+    free: { ...DEFAULT_GROUPS.free, ...current.free, ...(groups?.free || {}) }
+  };
+  setData(API_POOL_GROUPS_KEY, next);
 }
 
 async function ensureApiPoolMigrated() {
@@ -988,8 +993,12 @@ export async function callAPI({
 } = {}) {
   await ensureApiPoolMigrated();
   const poolItems = await getApiPoolItems();
-  const paidItems = poolItems.filter((item) => item.groupType !== 'free');
-  const freeItems = poolItems.filter((item) => item.groupType === 'free');
+  const groups = getPoolGroups();
+  const paidEnabled = groups.paid?.enabled !== false;
+  const freeEnabled = groups.free?.enabled !== false;
+
+  const paidItems = paidEnabled ? poolItems.filter((item) => item.groupType !== 'free') : [];
+  const freeItems = freeEnabled ? poolItems.filter((item) => item.groupType === 'free') : [];
   const paidSources = buildPoolCandidateSources(paidItems, model, 'paid');
   const freeSources = buildPoolCandidateSources(freeItems, model, 'free');
 
@@ -1314,3 +1323,4 @@ export async function testAllPoolEndpoints() {
 }
 
 // 依赖：./storage.js(getData,setData,getAllDB,setDB,deleteDB,getNow,generateId)
+
