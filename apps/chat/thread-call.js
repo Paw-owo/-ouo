@@ -566,7 +566,9 @@ function el(tag, className = '', text = '') {
 }
 
 function injectStyle() {
-  if (document.getElementById(CALL_STYLE_ID)) return;
+  // 修复：先删旧 style 再建新的，避免 CSS 缓存导致后续修改不生效
+  const old = document.getElementById(CALL_STYLE_ID);
+  if (old) old.remove();
 
   const style = document.createElement('style');
   style.id = CALL_STYLE_ID;
@@ -840,8 +842,8 @@ function injectStyle() {
   document.head.appendChild(style);
 }
 
-// 改了什么：1) buildCallMessages 系统提示词从"你扮演/你正在"改为"我是/我正在"第一人称；2) summarizeCall 总结提示词从"请把"改为"我正在把"第一人称；3) sendCallText 失败时不往 callLogs 写假AI回复，改为只 showToast。
-// 原来效果：AI系统指令用第二人称命令式；失败时写一条"我刚刚没听清"假回复进对话记录污染上下文。
-// 现在效果：全部第一人称；失败时只弹提示，不污染对话记录。
+// 改了什么：1) buildCallMessages 系统提示词从"你扮演/你正在"改为"我是/我正在"第一人称；2) summarizeCall 总结提示词从"请把"改为"我正在把"第一人称；3) sendCallText 失败时不往 callLogs 写假AI回复，改为只 showToast；4) injectStyle 从缓存跳过改为先删旧再建新。
+// 原来效果：AI系统指令用第二人称命令式；失败时写一条"我刚刚没听清"假回复进对话记录污染上下文；CSS注入缓存导致后续修改不生效。
+// 现在效果：全部第一人称；失败时只弹提示，不污染对话记录；CSS每次刷新。
 // 会不会影响其他文件：不会。导出接口（mountThreadCall/unmountThreadCall）不变，panels.js 调用方式不受影响。
 // 依赖：../../core/storage.js(generateId,getNow,setDB,getByIndexDB)；../../core/ui.js(createIcon,showToast)；../../core/api.js(silentRequest)；../../core/tts.js(playTTS,stopAll)
