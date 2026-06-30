@@ -78,13 +78,9 @@ function showToolsSheet(state, options) {
       var text = payload.note ? '转了 ' + payload.amount + '，' + payload.note : '转了 ' + payload.amount;
       await sendThreadMessage(state, text);
     },
-    onVoiceText: async function(text) {
-      await sendThreadMessage(state, text);
-    },
     onClose: function() {
       closeThreadToolsPanel();
     },
-    // 返回按钮：直接关抽屉回消息
     onBackToTools: function() {
       hideBottomSheet();
       panelState.toolsSheetEl = null;
