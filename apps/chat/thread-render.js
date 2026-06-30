@@ -388,6 +388,7 @@ function createErrorBubble(message) {
 // ───────────────────
 // 语音消息卡片
 // ───────────────────
+// 修复：去掉 360ms 定时器，改为等 playThreadTTS 的 Promise 结束才关波纹动画
 
 function createVoiceMessageCard(state, message) {
   const card = el('section', 'chat-voice-card');
@@ -414,15 +415,20 @@ function createVoiceMessageCard(state, message) {
   transcript.appendChild(createTextBlock(getVoiceTranscript(message) || '这条语音还没有文字内容。'));
 
   bar.addEventListener('click', async () => {
+    // 播放中再点击 → 暂停
+    if (card.dataset.playing === 'true') {
+      stopThreadTTS();
+      card.dataset.playing = 'false';
+      return;
+    }
+
     card.dataset.playing = 'true';
     try {
       await playThreadTTS(state, message);
     } catch (_) {
       showToast('语音播放失败');
     } finally {
-      window.setTimeout(() => {
-        card.dataset.playing = 'false';
-      }, 360);
+      card.dataset.playing = 'false';
     }
   });
 
@@ -499,7 +505,6 @@ function createShopCard(message) {
   card.appendChild(body);
   return card;
 }
-
 // ───────────────────
 // 表情包内容
 // ───────────────────
@@ -1204,20 +1209,6 @@ function normalizeText(value) {
   }
 
   return String(value || '').replace(/\s+/g, ' ').trim();
-}
-
-function normalizeMultiline(value) {
-  if (typeof value === 'string') return value.trim();
-
-  if (value && typeof value === 'object') {
-    try {
-      return JSON.stringify(value, null, 2);
-    } catch (_) {
-      return '';
-    }
-  }
-
-  return String(value || '').trim();
 }
 
 function trimOneLine(text, max) {
@@ -3118,4 +3109,3 @@ function injectStyle() {
 }
 
 // 依赖：../../core/storage.js(getData)；../../core/ui.js(showToast,showBottomSheet,hideBottomSheet)；./thread-actions.js(copyThreadMessage,quoteThreadMessage,editThreadMessage,deleteThreadMessage,regenerateThreadMessage,resendThreadMessage,playThreadTTS,stopThreadTTS)；./thinking-chain.js(createThinkingCard,hasThinkingChain)
-
