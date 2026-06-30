@@ -24,6 +24,68 @@ const RENDER_STYLE_ID = 'chat-thread-render-style';
 const TIME_GAP_MS = 5 * 60 * 1000;
 
 // ═══════════════════════════════════════
+// 【全局语音播放管理器】同时只放一个
+// ═══════════════════════════════════════
+
+const voicePlayer = {
+  currentCard: null,
+  currentMessageId: '',
+
+  play(card) {
+    if (this.currentCard && this.currentCard !== card) {
+      this.currentCard.dataset.playing = 'false';
+    }
+    this.currentCard = card;
+    this.currentMessageId = card?.dataset?.messageId || '';
+    if (card) card.dataset.playing = 'true';
+  },
+
+  pause() {
+    if (this.currentCard) {
+      this.currentCard.dataset.playing = 'false';
+    }
+  },
+
+  stop() {
+    if (this.currentCard) {
+      this.currentCard.dataset.playing = 'false';
+    }
+    this.currentCard = null;
+    this.currentMessageId = '';
+  },
+
+  isPlaying(messageId) {
+    return this.currentMessageId === messageId && this.currentCard?.dataset?.playing === 'true';
+  }
+};
+
+// ═══════════════════════════════════════
+// 【猫爪图标】粗线条圆头，走 --accent
+// ═══════════════════════════════════════
+
+function createPawIcon() {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('width', '16');
+  svg.setAttribute('height', '16');
+  svg.setAttribute('fill', 'none');
+  svg.setAttribute('stroke', 'currentColor');
+  svg.setAttribute('stroke-width', '2');
+  svg.setAttribute('stroke-linecap', 'round');
+  svg.setAttribute('stroke-linejoin', 'round');
+  svg.setAttribute('aria-hidden', 'true');
+  svg.innerHTML = `
+    <ellipse cx="6.5" cy="9" rx="1.8" ry="2.4" transform="rotate(-15 6.5 9)"/>
+    <ellipse cx="12" cy="7" rx="1.8" ry="2.6"/>
+    <ellipse cx="17.5" cy="9" rx="1.8" ry="2.4" transform="rotate(15 17.5 9)"/>
+    <ellipse cx="4" cy="13.5" rx="1.5" ry="2" transform="rotate(-20 4 13.5)"/>
+    <ellipse cx="20" cy="13.5" rx="1.5" ry="2" transform="rotate(20 20 13.5)"/>
+    <path d="M8 17.5c0-2.5 1.8-4.5 4-4.5s4 2 4 4.5c0 2-1.5 3.5-4 3.5s-4-1.5-4-3.5z"/>
+  `;
+  return svg;
+}
+
+// ═══════════════════════════════════════
 // 【主渲染入口】绘制消息列表
 // ═══════════════════════════════════════
 
@@ -386,19 +448,19 @@ function createErrorBubble(message) {
 }
 
 // ───────────────────
-// 语音消息卡片
+// 语音消息卡片（猫爪图标 + 全局播放管理 + 暂停/继续）
 // ───────────────────
-// 修复：去掉 360ms 定时器，改为等 playThreadTTS 的 Promise 结束才关波纹动画
 
 function createVoiceMessageCard(state, message) {
   const card = el('section', 'chat-voice-card');
+  card.dataset.messageId = message.id || '';
   card.dataset.open = 'false';
-  card.dataset.playing = 'false';
+  card.dataset.playing = voicePlayer.isPlaying(message.id) ? 'true' : 'false';
 
   const bar = safeButton('chat-voice-bar', '播放语音');
 
   const playIcon = el('span', 'chat-voice-play');
-  playIcon.appendChild(createLineIcon('volume'));
+  playIcon.appendChild(createPawIcon());
 
   const waves = el('span', 'chat-voice-waves');
   for (let index = 0; index < 5; index += 1) {
@@ -414,22 +476,38 @@ function createVoiceMessageCard(state, message) {
   const transcript = el('div', 'chat-voice-transcript');
   transcript.appendChild(createTextBlock(getVoiceTranscript(message) || '这条语音还没有文字内容。'));
 
-  bar.addEventListener('click', async () => {
-    // 播放中再点击 → 暂停
-    if (card.dataset.playing === 'true') {
-      stopThreadTTS();
+  let isPlaying = card.dataset.playing === 'true';
+
+  bar.addEventListener('click', () => {
+    if (isPlaying) {
+      // 当前正在播放 → 暂停
+      isPlaying = false;
       card.dataset.playing = 'false';
+      voicePlayer.pause();
+      stopThreadTTS();
       return;
     }
 
-    card.dataset.playing = 'true';
-    try {
-      await playThreadTTS(state, message);
-    } catch (_) {
-      showToast('语音播放失败');
-    } finally {
-      card.dataset.playing = 'false';
-    }
+    // 开始播放：先停掉全局其他语音
+    stopThreadTTS();
+
+    // 如果之前有播放中的卡片，标记为停止
+    voicePlayer.stop();
+
+    // 标记当前卡片为播放中
+    isPlaying = true;
+    voicePlayer.play(card);
+
+    // fire-and-forget：不 await，播放状态完全由点击控制
+    playThreadTTS(state, message).catch(() => {
+      // 只有失败时才恢复状态
+      if (voicePlayer.currentCard === card) {
+        isPlaying = false;
+        card.dataset.playing = 'false';
+        voicePlayer.stop();
+        showToast('语音播放失败');
+      }
+    });
   });
 
   arrow.addEventListener('click', (event) => {
@@ -459,7 +537,6 @@ function getVoiceDurationText(message) {
   const guessed = Math.max(1, Math.ceil(text.length / 5));
   return `${Math.min(60, guessed)}"`;
 }
-
 // ───────────────────
 // 转账和商店小卡片
 // ───────────────────
@@ -505,6 +582,7 @@ function createShopCard(message) {
   card.appendChild(body);
   return card;
 }
+
 // ───────────────────
 // 表情包内容
 // ───────────────────
@@ -1084,29 +1162,6 @@ function splitCodeBlocks(text) {
   return result;
 }
 
-function normalizeToolCalls(value) {
-  if (Array.isArray(value)) return value.filter(Boolean);
-  if (value === null || value === undefined || value === false) return [];
-  if (typeof value === 'string') return value.trim() ? [value.trim()] : [];
-  return [value].filter(Boolean);
-}
-
-function getToolStatus(tool) {
-  const status = normalizeText(tool.status || tool.state);
-  if (['running', 'loading', 'pending', 'calling'].includes(status)) return 'running';
-  if (['error', 'failed', 'fail'].includes(status)) return 'error';
-  return 'done';
-}
-
-function getToolStatusText(tool) {
-  const status = getToolStatus(tool);
-  if (status === 'running') return '调用中...';
-  if (status === 'error') return '没有成功';
-
-  const summary = normalizeText(tool.summary || tool.resultSummary || tool.result || tool.output || tool.content);
-  return summary ? trimOneLine(summary, 34) : '已完成';
-}
-
 function getPreviewText(message) {
   if (!message) return '';
   if (message.type === 'image') return '[图片]';
@@ -1132,7 +1187,7 @@ function estimateMessageTokens(message) {
     message.quoteText || '',
     message.thinking || '',
     message.stickerDescription || '',
-    normalizeToolCalls(message.toolCalls).map((tool) => normalizeToolValue(tool)).join(' ')
+    normalizeToolCallsForTokens(message.toolCalls).map((tool) => normalizeToolValue(tool)).join(' ')
   ].join('\n');
 
   return estimateTokens(text);
@@ -1182,6 +1237,11 @@ function getRpsOutcomeLabel(outcome) {
   return outcome;
 }
 
+function normalizeToolCallsForTokens(value) {
+  if (Array.isArray(value)) return value.filter(Boolean);
+  return [];
+}
+
 function normalizeToolValue(value) {
   if (typeof value === 'string') return value.trim();
 
@@ -1195,26 +1255,6 @@ function normalizeToolValue(value) {
 
   if (value === null || value === undefined) return '';
   return String(value).trim();
-}
-
-function normalizeText(value) {
-  if (typeof value === 'string') return value.replace(/\s+/g, ' ').trim();
-
-  if (value && typeof value === 'object') {
-    try {
-      return JSON.stringify(value).replace(/\s+/g, ' ').trim();
-    } catch (_) {
-      return '';
-    }
-  }
-
-  return String(value || '').replace(/\s+/g, ' ').trim();
-}
-
-function trimOneLine(text, max) {
-  const clean = normalizeText(text);
-  if (!clean) return '';
-  return clean.length > max ? `${clean.slice(0, max)}…` : clean;
 }
 
 function normalizeCodeLang(lang) {
@@ -2158,7 +2198,7 @@ function injectStyle() {
     .chat-thinking-tool-head {
       width: 100%;
       display: grid;
-      grid-template-columns: auto auto minmax(0, 1fr) auto;
+      grid-template-columns: auto auto minmax(0,1fr) auto;
       align-items: center;
       gap: 8px;
       padding: 6px 10px;
