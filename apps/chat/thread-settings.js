@@ -16,6 +16,7 @@ import {
 } from '../../core/storage.js';
 
 import { createIcon, showToast } from '../../core/ui.js';
+import { getApiPoolItems, getMergedPoolModels, getPoolGroups } from '../../core/api.js';
 
 // ═══════════════════════════════════════
 // 【基础状态】保存设置页运行时状态
@@ -50,7 +51,7 @@ const DEFAULT_CHAT_CONFIG = {
 
 const DEFAULT_API_CONFIG = {
   useGlobal: true,
-  endpointId: '',
+  poolGroup: 'all',
   model: '',
   temperature: 0.85,
   topP: 1,
@@ -80,6 +81,8 @@ const state = {
   models: [],
   userProfiles: [],
   worldbooks: [],
+  poolModels: [],
+  poolGroups: { paid: { name: '付费组' }, free: { name: '免费组' } },
   config: { ...DEFAULT_CHAT_CONFIG },
   saving: false
 };
@@ -115,6 +118,8 @@ export function unmountThreadSettings() {
   state.models = [];
   state.userProfiles = [];
   state.worldbooks = [];
+  state.poolModels = [];
+  state.poolGroups = { paid: { name: '付费组' }, free: { name: '免费组' } };
   state.config = { ...DEFAULT_CHAT_CONFIG };
   state.saving = false;
 }
@@ -136,6 +141,8 @@ async function loadData() {
   state.models = models;
   state.userProfiles = loadUserProfiles();
   state.worldbooks = normalizeArray(await getAllDB('worldbook').catch(() => []));
+  state.poolModels = await getMergedPoolModels().catch(() => []);
+  state.poolGroups = getPoolGroups();
 }
 
 function getChatConfig() {
@@ -221,10 +228,9 @@ function createHeader() {
     el('div', 'thread-settings-subtitle', state.character?.name ? `正在调整 ${state.character.name}` : '当前聊天')
   );
 
-  const save = el('button', 'thread-settings-save', '保存');
+  const save = el('button', 'thread-settings-save', '已自动保存');
   save.type = 'button';
-  save.disabled = state.saving;
-  save.addEventListener('click', () => saveAll());
+  save.disabled = true;
 
   header.append(back, title, save);
   return header;
@@ -352,124 +358,79 @@ async function loadWallpaperPreview(el, key) {
 }
 
 // ═══════════════════════════════════════
-// 【API配置】模型、中转站、温度和请求参数
+// 【API配置】轮换池分组、模型、温度和请求参数
 // ═══════════════════════════════════════
 
 function createApiSection() {
   const api = getApiConfig();
-  const followGlobal = api.useGlobal !== false;
-  const section = card('模型和中转站', '控制这个 AI 用哪个连接、模型和回复参数。');
+  const section = card('模型和连接', '控制这个 AI 从轮换池的哪个组、用哪个模型连出去。');
+
+  const modeOptions = [
+    ['all', '跟随全局（付费+免费）'],
+    ['paid', '只用付费组'],
+    ['free', '只用免费组'],
+    ['fixed', '固定模型名']
+  ];
 
   section.append(
-    switchRow('跟随全局模型', followGlobal, async (checked) => {
+    selectSettingBlock('连接方式', api.poolGroup || 'all', modeOptions, async (value) => {
       const own = { ...DEFAULT_API_CONFIG, ...(state.character?.apiConfig || {}) };
-      if (checked) {
-        await updateCharacter({ apiConfig: { ...own, useGlobal: true } });
+      if (value === 'fixed') {
+        await updateCharacter({ apiConfig: { ...own, useGlobal: false, poolGroup: 'fixed', endpointId: '', model: own.model || '' } });
       } else {
-        const global = getGlobalApiEndpoint();
-        await updateCharacter({
-          apiConfig: {
-            ...own,
-            useGlobal: false,
-            endpointId: global ? String(global.id || '') : own.endpointId,
-            model: global?.model || own.model
-          }
-        });
+        await updateCharacter({ apiConfig: { ...own, useGlobal: false, poolGroup: value, endpointId: '', model: '' } });
       }
     })
   );
 
-  if (!followGlobal) {
-    section.append(
-      selectSettingBlock('中转站', api.endpointId || '', [
-        ['', '默认中转站'],
-        ...state.endpoints.map((item, index) => [
-          String(item.id || item.key || item.name || index),
-          item.name || item.title || item.url || `中转站 ${index + 1}`
-        ])
-      ], async (value) => updateApiConfig({ useGlobal: false, endpointId: value }))
-    );
+  if (api.poolGroup === 'fixed') {
+    const picker = modelPicker({
+      models: state.poolModels.map((m) => m.name || m.key),
+      current: api.model || '',
+      emptyText: '还没模型，可以直接手填',
+      onSelect: async (value) => {
+        await updateApiConfig({ model: value });
+      }
+    });
 
-    const modelOptions = getModelOptions(api.endpointId);
-    if (modelOptions.length) {
-      section.append(
-        selectSettingBlock('模型名称', api.model || '', [
-          ['', '请选择模型'],
-          ...modelOptions.map((m) => [m, m])
-        ], async (value) => updateApiConfig({ useGlobal: false, model: value }))
-      );
-    } else {
-      section.append(
-        labelBlock('模型名称', inputRow('', api.model || '', '例如 gpt-4o-mini', async (value) => updateApiConfig({ useGlobal: false, model: value })))
-      );
-    }
+    section.append(labelBlock('固定模型名', inputRow('', api.model || '', '例如 gpt-4o-mini 或智谱模型', async (value) => {
+      await updateApiConfig({ model: value });
+      render();
+    })));
+
+    section.append(picker);
+  } else {
+    const groupName = state.poolGroups[api.poolGroup]?.name || (api.poolGroup === 'paid' ? '付费组' : '免费组');
+    section.append(el('p', 'settings-note', `现在 TA 会走${groupName}，并按轮换池规则自动切换接口。`));
   }
 
   section.append(
-    labelBlock('温度', rangeBlock(api.temperature ?? 0.85, 0, 2, 0.05, (value) => updateApiConfig({
-      temperature: Number(value),
-      ...(followGlobal ? {} : { useGlobal: false })
-    }))),
-    labelBlock('发散度', rangeBlock(api.topP ?? 1, 0.1, 1, 0.05, (value) => updateApiConfig({
-      topP: Number(value),
-      ...(followGlobal ? {} : { useGlobal: false })
-    }))),
-    labelBlock('最大回复长度', rangeBlock(Math.round(Number(api.maxTokens || 1200) / 128), 1, 94, 1, (value) => updateApiConfig({
-      maxTokens: Math.round(Number(value)) * 128,
-      ...(followGlobal ? {} : { useGlobal: false })
-    }))),
-    labelBlock('新话题倾向', rangeBlock(api.presencePenalty ?? 0, -1, 1, 0.05, (value) => updateApiConfig({
-      presencePenalty: Number(value),
-      ...(followGlobal ? {} : { useGlobal: false })
-    }))),
-    labelBlock('重复惩罚', rangeBlock(api.frequencyPenalty ?? 0, -1, 1, 0.05, (value) => updateApiConfig({
-      frequencyPenalty: Number(value),
-      ...(followGlobal ? {} : { useGlobal: false })
-    }))),
-    labelBlock('等待超时', rangeBlock(Math.round(Number(api.timeout || 45000) / 1000), 10, 180, 5, (value) => updateApiConfig({
-      timeout: Math.round(Number(value)) * 1000,
-      ...(followGlobal ? {} : { useGlobal: false })
-    }))),
-    switchRow('流式输出', api.stream !== false, async (checked) => updateApiConfig({
-      stream: checked,
-      ...(followGlobal ? {} : { useGlobal: false })
-    }))
+    labelBlock('温度', rangeBlock(api.temperature ?? 0.85, 0, 2, 0.05, (value) => updateApiConfig({ temperature: Number(value) }))),
+    labelBlock('发散度', rangeBlock(api.topP ?? 1, 0.1, 1, 0.05, (value) => updateApiConfig({ topP: Number(value) }))),
+    labelBlock('最大回复长度', rangeBlock(Math.round(Number(api.maxTokens || 1200) / 128), 1, 94, 1, (value) => updateApiConfig({ maxTokens: Math.round(Number(value)) * 128 }))),
+    labelBlock('新话题倾向', rangeBlock(api.presencePenalty ?? 0, -1, 1, 0.05, (value) => updateApiConfig({ presencePenalty: Number(value) }))),
+    labelBlock('重复惩罚', rangeBlock(api.frequencyPenalty ?? 0, -1, 1, 0.05, (value) => updateApiConfig({ frequencyPenalty: Number(value) }))),
+    labelBlock('等待超时', rangeBlock(Math.round(Number(api.timeout || 45000) / 1000), 10, 180, 5, (value) => updateApiConfig({ timeout: Math.round(Number(value)) * 1000 }))),
+    switchRow('流式输出', api.stream !== false, async (checked) => updateApiConfig({ stream: checked }))
   );
 
   return section;
 }
 
-function getModelOptions(endpointId) {
-  const ep = state.endpoints.find((e) => String(e.id) === String(endpointId || ''));
-  const list = Array.isArray(ep?.modelList) ? ep.modelList : [];
-  return list;
-}
-
 function getApiConfig() {
   const base = { ...DEFAULT_API_CONFIG, ...(state.character?.apiConfig || {}) };
 
-  if (base.useGlobal !== false) {
-    const global = getGlobalApiEndpoint();
-    if (global) {
-      return {
-        ...base,
-        useGlobal: true,
-        endpointId: String(global.id || ''),
-        endpoint: global.endpoint || '',
-        apiKey: global.apiKey || '',
-        model: global.model || base.model || ''
-      };
-    }
+  // 旧配置迁移：有 endpointId 没 poolGroup 的，默认按有 Key 与否归到付费/固定
+  if (base.poolGroup === 'all' && base.endpointId && !base.useGlobal) {
+    return { ...base, poolGroup: 'fixed' };
+  }
+
+  // 默认跟随全局：付费 + 免费
+  if (!base.poolGroup || base.useGlobal) {
+    return { ...base, useGlobal: true, poolGroup: 'all' };
   }
 
   return base;
-}
-
-function getGlobalApiEndpoint() {
-  const settings = getData('app_settings') || {};
-  const endpoints = Array.isArray(settings.apiEndpoints) ? settings.apiEndpoints : [];
-  const id = settings.defaultApiEndpointId || '';
-  return endpoints.find((item) => item.id === id) || endpoints[0] || null;
 }
 
 async function updateApiConfig(patch = {}) {
@@ -477,7 +438,8 @@ async function updateApiConfig(patch = {}) {
   await updateCharacter({
     apiConfig: {
       ...own,
-      ...patch
+      ...patch,
+      useGlobal: false
     }
   });
 }
@@ -828,6 +790,28 @@ function selectSettingBlock(label, value, options, onChange) {
   return wrap;
 }
 
+function modelPicker({ models = [], current = '', onSelect, emptyText = '还没有模型' }) {
+  const box = el('div', 'api-pool-model-picker');
+  box.append(el('div', 'api-pool-model-title', '模型小篮子'));
+
+  if (!models.length) {
+    box.append(el('p', 'settings-note', emptyText));
+    return box;
+  }
+
+  const list = el('div', 'api-pool-model-list');
+  models.forEach((model) => {
+    const btn = el('button', `api-pool-model-chip ${model === current ? 'active' : ''}`);
+    btn.type = 'button';
+    btn.append(el('span', '', model), el('small', '', model === current ? '正在用' : '点我选'));
+    btn.addEventListener('click', () => onSelect?.(model));
+    list.append(btn);
+  });
+
+  box.append(list);
+  return box;
+}
+
 function actionRow(buttons) {
   const row = el('div', 'settings-actions');
   buttons.forEach((btn) => row.append(btn));
@@ -1094,7 +1078,8 @@ function safeIcon(name, size = 18) {
 // ═══════════════════════════════════════
 
 function injectStyle() {
-  if (document.getElementById(STYLE_ID)) return;
+  const old = document.getElementById(STYLE_ID);
+  if (old) old.remove();
 
   const style = document.createElement('style');
   style.id = STYLE_ID;
@@ -1166,23 +1151,23 @@ function injectStyle() {
     }
 
     .thread-settings-save{
-      min-width:62px;
+      min-width:92px;
       height:40px;
       padding:0 14px;
       border-radius:16px;
-      background:var(--accent);
-      color:var(--bubble-user-text);
-      box-shadow:var(--shadow-sm);
+      background:transparent;
+      color:var(--text-secondary);
       font:inherit;
       font-size:var(--font-size-small);
-      font-weight:600;
+      font-weight:500;
       transition:var(--motion);
       white-space:nowrap;
       flex:0 0 auto;
+      cursor:default;
     }
 
-    .thread-settings-save:active{
-      transform:scale(var(--press-scale));
+    .thread-settings-save:disabled{
+      opacity:0.7;
     }
 
     .thread-settings-scroll{
@@ -1448,6 +1433,85 @@ function injectStyle() {
       display:block;
     }
 
+    .api-pool-model-picker {
+      margin-top: 12px;
+      padding: 12px;
+      border-radius: 16px;
+      background: var(--surface-muted);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .api-pool-model-title {
+      margin-bottom: 10px;
+      color: var(--text-secondary);
+      font-size: var(--font-size-small);
+      font-weight: 600;
+    }
+
+    .api-pool-model-list {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding: 2px 2px 8px;
+      scrollbar-width: none;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .api-pool-model-list::-webkit-scrollbar {
+      display: none;
+    }
+
+    .api-pool-model-chip {
+      min-width: 148px;
+      max-width: 220px;
+      min-height: 58px;
+      flex: 0 0 auto;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      justify-content: center;
+      gap: 3px;
+      padding: 10px 12px;
+      border: none;
+      outline: none;
+      border-radius: 16px;
+      background: var(--bg-card);
+      color: var(--text-primary);
+      text-align: left;
+      box-shadow: var(--shadow-sm);
+      transition: var(--motion);
+    }
+
+    .api-pool-model-chip:active {
+      transform: scale(var(--press-scale));
+    }
+
+    .api-pool-model-chip.active {
+      background: var(--accent-light);
+      color: var(--accent-dark);
+    }
+
+    .api-pool-model-chip span {
+      width: 100%;
+      overflow: hidden;
+      font-size: var(--font-size-small);
+      font-weight: 600;
+      line-height: 1.3;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .api-pool-model-chip small {
+      color: var(--text-secondary);
+      font-size: calc(var(--font-size-small) * 0.86);
+      line-height: 1.2;
+    }
+
+    .api-pool-model-chip.active small,
+    .api-pool-model-chip.active span {
+      color: var(--accent-dark);
+    }
+
     .settings-confirm-overlay{
       position:fixed;
       inset:0;
@@ -1563,6 +1627,7 @@ function injectStyle() {
       .settings-switch-dot,
       .settings-switch-dot::after,
       .settings-action-btn,
+      .api-pool-model-chip,
       .settings-confirm-btn,
       .settings-confirm-overlay,
       .settings-confirm-card{
@@ -1575,4 +1640,5 @@ function injectStyle() {
   document.head.appendChild(style);
 }
 
-// 依赖：../../core/storage.js(getData,setData,removeData,getDB,setDB,getAllDB,getByIndexDB,deleteDB,getNow)；../../core/ui.js(createIcon,showToast)
+// 依赖：../../core/storage.js / ../../core/api.js(getApiPoolItems,getMergedPoolModels,getPoolGroups) / ../../core/ui.js(createIcon,showToast)
+
