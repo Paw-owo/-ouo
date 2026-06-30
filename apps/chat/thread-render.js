@@ -23,6 +23,9 @@ import {
 const RENDER_STYLE_ID = 'chat-thread-render-style';
 const TIME_GAP_MS = 5 * 60 * 1000;
 
+// 缓存已解析的文本结构，减少流式抖动
+const parsedCache = new WeakMap();
+
 // ═══════════════════════════════════════
 // 【全局语音播放管理器】同时只放一个
 // ═══════════════════════════════════════
@@ -130,6 +133,54 @@ export function renderThreadMessages(state, pageEl) {
 }
 
 // ═══════════════════════════════════════
+// 【局部更新】只更新某条消息的文本和思考
+// ═══════════════════════════════════════
+
+export function updateMessageContent(state, pageEl, messageId, content, thinking) {
+  const list = pageEl.querySelector('#chat-thread-list');
+  if (!list) return;
+
+  const row = list.querySelector(`.chat-message-row[data-message-id="${messageId}"]`);
+  if (!row) {
+    renderThreadMessages(state, pageEl);
+    return;
+  }
+
+  const message = findMessageById(state, messageId);
+  if (!message) return;
+
+  const updated = { ...message, content: String(content ?? message.content) };
+  if (thinking !== undefined) {
+    updated.thinking = String(thinking);
+  }
+
+  // 更新气泡正文，减少抖动
+  const bubble = row.querySelector('.chat-message-bubble.role-ai');
+  if (bubble) {
+    const oldContent = bubble.querySelector('.chat-message-content');
+    if (oldContent) {
+      const newContent = createMessageContent(state, updated);
+      // 流式过程中保留外层容器，只替换内部结构
+      oldContent.replaceChildren(...Array.from(newContent.childNodes));
+    }
+  }
+
+  // 更新思维链，保留展开状态
+  updateReasoningInRow(row, state, updated);
+
+  // 滚动到底部（如果已经在底部附近）
+  const nearBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 180;
+  if (nearBottom) {
+    list.scrollTop = list.scrollHeight;
+  }
+}
+
+function findMessageById(state, messageId) {
+  const list = state.mode === 'group' ? state.groupMessages : state.messages;
+  return list.find((item) => item.id === messageId) || null;
+}
+
+// ═══════════════════════════════════════
 // 【消息行】单条消息的完整结构
 // ═══════════════════════════════════════
 
@@ -140,35 +191,76 @@ function createMessageRow(state, message, pageEl) {
   row.dataset.messageId = message.id || '';
   row.dataset.role = role;
 
-  if (role === 'assistant' && hasThinkingChain(message)) {
-    row.appendChild(createReasoningStack(state, message, mode));
-  }
-
-  if (role === 'assistant' && mode === 'bubble' && !message.isPending && !message.isError) {
-    const chunks = splitAIBubbleChunks(message);
-    if (chunks.length > 1) {
-      chunks.forEach((chunkText, chunkIndex) => {
-        const chunkBody = el('div', 'chat-message-body role-assistant');
-        chunkBody.append(
-          createMessageAuthor(state, message),
-          createSingleBubbleChunk(state, message, chunkText, chunkIndex === 0, chunkIndex === chunks.length - 1),
-          chunkIndex === 0 ? createMessageActions(state, message, pageEl) : el('div', 'chat-message-actions-placeholder')
-        );
-        row.appendChild(chunkBody);
-      });
-      return row;
-    }
-  }
-
   const body = el('div', `chat-message-body role-${role}`);
   body.append(
     createMessageAuthor(state, message),
+    createReasoningStackIfNeeded(state, message, mode),
     createBubbleContent(state, message),
     createMessageActions(state, message, pageEl)
   );
   row.appendChild(body);
 
   return row;
+}
+
+// ═══════════════════════════════════════
+// 【思维链】按角色放对位置
+// ═══════════════════════════════════════
+
+function createReasoningStackIfNeeded(state, message, mode) {
+  if (message.role !== 'assistant') return null;
+  if (!hasThinkingChain(message)) return null;
+  return createReasoningStack(state, message, mode);
+}
+
+function createReasoningStack(state, message, mode = 'bubble') {
+  const stack = el('section', `chat-reasoning-stack role-assistant mode-${mode}`);
+  const target = getTargetInfo(state, message);
+  const card = createThinkingCard(message, {
+    roleName: target.name,
+    messageId: message.id || ''
+  });
+  stack.appendChild(card);
+  return stack;
+}
+
+function updateReasoningInRow(row, state, message) {
+  if (message.role !== 'assistant') return;
+
+  const body = row.querySelector('.chat-message-body.role-assistant');
+  if (!body) return;
+
+  const existingStack = body.querySelector('.chat-reasoning-stack');
+  const shouldHave = hasThinkingChain(message);
+
+  if (!shouldHave) {
+    if (existingStack) existingStack.remove();
+    return;
+  }
+
+  if (!existingStack) {
+    const stack = createReasoningStack(state, message, state.displayMode || 'bubble');
+    const bubble = body.querySelector('.chat-message-bubble');
+    if (bubble) body.insertBefore(stack, bubble);
+    else body.appendChild(stack);
+    return;
+  }
+
+  // 保留展开状态，只更新内容
+  const oldCard = existingStack.querySelector('.chat-thinking-card');
+  const expanded = oldCard?.dataset.expanded === 'true';
+  const newCard = createThinkingCard(message, {
+    roleName: getTargetInfo(state, message).name,
+    messageId: message.id || ''
+  });
+  if (expanded) {
+    newCard.dataset.expanded = 'true';
+  }
+  if (oldCard) {
+    oldCard.replaceWith(newCard);
+  } else {
+    existingStack.appendChild(newCard);
+  }
 }
 
 // ═══════════════════════════════════════
@@ -270,21 +362,6 @@ function createTimeDivider(currentTime, lastTime) {
 }
 
 // ═══════════════════════════════════════
-// 【思维链】接入新版 thinking-card 组件
-// ═══════════════════════════════════════
-
-function createReasoningStack(state, message, mode = 'bubble') {
-  const stack = el('section', `chat-reasoning-stack role-assistant mode-${mode}`);
-  const target = getTargetInfo(state, message);
-  const card = createThinkingCard(message, {
-    roleName: target.name,
-    messageId: message.id || ''
-  });
-  stack.appendChild(card);
-  return stack;
-}
-
-// ═══════════════════════════════════════
 // 【作者信息】头像和名称
 // ═══════════════════════════════════════
 
@@ -332,7 +409,8 @@ function createBubbleContent(state, message) {
     bubble.append(createQuoteBlock(message.quoteText));
   }
 
-  bubble.append(createMessageContent(state, message));
+  const content = createMessageContent(state, message);
+  bubble.appendChild(content);
 
   if (message.editedAt) {
     bubble.append(el('div', 'chat-message-edited', '已编辑'));
@@ -480,7 +558,6 @@ function createVoiceMessageCard(state, message) {
 
   bar.addEventListener('click', () => {
     if (isPlaying) {
-      // 当前正在播放 → 暂停
       isPlaying = false;
       card.dataset.playing = 'false';
       voicePlayer.pause();
@@ -488,19 +565,13 @@ function createVoiceMessageCard(state, message) {
       return;
     }
 
-    // 开始播放：先停掉全局其他语音
     stopThreadTTS();
-
-    // 如果之前有播放中的卡片，标记为停止
     voicePlayer.stop();
 
-    // 标记当前卡片为播放中
     isPlaying = true;
     voicePlayer.play(card);
 
-    // fire-and-forget：不 await，播放状态完全由点击控制
     playThreadTTS(state, message).catch(() => {
-      // 只有失败时才恢复状态
       if (voicePlayer.currentCard === card) {
         isPlaying = false;
         card.dataset.playing = 'false';
@@ -537,6 +608,7 @@ function getVoiceDurationText(message) {
   const guessed = Math.max(1, Math.ceil(text.length / 5));
   return `${Math.min(60, guessed)}"`;
 }
+
 // ───────────────────
 // 转账和商店小卡片
 // ───────────────────
@@ -1500,6 +1572,9 @@ function createLineIcon(name) {
     addPath('M18 6 6 18');
     addCircle('6', '6', '2');
     addCircle('6', '18', '2');
+  } else if (name === 'scissors') {
+    addPath('M6 6l12 12');
+    addPath('M18 6 6 18');
   } else if (name === 'rps') {
     addRect('5', '5', '14', '14', '4');
     addPath('M8 12h8');
@@ -1688,6 +1763,7 @@ function injectStyle() {
       border-radius: 20px;
       box-shadow: var(--shadow-sm);
       overflow: hidden;
+      transition: all 200ms ease;
     }
 
     .chat-message-bubble.role-user {
@@ -2040,6 +2116,7 @@ function injectStyle() {
       display: flex;
       flex-direction: column;
       gap: 6px;
+      order: -1;
     }
 
     .chat-reasoning-stack.role-user {
@@ -2054,6 +2131,23 @@ function injectStyle() {
 
     .chat-reasoning-stack.mode-dialog {
       max-width: 220px;
+    }
+
+    .chat-message-body.role-assistant {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .chat-message-body.role-assistant .chat-reasoning-stack {
+      order: 1;
+    }
+
+    .chat-message-body.role-assistant .chat-message-bubble {
+      order: 2;
+    }
+
+    .chat-message-body.role-assistant .chat-message-actions {
+      order: 3;
     }
 
     /* ── thinking 折叠卡片 ── */
@@ -2437,6 +2531,12 @@ function injectStyle() {
       align-items: center;
       gap: 8px;
       padding: 2px 0;
+      transition: all 200ms ease;
+    }
+
+    .chat-pending-card.fade-out {
+      opacity: 0;
+      transform: translateY(-4px);
     }
 
     .chat-pending-dots {
@@ -3149,3 +3249,4 @@ function injectStyle() {
 }
 
 // 依赖：../../core/storage.js(getData)；../../core/ui.js(showToast,showBottomSheet,hideBottomSheet)；./thread-actions.js(copyThreadMessage,quoteThreadMessage,editThreadMessage,deleteThreadMessage,regenerateThreadMessage,resendThreadMessage,playThreadTTS,stopThreadTTS)；./thinking-chain.js(createThinkingCard,hasThinkingChain)
+
