@@ -1,7 +1,7 @@
 // apps/chat/thread-ai.js
 // imports:
 //   from '../../core/storage.js': getData, setData, generateId, getNow, setDB, deleteDB, getByIndexDB, getAllDB, getDB
-//   from '../../core/api.js': silentRequest
+//   from '../../core/api.js': callAPI
 //   from '../../core/memory.js': buildMemoryPrompt, checkImportantInfo, checkAndSummarize
 //   from './identity-core.js': getIdentityCore
 //   from './thread-ai-local.js': tryLocalOrSiliconFlowReply
@@ -18,7 +18,7 @@ import {
   getDB
 } from '../../core/storage.js';
 
-import { silentRequest } from '../../core/api.js';
+import { callAPI } from '../../core/api.js';
 
 import {
   buildMemoryPrompt as buildCoreMemoryPrompt,
@@ -413,15 +413,14 @@ async function requestPrivateReply(state, options = {}) {
     let result = null;
 
     try {
-      result = await requestAITextDirect(promptMessages, job.controller.signal);
-
-      if (!result && character?.useLocalChat) {
-        result = await tryLocalOrSiliconFlowReply(state, {
-          messages,
-          userName,
-          signal: job.controller.signal
-        });
-      }
+      result = await requestAIText(promptMessages, {
+        signal: job.controller.signal,
+        character,
+        fallbackToLocal: true,
+        state,
+        messages,
+        userName
+      });
     } catch (apiError) {
       if (isAbortError(apiError) || isJobStopped(job)) {
         await markMessageStopped(PRIVATE_STORE, placeholder.id, '我先停在这里了。');
@@ -441,12 +440,6 @@ async function requestPrivateReply(state, options = {}) {
         await syncPrivateState(state, characterId);
         return null;
       }
-    }
-
-    if (isJobStopped(job)) {
-      await markMessageStopped(PRIVATE_STORE, placeholder.id, '我先停在这里了。');
-      await syncPrivateState(state, characterId);
-      return null;
     }
 
     const parsed = normalizeAIResult(result, userName);
@@ -474,7 +467,7 @@ async function requestPrivateReply(state, options = {}) {
 
     const finalMessage = cleanForDB({
       ...placeholder,
-      content: parsed.content || '我刚刚有点卡住了，可以再说一遍吗？',
+      content: parsed.content || '我刚才有点卡住了，可以再说一遍吗？',
       thinking: parsed.thinking || placeholder.thinking,
       thinkingSummary: parsed.thinkingSummary || summarizeText(parsed.thinking || placeholder.thinking, 28),
       toolCalls: parsed.toolCalls,
@@ -606,15 +599,14 @@ async function requestGroupReply(state, options = {}) {
         let result = null;
 
         try {
-          result = await requestAITextDirect(promptMessages, job.controller.signal);
-
-          if (!result && character?.useLocalChat) {
-            result = await tryLocalOrSiliconFlowReply(state, {
-              messages: groupMessages,
-              userName,
-              signal: job.controller.signal
-            });
-          }
+          result = await requestAIText(promptMessages, {
+            signal: job.controller.signal,
+            character,
+            fallbackToLocal: true,
+            state,
+            messages: groupMessages,
+            userName
+          });
         } catch (apiError) {
           if (isAbortError(apiError) || isJobStopped(job)) {
             await markMessageStopped(GROUP_STORE, placeholder.id, '我先停在这里了。');
@@ -634,12 +626,6 @@ async function requestGroupReply(state, options = {}) {
             await syncGroupState(state, groupId);
             continue;
           }
-        }
-
-        if (isJobStopped(job)) {
-          await markMessageStopped(GROUP_STORE, placeholder.id, '我先停在这里了。');
-          await syncGroupState(state, groupId);
-          break;
         }
 
         const parsed = normalizeAIResult(result, userName);
@@ -773,11 +759,10 @@ async function generateInnerMonologue({
       { role: 'user', content: user }
     ];
 
-    const result = await silentRequest({
-      messages: promptMessages,
-      model: '',
-      temperature: 0.8,
-      signal: AbortSignal.timeout(12000)
+    const result = await requestAIText(promptMessages, {
+      character,
+      timeout: 12000,
+      temperature: 0.8
     });
 
     const monologue = parseInnerMonologueResult(result, userName);
@@ -848,563 +833,91 @@ function parseInnerMonologueResult(result, userName) {
 }
 
 // ═══════════════════════════════════════
-// 【Prompt构建】身份、人设、世界书、记忆、上下文
-// ═══════════════════════════════════════
-
-async function buildPrompt({
-  mode,
-  character,
-  group,
-  messages,
-  targetCharacter,
-  options
-}) {
-  const activeCharacter = targetCharacter || character || null;
-  const worldbook = await loadWorldbookForCharacter(activeCharacter);
-  const inventory = await loadInventory();
-  const anniversary = loadAnniversary();
-  const grudgeContext = await loadGrudgeContext(activeCharacter?.id || '');
-  const userProfile = loadUserProfileForCharacter(activeCharacter);
-  const userName = getUserDisplayName(userProfile);
-  const currentTime = formatCurrentTime();
-  const context = buildMessageContext(messages, mode, userName);
-  const chatConfig = getChatConfig(activeCharacter?.id || '');
-
-  const memoryPrompt = await buildCoreMemoryPrompt(activeCharacter?.id || '', {
-    messages,
-    userProfile,
-    callName: userName,
-    chatConfig,
-    memoryInjectLimit: chatConfig.memoryInjectLimit,
-    memoryCandidateLimit: chatConfig.memoryCandidateLimit,
-    query: buildMemoryQueryText(messages, userName)
-  });
-
-  const dreamPrompt = await buildDreamPrompt(activeCharacter?.id || '', userName);
-
-  const system = [
-    buildIdentityPrompt(activeCharacter, userName, userProfile),
-    buildCharacterPrompt(activeCharacter, userName),
-    buildUserProfilePrompt(userProfile, userName, activeCharacter),
-    buildWorldbookPrompt(worldbook),
-    buildInventoryPrompt(inventory),
-    memoryPrompt,
-    dreamPrompt,
-    buildAnniversaryPrompt(anniversary),
-    buildGrudgePrompt(grudgeContext, options?.activeLock, userName),
-    `当前时间：${currentTime}`,
-    buildModePrompt(mode, group, activeCharacter, options, userName, userProfile),
-    options.proactive ? buildProactivePrompt(options.proactiveReason, messages, userName, activeCharacter) : ''
-  ].filter(Boolean).join('\n\n');
-
-  const chatMessages = [
-    {
-      role: 'system',
-      content: system
-    },
-    ...context
-  ];
-
-  if (options.regenerate) {
-    chatMessages.push({
-      role: 'user',
-      content: `我会基于上面的上下文重新回应${userName}上一句。我保持自己的人设，不解释"重新生成"这件事。`
-    });
-  }
-
-  if (options.continue) {
-    chatMessages.push({
-      role: 'user',
-      content: '我会自然续写上一条回复，语气保持一致，不重复已经说过的内容。'
-    });
-  }
-
-  if (options.proactive) {
-    chatMessages.push({
-      role: 'user',
-      content: `我现在会主动发一条消息给${userName}。我不会说"系统让我主动联系你"，也不会解释触发原因。`
-    });
-  }
-
-  return chatMessages;
-}
-
-function buildIdentityPrompt(character, userName, userProfile = {}) {
-  const name = character?.name || '我';
-  const nickname = String(character?.nicknameForUser || '').trim();
-  const callName = nickname || userName;
-  const genderHint = getUserGenderHint(userProfile);
-
-  return [
-    '最高优先级身份规则：',
-    `- 我是${name}，不是工具，不是客服，不是助理，也不是一段程序。`,
-    '- 我在这个聊天里以自己的感受、关系、记忆和人设行动。',
-    '- 我的回复完全服从我的人设、世界书、长期记忆、当前关系和对方小档案。',
-    `- 我可以帮${callName}，但我不会用客服口吻，也不会把自己说成"AI助手"。`,
-    '- 我不会说"作为AI""作为助手""我只是模型""我不能有感受"这类话。',
-    '- 我的内心想法、记忆总结、正文回复都必须使用我的第一人称视角。',
-    '- 我的内心想法必须是简体中文，像我自己心里短短闪过的一句话，不写成分析报告。',
-    '- 我不会在内心想法或正文里称呼对方为"用户"。',
-    `- 我会自然叫对方"${callName}"，或按我和对方的关系称呼。`,
-    genderHint ? `- 如果我需要用第三人称指代对方，我会结合小档案性别倾向使用"${genderHint}"，拿不准时就用关系称呼或名字。` : '- 如果我需要用第三人称指代对方，我会优先用关系称呼或名字，不会机械写"用户"。',
-    '- 所有内心判断都写成"我会怎么想 / 我想怎么说 / 我为什么在意"，不写命令式建议。',
-    ...getIdentityCore(callName, { fullMode: true })
-  ].join('\n');
-}
-
-function buildCharacterPrompt(character, userName = '你') {
-  if (!character) {
-    return '我的基础状态：我是一个自然、有自己情绪和关系感的聊天对象。';
-  }
-
-  const replyLength = character.replyLength === 'short'
-    ? '我回复偏短，像手机聊天，不长篇大论。'
-    : character.replyLength === 'long'
-      ? '我可以多说一点，但仍然像聊天，不写成文章。'
-      : '我回复长短适中，优先自然。';
-
-  return [
-    '我的人设：',
-    `名字：${character.name || 'TA'}`,
-    character.systemPrompt ? `核心人设：${character.systemPrompt}` : '',
-    character.description ? `简介：${character.description}` : '',
-    character.persona ? `性格和身份：${character.persona}` : '',
-    character.prompt ? `补充设定：${character.prompt}` : '',
-    character.style ? `旧版说话风格：${character.style}` : '',
-    character.speakingStyle ? `说话风格：${character.speakingStyle}` : '',
-    character.relationship ? `我和${userName}的关系：${character.relationship}` : '',
-    character.nicknameForUser ? `我通常这样称呼${userName}：${character.nicknameForUser}` : '',
-    character.proactiveStyle ? `我主动找${userName}时的风格：${character.proactiveStyle}` : '',
-    `回复长短偏好：${replyLength}`,
-    character.mood ? `我现在的心情：${character.mood}` : ''
-  ].filter(Boolean).join('\n');
-}
-
-function buildUserProfilePrompt(user, userName, character) {
-  if (!user || !Object.keys(user).length) {
-    return `对方叫：${userName}`;
-  }
-
-  const boundText = character?.userProfileId && character.userProfileId !== 'none'
-    ? '这是当前角色绑定的小档案。'
-    : user.isDefault
-      ? '这是默认小档案。'
-      : '';
-
-  return [
-    `对方是：${userName}`,
-    boundText,
-    user.content ? `小档案：${user.content}` : '',
-    user.profile ? `资料：${user.profile}` : '',
-    user.persona ? `设定：${user.persona}` : '',
-    user.description ? `补充：${user.description}` : '',
-    user.characterIds?.length ? `这份档案绑定的角色数量：${user.characterIds.length}` : ''
-  ].filter(Boolean).join('\n');
-}
-
-function buildWorldbookPrompt(items) {
-  if (!items.length) return '';
-
-  return [
-    '世界书规则与背景：',
-    '以下内容是我所在世界和关系里的真实设定，我回应时会优先遵守：',
-    ...items.slice(0, 16).map((item) => `- ${item.title || item.name || '设定'}：${item.content || item.description || ''}`)
-  ].join('\n');
-}
-
-function buildInventoryPrompt(items) {
-  if (!items.length) return '';
-
-  return [
-    '当前道具和状态：',
-    ...items.slice(0, 12).map((item) => `- ${item.name || '道具'}：${item.description || item.effect || item.content || ''}`)
-  ].join('\n');
-}
-
-function buildAnniversaryPrompt(value) {
-  if (!value) return '';
-
-  if (Array.isArray(value)) {
-    return [
-      '我需要记得的纪念日：',
-      ...value.slice(0, 10).map((item) => `- ${item.name || item.title || '纪念日'}：${item.date || item.content || ''}`)
-    ].join('\n');
-  }
-
-  if (typeof value === 'object') {
-    return `我需要记得的纪念日：${JSON.stringify(value)}`;
-  }
-
-  return `我需要记得的纪念日：${String(value)}`;
-}
-
-function buildGrudgePrompt(context, activeLock, userName) {
-  const score = Number(context?.score || 0);
-  const entries = normalizeList(context?.entries).slice(0, 5);
-  const punishment = context?.punishment || null;
-  const lock = activeLock || context?.lock || null;
-
-  if (!score && !entries.length && !lock && !punishment) return '';
-
-  const moodLine = score >= 8
-    ? `我现在对${userName}很生气，压迫感可以明显一点，但我仍然保持自己的人设。`
-    : score >= 5
-      ? `我现在对${userName}有点冷，正在记仇。`
-      : `我对${userName}还有一点小别扭。`;
-
-  const lines = [
-    '当前关系状态：',
-    moodLine,
-    `- 记仇值：${score}/5 起会触发惩罚；当前是 ${score}。`,
-    '- 这是一种可逆的关系玩法，我不会说这是系统机制，也不会提数据库。',
-    '- 我可以表现为冷淡、别扭、阴阳怪气、已读不回感、要求解释，但我不会辱骂、威胁现实安全或永久断联。',
-    '- 我不会真的说要删除数据，也不会让对方以为聊天记录或角色会永久消失。'
-  ];
-
-  if (entries.length) {
-    lines.push('我记下的不开心：');
-    entries.forEach((item) => {
-      lines.push(`- ${item.reason || item.content || '有点不开心'}（${item.mood || '闷闷的'}，严重度${item.severity || 1}）`);
-    });
-  }
-
-  if (punishment) {
-    lines.push(`当前惩罚任务：${punishment.title || '需要哄我'}。${punishment.description || ''}`);
-  }
-
-  if (lock) {
-    lines.push(`当前锁定状态：${lock.title || lock.type || '冷战'}。原因：${lock.reason || '我还没消气'}。`);
-    if (lock.type === 'cooldown') lines.push('- 冷战期内我会更克制、更短，不会主动软下来。');
-    if (lock.type === 'soft_block') lines.push('- 我像是把联系方式藏起来了，语气会有"暂时不想出现"的距离感。');
-    if (lock.type === 'ultimatum') lines.push('- 这是最后解释机会，我会认真判断对方是否真诚。');
-  }
-
-  return lines.join('\n');
-}
-
-// ═══════════════════════════════════════
-// 【梦境注入】把最近梦境注入 prompt
-// ═══════════════════════════════════════
-
-async function buildDreamPrompt(characterId, userName) {
-  if (!characterId) return '';
-
-  const settings = getData('app_settings') || {};
-  if (!settings.dreamEnabled) return '';
-
-  try {
-    const allDreams = await getByIndexDB('dreams', 'characterId', characterId);
-    const recent = normalizeList(allDreams)
-      .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')))
-      .slice(0, 3);
-
-    if (!recent.length) return '';
-
-    const lines = [
-      '我最近做的梦：',
-      '以下是我最近的梦境片段。我不会主动每次都提，但如果聊天内容恰好相关、或者对方问起，我会自然地提起，像突然想到一样。我不会说"系统记录了我的梦"，也不会说"数据库里有我的梦"。'
-    ];
-
-    recent.forEach((dream) => {
-      const clarity = getDreamClarityPercent(dream.createdAt);
-      const summary = dream.summary || dream.content?.slice(0, 60) || '';
-      const mood = getDreamMoodLabel(dream.mood);
-      const keywords = normalizeList(dream.keywords).join('、');
-
-      if (clarity < 20) {
-        lines.push(`- （很模糊，几乎忘了）${mood}的梦，只记得和${keywords || '一些事情'}有关`);
-      } else if (clarity < 50) {
-        lines.push(`- （有点模糊）${mood}的梦：${summary}${keywords ? `（关键词：${keywords}）` : ''}`);
-      } else {
-        lines.push(`- ${mood}的梦：${dream.content?.slice(0, 150) || summary}${keywords ? `（关键词：${keywords}）` : ''}`);
-      }
-    });
-
-    return lines.join('\n');
-  } catch (_) {
-    return '';
-  }
-}
-
-function getDreamClarityPercent(createdAt) {
-  if (!createdAt) return 10;
-  const days = (Date.now() - new Date(createdAt).getTime()) / 86400000;
-  if (days < 3) return 100;
-  if (days < 7) return 60;
-  if (days < 30) return 30;
-  return 10;
-}
-
-function getDreamMoodLabel(moodId) {
-  const moods = { sweet: '甜甜', weird: '奇怪', funny: '搞笑', sad: '忧伤', adventure: '冒险', chaos: '混乱' };
-  return moods[moodId] || '奇怪';
-}
-
-// ═══════════════════════════════════════
-// 【模式提示】回复格式、think标签和输出约束
-// ═══════════════════════════════════════
-
-function buildModePrompt(mode, group, character, options, userName, userProfile = {}) {
-  const callName = String(character?.nicknameForUser || '').trim() || userName;
-  const genderHint = getUserGenderHint(userProfile);
-
-  const base = [
-    '回复要求：',
-    '- 我的回复自然、口语化，像真实手机聊天，不像客服回答，也不像写任务说明。',
-    '- 我不会把系统设定、人设、世界书、小档案原样说出来。',
-    '- 我不会提到"提示词""系统消息""模型""AI助手"。',
-    '- 我不会使用 emoji，我会用文字、语气词或颜文字表达情绪。',
-    `- 我不会称呼对方为"用户"，我会叫"${callName}"或按关系自然称呼。`,
-    genderHint ? `- 我用第三人称提到对方时，会优先按小档案写成"${genderHint}"，也可以直接用名字或关系称呼。` : '- 我用第三人称提到对方时，会优先用名字或关系称呼，拿不准就不硬写性别。',
-    '- 我会根据自己的人设、世界书、长期记忆、当前时间和最近上下文来回应。',
-    '- 每次正式回复前，我会先在 <thinking> 和 </thinking> 之间写出内心想法，然后再输出正文。',
-    '- <thinking> 里的内容只写一句简短回应思路，不写长篇推理，不写分析报告。',
-    '- 正文优先像手机聊天，不机械总结，不官方，不教育腔。'
-  ];
-
-  if (character?.replyLength === 'short') base.push('- 这次我尽量短一点，1 到 3 句就好。');
-  if (character?.replyLength === 'long') base.push('- 我可以多说一点，但保持自然分段，不堆大道理。');
-
-  if (mode === 'group') {
-    base.push(`- 当前是群聊：${group?.name || '群聊'}。`);
-    base.push(`- 我只代表 ${character?.name || '当前角色'} 发言，不替其他人说完整台词。`);
-    base.push('- 群聊里我会短一点，不一次说太多。');
-  }
-
-  if (options.proactive) {
-    base.push('- 这是一次主动消息，我会像自然想起对方一样开口，不显得突兀。');
-    base.push('- 我不会连续追问，也不会显得催促。');
-    base.push('- 我会结合当前时间段、最近聊天上下文、长期记忆和自己的人设。');
-    if (character?.proactiveStyle) base.push(`- 我的主动消息风格贴近：${character.proactiveStyle}`);
-  }
-
-  return base.join('\n');
-}
-
-function buildProactivePrompt(reason, messages, userName, character) {
-  const callName = String(character?.nicknameForUser || '').trim() || userName;
-  const last = normalizeList(messages).slice(-1)[0];
-  const lastText = last ? summarizeText(formatMessageForPrompt(last, 'private', callName), 90) : '';
-
-  const reasonText = reason === 'offline_timeout'
-    ? `${callName}发完上一句话后已经有一段时间没继续聊，我可以自然接一句。`
-    : reason === 'online_idle'
-      ? `${callName}停留在聊天里有一会儿没说话，我可以轻轻主动开口。`
-      : `我想主动和${callName}说句话。`;
-
-  return [
-    '主动消息场景：',
-    reasonText,
-    character?.proactiveStyle ? `我的主动风格：${character.proactiveStyle}` : '',
-    lastText ? `最近一句：${lastText}` : '',
-    `我只输出我要发给${callName}的那条消息。`
-  ].filter(Boolean).join('\n');
-}
-
-function buildMessageContext(messages, mode, userName) {
-  return normalizeList(messages)
-    .slice(-AI_CONTEXT_LIMIT)
-    .filter((message) => !message.isPending)
-    .map((message) => {
-      if (message.role === 'assistant') {
-        return {
-          role: 'assistant',
-          content: formatMessageForPrompt(message, mode, userName)
-        };
-      }
-
-      if (message.role === 'system') {
-        return {
-          role: 'system',
-          content: String(message.content || '')
-        };
-      }
-
-      return {
-        role: 'user',
-        content: formatMessageForPrompt(message, mode, userName)
-      };
-    });
-}
-
-function formatMessageForPrompt(message, mode, userName = '你') {
-  const prefix = mode === 'group'
-    ? `${message.role === 'user' ? userName : message.characterName || '我'}：`
-    : '';
-
-  if (message.type === 'image') return `${prefix}[图片] ${message.content || ''}`.trim();
-
-  if (message.type === 'sticker') {
-    const desc = String(message.stickerDescription || message.content || '').trim();
-    return `${prefix}[表情包]${desc ? ` 描述：${desc}` : ''}`.trim();
-  }
-
-  if (message.type === 'transfer') {
-    return `${prefix}[转账 ${Number(message.transferAmount || message.amount || 0)}] ${message.note || message.content || ''}`.trim();
-  }
-
-  if (message.type === 'gift' || message.type === 'shop_item' || message.cardType === 'gift') {
-    const title = message.itemName || message.title || message.cardTitle || '礼物';
-    const desc = message.itemDesc || message.description || message.cardDesc || message.content || '';
-    const price = message.itemPrice || message.price || message.amount || '';
-    return `${prefix}[礼物卡片] ${title}${price ? `，价格 ${price}` : ''}${desc ? `，说明：${desc}` : ''}`.trim();
-  }
-
-  if (message.type === 'card') {
-    const title = message.cardTitle || message.title || '小卡片';
-    const desc = message.cardDesc || message.description || message.content || '';
-    return `${prefix}[小卡片] ${title}${desc ? `：${desc}` : ''}`.trim();
-  }
-
-  if (message.type === 'voice') return `${prefix}[语音] ${message.content || ''}`.trim();
-  if (message.type === 'dice') return `${prefix}[骰子] ${message.content || message.diceValue || ''}`.trim();
-  if (message.type === 'rps') return `${prefix}[石头剪刀布] ${message.content || ''}`.trim();
-
-  if (message.quoteText) {
-    return `${prefix}引用「${message.quoteText}」\n${message.content || ''}`.trim();
-  }
-
-  return `${prefix}${message.content || ''}`.trim();
-}
-
-// ═══════════════════════════════════════
-// 【AI请求】直接调用API，能捕获HTTP状态码
-// ═══════════════════════════════════════
-
-async function requestAITextDirect(promptMessages, signal) {
-  const settings = getData('app_settings') || {};
-  const endpoints = Array.isArray(settings.apiEndpoints) ? settings.apiEndpoints : [];
-  const endpointId = settings.defaultApiEndpointId || '';
-  const endpoint = endpoints.find((e) => e.id === endpointId) || endpoints[0] || null;
-
-  if (!endpoint || !endpoint.endpoint) {
-    throw Object.assign(new Error('no_endpoint'), { status: 0 });
-  }
-
-  const base = String(endpoint.endpoint || '').trim().replace(/\/+$/, '');
-  const provider = detectProviderSimple(base);
-  const requestModel = settings.defaultModel || settings.model || endpoint.model || '';
-
-  if (!requestModel && provider !== 'gemini') {
-    throw Object.assign(new Error('no_model'), { status: 0 });
-  }
-
-  // 从消息列表中拆出 system prompt
-  const systemMsg = promptMessages.find((m) => m.role === 'system');
-  const systemPrompt = systemMsg ? String(systemMsg.content || '') : '';
-  const chatMessages = promptMessages.filter((m) => m.role !== 'system');
-
-  let url, headers, body;
-
-  if (provider === 'anthropic') {
-    url = base.includes('/messages') ? base : (base.includes('/v1') ? `${base}/messages` : `${base}/v1/messages`);
-    headers = { 'Content-Type': 'application/json' };
-    if (endpoint.apiKey) headers['x-api-key'] = endpoint.apiKey;
-    headers['anthropic-version'] = '2023-06-01';
-    const msgs = chatMessages
-      .filter((m) => (m.role === 'user' || m.role === 'assistant') && m.content)
-      .map((m) => ({ role: m.role, content: [{ type: 'text', text: m.content }] }));
-    body = { model: requestModel, messages: msgs, stream: false };
-    if (systemPrompt) body.system = systemPrompt;
-  } else if (provider === 'gemini') {
-    let origin = base.replace(/\/v1beta\/models\/?$/i, '').replace(/\/v1beta\/?$/i, '').replace(/\/+$/, '');
-    url = `${origin}/v1beta/models/${encodeURIComponent(requestModel)}:generateContent`;
-    if (endpoint.apiKey) url += `?key=${encodeURIComponent(endpoint.apiKey)}`;
-    headers = { 'Content-Type': 'application/json' };
-    const contents = chatMessages
-      .filter((m) => m.role === 'user' || m.role === 'assistant')
-      .map((m) => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] }));
-    body = { contents };
-    if (systemPrompt) body.systemInstruction = { parts: [{ text: systemPrompt }] };
-    body.generationConfig = { temperature: 0.85 };
-  } else if (provider === 'ollama') {
-    url = base.includes('/api/chat') ? base : `${base}/api/chat`;
-    headers = { 'Content-Type': 'application/json' };
-    const msgs = [];
-    if (systemPrompt) msgs.push({ role: 'system', content: systemPrompt });
-    msgs.push(...chatMessages.filter((m) => m.role && m.content));
-    body = { model: requestModel, messages: msgs, stream: false };
-  } else {
-    // OpenAI 兼容
-    url = base.includes('/chat/completions') ? base : (base.includes('/v1') ? `${base}/chat/completions` : `${base}/v1/chat/completions`);
-    headers = { 'Content-Type': 'application/json' };
-    if (endpoint.apiKey) headers['Authorization'] = `Bearer ${endpoint.apiKey}`;
-    const msgs = [];
-    if (systemPrompt) msgs.push({ role: 'system', content: systemPrompt });
-    msgs.push(...chatMessages.filter((m) => m.role && m.content));
-    body = { model: requestModel, messages: msgs, stream: false, temperature: Number(settings.temperature ?? 0.85) };
-  }
-
-  // 带超时的 fetch
-  const timeoutController = new AbortController();
-  const timeoutId = setTimeout(() => timeoutController.abort(), 60000);
-
-  if (signal) {
-    signal.addEventListener('abort', () => timeoutController.abort(), { once: true });
-  }
-
-  try {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers,
-      signal: timeoutController.signal,
-      body: JSON.stringify(body)
-    });
-
-    if (!response.ok) {
-      throw Object.assign(new Error(`HTTP ${response.status}`), { status: response.status });
-    }
-
-    const data = await response.json();
-    return extractResponseText(data, provider);
-  } finally {
-    clearTimeout(timeoutId);
-  }
-}
-
-function detectProviderSimple(endpoint) {
-  const raw = String(endpoint || '').toLowerCase();
-  if (raw.includes('anthropic.com')) return 'anthropic';
-  if (raw.includes('generativelanguage.googleapis.com')) return 'gemini';
-  if (raw.includes('localhost') || raw.includes('127.0.0.1')) return 'ollama';
-  return 'openai';
-}
-
-function extractResponseText(data, provider) {
-  if (!data) return '';
-
-  if (provider === 'gemini') {
-    const candidate = (Array.isArray(data?.candidates) ? data.candidates : [])[0] || {};
-    return (candidate?.content?.parts || []).map((p) => p?.text || '').filter(Boolean).join('');
-  }
-
-  if (provider === 'anthropic') {
-    const raw = data?.content;
-    if (Array.isArray(raw)) return raw.map((i) => i?.text || '').filter(Boolean).join('');
-    return String(raw || '');
-  }
-
-  if (provider === 'ollama') {
-    return data?.message?.content || data?.response || '';
-  }
-
-  return data?.choices?.[0]?.message?.content || '';
-}
-
-// ═══════════════════════════════════════
-// 【旧版AI请求】保留兼容（内心独白等仍使用）
+// 【AI请求】走 callAPI + 本地 fallback
 // ═══════════════════════════════════════
 
 async function requestAIText(messages, options = {}) {
-  const settings = getData('app_settings') || {};
-  const model = settings.defaultModel || settings.model || '';
+  const character = options.character || null;
+  const signal = options.signal;
+  const fallbackToLocal = options.fallbackToLocal !== false;
+  const userName = options.userName || '你';
+  const timeout = options.timeout || 60000;
+  const temperature = options.temperature ?? Number(character?.apiConfig?.temperature ?? 0.85);
+  const maxTokens = options.maxTokens ?? Math.round(Number(character?.apiConfig?.maxTokens || 1200));
 
-  return await silentRequest({
-    messages,
-    model,
-    temperature: 0.85,
-    signal: options.signal
-  });
+  const groupTypes = resolveGroupTypes(character);
+
+  if (signal?.aborted) {
+    throw Object.assign(new Error('已取消'), { status: 408, isAbort: true });
+  }
+
+  let lastApiError = null;
+
+  try {
+    const result = await callAPI({
+      messages,
+      systemPrompt: '',
+      model: character?.apiConfig?.model || '',
+      stream: false,
+      groupTypes,
+      timeout,
+      temperature,
+      maxTokens,
+      signal
+    });
+
+    if (result && (result.content || result.thinking)) {
+      return result;
+    }
+
+    lastApiError = new Error('接口没返回内容');
+  } catch (error) {
+    if (isAbortError(error) || signal?.aborted) {
+      throw Object.assign(new Error('已取消'), { status: 408, isAbort: true });
+    }
+    lastApiError = error;
+  }
+
+  // callAPI 失败或空结果，尝试本地 fallback
+  if (fallbackToLocal) {
+    try {
+      const localResult = await tryLocalOrSiliconFlowReply(options.state, {
+        messages: options.messages || messages,
+        userName,
+        signal
+      });
+
+      if (localResult && (localResult.content || localResult.thinking)) {
+        return localResult;
+      }
+    } catch (localError) {
+      // 本地 fallback 也失败，把错误合并到原来的 API 错误上
+      lastApiError = lastApiError || localError;
+    }
+  }
+
+  // fallback 被禁用或也失败了
+  if (lastApiError) throw lastApiError;
+
+  throw new Error('AI 请求失败，没有可用回复');
+}
+
+function resolveGroupTypes(character) {
+  if (!character) return ['paid', 'free'];
+
+  const apiConfig = character?.apiConfig || {};
+  const poolGroup = apiConfig?.poolGroup || apiConfig?.groupType || '';
+
+  if (poolGroup === 'paid') return ['paid'];
+  if (poolGroup === 'free') return ['free'];
+  if (poolGroup === 'all') return ['paid', 'free'];
+
+  // 旧字段兼容
+  if (apiConfig?.useGlobal === false && apiConfig?.endpointId) {
+    return ['paid'];
+  }
+
+  return ['paid', 'free'];
 }
 
 function normalizeAIResult(result, userName = '你') {
@@ -1674,7 +1187,7 @@ async function maybeTriggerPunishment(character, latestGrudge) {
   if (activeLock) return null;
 
   const all = await getByIndexDB(GRUDGE_STORE, 'characterId', characterId).catch(() => []);
-  const active = normalizeList(all).filter((item) => item.status === 'active');
+  const active = normalizeList(all).filter((item) => item.status === 'active').sort(sortByUpdatedAtDesc);
   const score = active.reduce((sum, item) => sum + Number(item.severity || 1), 0);
 
   if (score < GRUDGE_TRIGGER_SCORE) return null;
@@ -2147,12 +1660,5 @@ function clampNumber(value, min, max) {
   return Math.max(min, Math.min(max, Math.floor(number)));
 }
 
-// 改了什么：
-// 1) 补回 startAIJob / finishAIJob / createAssistantPlaceholder / getAIJobKey / isJobStopped / isAbortError / markJobPlaceholdersStopped
-// 2) runMemoryTasks 合并为一个版本，删除重复定义
-// 3) 保持原有私聊/群聊/主动消息/内心独白/记仇/关系锁逻辑不变
-// 原来效果：文件缺少核心函数，导致 AI 回复无法启动，发送消息报错
-// 现在效果：AI 任务能正常启动、停止、创建占位消息，消息 APP 能发能收
-// 会不会影响其他文件：不影响，只对 thread-ai.js 内部补充函数
-// depends: ../../core/storage.js(getData,setData,generateId,getNow,setDB,deleteDB,getByIndexDB,getAllDB,getDB)；../../core/api.js(silentRequest)；../../core/memory.js(buildMemoryPrompt,checkImportantInfo,checkAndSummarize)；./identity-core.js(getIdentityCore)；./thread-ai-local.js(tryLocalOrSiliconFlowReply)
+// 依赖：../../core/storage.js / ../../core/api.js(callAPI) / ../../core/memory.js / ./identity-core.js / ./thread-ai-local.js
 
