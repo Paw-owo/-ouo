@@ -1,9 +1,10 @@
+// apps/settings/settings.js
 // imports:
 //   from '../core/storage.js': getData, setData, removeData, generateId, getNow, getStorageUsage, getDB, setDB, getAllDB, deleteDB, clearStoreDB
 //   from '../core/theme.js': getThemePresets, getCurrentTheme, setPreset, setThemeMode, applyTheme, saveTheme, exportTheme, importTheme
 //   from '../core/ui.js': showToast, showBottomSheet, hideBottomSheet, showConfirm, createIcon
 //   from '../core/api.js': fetchModels, smartModelsUrl, parseErrorResponse, buildHeaders
-//   from '../core/mcp.js': resetSession
+//   from '../core/mcp.js': resetSession, getMcpServers, listMcpTools
 //   from '../core/storage-manager.js': testCloudConnection
 
 import {
@@ -33,7 +34,7 @@ import {
 
 import { showToast, showBottomSheet, hideBottomSheet, showConfirm, createIcon } from '../core/ui.js';
 import { fetchModels, smartModelsUrl, parseErrorResponse, buildHeaders } from '../core/api.js';
-import { resetSession } from '../core/mcp.js';
+import { resetSession, getMcpServers, listMcpTools } from '../core/mcp.js';
 import { testCloudConnection } from '../core/storage-manager.js';
 
 // ═══════════════════════════════════════
@@ -528,11 +529,11 @@ function askAfterTest(apiData) {
   const sheet = sheetBox('测试通过啦，想怎么用？');
 
   sheet.body.append(
-    el('p', 'settings-free-note', '「我的自选」会固定用它，不走轮换池。\n「轮换池」会按分组自动切换，更稳。')
+    el('p', 'settings-free-note', '「设为全局默认」会固定用它，所有 AI 请求都走它。\n「加入轮换池」会按分组自动切换，更稳。')
   );
 
   sheet.actions.append(
-    actionBtn('star', '设为我的自选', () => {
+    actionBtn('star', '设为全局默认', () => {
       const settings = getSettings();
       const newApi = {
         id: generateId(),
@@ -548,7 +549,7 @@ function askAfterTest(apiData) {
       settings.defaultModel = newApi.model;
       saveSettings(settings);
       hideBottomSheet();
-      showToast('已固定为你的自选接口');
+      showToast('已设为全局默认接口');
       render('apiTest');
     }),
 
@@ -563,22 +564,37 @@ function askAfterTest(apiData) {
 
 function openPoolGroupSelector(apiData) {
   const sheet = sheetBox('放进哪个组？');
+  let selected = apiData.groupType || '';
 
-  sheet.body.append(
-    el('p', 'settings-free-note', '免费组：免 Key 或免费额度接口，失败会安静等。\n付费组：自己的 Key 接口，失败会自动切下一条。')
-  );
+  const note = el('p', 'settings-free-note', '免费组：免 Key 或免费额度接口，失败会安静等。\n付费组：自己的 Key 接口，失败会自动切下一条。');
+  sheet.body.append(note);
 
-  sheet.actions.append(
-    actionBtn('play', '免费组', () => {
-      addToPool({ ...apiData, groupType: 'free' });
-      hideBottomSheet();
-    }),
-    actionBtn('settings', '付费组', () => {
-      addToPool({ ...apiData, groupType: 'paid' });
-      hideBottomSheet();
-    })
-  );
+  const paidBtn = actionBtn('settings', '付费组', () => {
+    selected = 'paid';
+    updateButtons();
+  });
+  const freeBtn = actionBtn('play', '免费组', () => {
+    selected = 'free';
+    updateButtons();
+  });
 
+  function updateButtons() {
+    paidBtn.classList.toggle('active-selected', selected === 'paid');
+    freeBtn.classList.toggle('active-selected', selected === 'free');
+  }
+
+  sheet.actions.append(paidBtn, freeBtn);
+
+  sheet.actions.append(actionBtn('check', '确认加入', () => {
+    if (!selected) {
+      showToast('先选一个分组哦');
+      return;
+    }
+    addToPool({ ...apiData, groupType: selected });
+    hideBottomSheet();
+  }));
+
+  updateButtons();
   showBottomSheet(sheet.root);
 }
 
@@ -616,9 +632,20 @@ async function renderApiPoolPage() {
   apiPoolModule = module;
 
   const wrap = page();
-  const pageEl = await module.renderApiPoolSettings({
-    onBack: () => render('home')
-  });
+  let pageEl;
+
+  if (typeof module.mount === 'function') {
+    pageEl = el('div', 'api-pool-host settings-page');
+    apiPoolModule.mount(pageEl, { onBack: () => render('home'), onRefresh: () => render('apiPool') });
+  } else if (typeof module.renderApiPoolSettings === 'function') {
+    pageEl = await module.renderApiPoolSettings({
+      onBack: () => render('home'),
+      onRefresh: () => render('apiPool')
+    });
+  } else {
+    pageEl = empty('轮换池模块加载失败');
+  }
+
   wrap.append(pageEl);
   return wrap;
 }
@@ -634,9 +661,19 @@ async function renderTtsPage() {
   ttsModule = module;
 
   const wrap = page();
-  const pageEl = await module.renderTtsSettings({
-    onBack: () => render('home')
-  });
+  let pageEl;
+
+  if (typeof module.mount === 'function') {
+    pageEl = el('div', 'tts-host settings-page');
+    await module.mount(pageEl, { onBack: () => render('home') });
+  } else if (typeof module.renderTtsSettings === 'function') {
+    pageEl = await module.renderTtsSettings({
+      onBack: () => render('home')
+    });
+  } else {
+    pageEl = empty('TTS 模块加载失败');
+  }
+
   wrap.append(pageEl);
   return wrap;
 }
@@ -680,6 +717,108 @@ function renderMcpPage() {
   });
 
   return wrap;
+}
+
+// ═══════════════════════════════════════
+// 【MCP 操作】
+// ═══════════════════════════════════════
+
+async function testMcpServer(id) {
+  const settings = getSettings();
+  const server = settings.mcpServers.find((item) => item.id === id);
+  if (!server) {
+    showToast('没找到这个服务器');
+    return;
+  }
+
+  showToast('正在连接 MCP 服务器...');
+  try {
+    await resetSession();
+    const tools = await listMcpTools(server);
+    if (Array.isArray(tools)) {
+      showToast(`连上啦，找到 ${tools.length} 个工具`);
+    } else {
+      showToast('连上啦，但没有读到工具列表');
+    }
+  } catch (error) {
+    showToast(formatApiError(error?.message || 'MCP 连接失败'));
+  }
+}
+
+function toggleMcp(id) {
+  const settings = getSettings();
+  const servers = settings.mcpServers.map((item) => {
+    if (item.id !== id) return item;
+    return { ...item, enabled: !item.enabled, updatedAt: getNow() };
+  });
+
+  saveSettings({ ...settings, mcpServers: servers });
+  showToast('状态换好啦');
+  render('mcp');
+}
+
+async function deleteMcp(id) {
+  const ok = await showConfirm('要删除这个 MCP 服务器吗？');
+  if (!ok) return;
+
+  const settings = getSettings();
+  saveSettings({ ...settings, mcpServers: settings.mcpServers.filter((item) => item.id !== id) });
+  showToast('删除好啦');
+  render('mcp');
+}
+
+function openMcpEditor(server) {
+  const editing = Boolean(server?.id);
+  const current = {
+    id: server?.id || generateId('mcp'),
+    name: server?.name || '',
+    url: server?.url || '',
+    apiKey: server?.apiKey || '',
+    apiKeyHeader: server?.apiKeyHeader || '',
+    sseEndpoint: server?.sseEndpoint || '/sse',
+    messageEndpoint: server?.messageEndpoint || '/message',
+    enabled: server?.enabled !== false,
+    updatedAt: getNow()
+  };
+
+  const sheet = sheetBox(editing ? '编辑 MCP 服务器' : '新增 MCP 服务器');
+
+  const name = inputRow('名字', current.name || '', '比如：我的世界百科');
+  const url = inputRow('服务器地址', current.url || '', 'https://example.com/mcp');
+  const sse = inputRow('SSE 地址', current.sseEndpoint || '/sse', '/sse');
+  const message = inputRow('消息地址', current.messageEndpoint || '/message', '/message');
+  const apiKey = inputRow('API Key', current.apiKey || '', '可选');
+  const apiKeyHeader = inputRow('Key 字段名', current.apiKeyHeader || '', '例如 Authorization');
+
+  sheet.body.append(name.wrap, url.wrap, sse.wrap, message.wrap, apiKey.wrap, apiKeyHeader.wrap);
+
+  sheet.actions.append(
+    actionBtn('check', editing ? '保存' : '添加', () => {
+      const settings = getSettings();
+      const nextServer = {
+        id: current.id,
+        name: name.input.value.trim() || '未命名服务器',
+        url: url.input.value.trim(),
+        apiKey: apiKey.input.value.trim(),
+        apiKeyHeader: apiKeyHeader.input.value.trim(),
+        sseEndpoint: sse.input.value.trim() || '/sse',
+        messageEndpoint: message.input.value.trim() || '/message',
+        enabled: current.enabled,
+        updatedAt: getNow()
+      };
+
+      const servers = editing
+        ? settings.mcpServers.map((item) => item.id === nextServer.id ? nextServer : item)
+        : [...settings.mcpServers, { ...nextServer, createdAt: getNow() }];
+
+      saveSettings({ ...settings, mcpServers: servers });
+      hideBottomSheet();
+      showToast(editing ? '保存好啦' : '加好啦');
+      render('mcp');
+    })
+  );
+
+  showBottomSheet(sheet.root);
 }
 
 // ═══════════════════════════════════════
@@ -1022,6 +1161,7 @@ function saveBubbleMode(mode) {
   showToast('聊天样子换好啦');
   render('display');
 }
+
 // ═══════════════════════════════════════
 // 【桌面缩放/壁纸】
 // ═══════════════════════════════════════
@@ -1331,7 +1471,10 @@ async function importAll() {
       if (!Array.isArray(data.indexedDB?.[store])) continue;
       try {
         await clearStoreDB(store);
-        for (const item of data.indexedDB[store]) await setDB(store, item.key || item.id, item);
+        for (const item of data.indexedDB[store]) {
+          const record = item.key ? item : { ...item, key: item.id };
+          await setDB(store, record);
+        }
       } catch {}
     }
 
@@ -2267,6 +2410,11 @@ function injectStyle() {
       transition: var(--motion);
     }
 
+    .settings-action-btn.active-selected {
+      background: var(--accent-light);
+      color: var(--accent-dark);
+    }
+
     .settings-grid {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2755,4 +2903,5 @@ function injectStyle() {
   document.head.appendChild(styleEl);
 }
 
-// depends: ../core/storage.js(getData,setData,removeData,generateId,getNow,getStorageUsage,getDB,setDB,getAllDB,deleteDB,clearStoreDB)；../core/theme.js(getThemePresets,getCurrentTheme,setPreset,setThemeMode,applyTheme,saveTheme,exportTheme,importTheme)；../core/ui.js(showToast,showBottomSheet,hideBottomSheet,showConfirm,createIcon)；../core/api.js(fetchModels,smartModelsUrl,parseErrorResponse,buildHeaders)；../core/mcp.js(resetSession)；../core/storage-manager.js(testCloudConnection)；./settings/api-pool-settings.js；./settings/tts-settings.js
+// depends: ../core/storage.js(getData,setData,removeData,generateId,getNow,getStorageUsage,getDB,setDB,getAllDB,deleteDB,clearStoreDB)；../core/theme.js(getThemePresets,getCurrentTheme,setPreset,setThemeMode,applyTheme,saveTheme,exportTheme,importTheme)；../core/ui.js(showToast,showBottomSheet,hideBottomSheet,showConfirm,createIcon)；../core/api.js(fetchModels,smartModelsUrl,parseErrorResponse,buildHeaders)；../core/mcp.js(resetSession,getMcpServers,listMcpTools)；../core/storage-manager.js(testCloudConnection)；./settings/api-pool-settings.js；./settings/tts-settings.js
+
