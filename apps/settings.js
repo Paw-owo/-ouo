@@ -1,9 +1,9 @@
-// apps/settings/settings.js
+// apps/settings.js
 // imports:
 //   from '../core/storage.js': getData, setData, removeData, generateId, getNow, getStorageUsage, getDB, setDB, getAllDB, deleteDB, clearStoreDB
 //   from '../core/theme.js': getThemePresets, getCurrentTheme, setPreset, setThemeMode, applyTheme, saveTheme, exportTheme, importTheme
 //   from '../core/ui.js': showToast, showBottomSheet, hideBottomSheet, showConfirm, createIcon
-//   from '../core/api.js': fetchModels, smartModelsUrl, parseErrorResponse, buildHeaders
+//   from '../core/api.js': fetchModels, smartModelsUrl, parseErrorResponse, buildHeaders, addPoolEndpoint, getPoolGroups
 //   from '../core/mcp.js': resetSession, getMcpServers, listMcpTools
 //   from '../core/storage-manager.js': testCloudConnection
 
@@ -33,7 +33,7 @@ import {
 } from '../core/theme.js';
 
 import { showToast, showBottomSheet, hideBottomSheet, showConfirm, createIcon } from '../core/ui.js';
-import { fetchModels, smartModelsUrl, parseErrorResponse, buildHeaders } from '../core/api.js';
+import { fetchModels, smartModelsUrl, parseErrorResponse, buildHeaders, addPoolEndpoint, getPoolGroups } from '../core/api.js';
 import { resetSession, getMcpServers, listMcpTools } from '../core/mcp.js';
 import { testCloudConnection } from '../core/storage-manager.js';
 
@@ -526,22 +526,94 @@ function renderApiTestPage() {
 }
 
 function askAfterTest(apiData) {
-  const sheet = sheetBox('测试通过啦，想怎么用？');
+  const groups = getPoolGroups();
+  const initialGroup = apiData.apiKey ? 'paid' : 'free';
+  let selectedGroup = initialGroup;
+
+  const sheet = sheetBox('测试通过啦，存到轮换池');
+  const name = inputRow('接口名称', apiData.name, '未命名接口');
+  const model = inputRow('主模型', apiData.model, '例如 gpt-4o-mini');
+  const modelArea = el('div', 'settings-editor-model-area');
+
+  modelArea.append(modelPicker({
+    models: apiData.modelList || [],
+    current: apiData.model,
+    emptyText: '没有拉到模型，可以手填',
+    onSelect: (value) => {
+      model.input.value = value;
+      showToast(`已选择：${value}`);
+    }
+  }));
+
+  const groupSelector = el('div', 'api-pool-quick-group');
+  const paidBtn = el('button', `settings-preset ${selectedGroup === 'paid' ? 'active' : ''}`);
+  paidBtn.type = 'button';
+  paidBtn.textContent = groups.paid?.name || '付费组';
+  const freeBtn = el('button', `settings-preset ${selectedGroup === 'free' ? 'active' : ''}`);
+  freeBtn.type = 'button';
+  freeBtn.textContent = groups.free?.name || '免费组';
+
+  paidBtn.addEventListener('click', () => {
+    selectedGroup = 'paid';
+    paidBtn.classList.add('active');
+    freeBtn.classList.remove('active');
+  });
+
+  freeBtn.addEventListener('click', () => {
+    selectedGroup = 'free';
+    freeBtn.classList.add('active');
+    paidBtn.classList.remove('active');
+  });
+
+  groupSelector.append(paidBtn, freeBtn);
 
   sheet.body.append(
-    el('p', 'settings-free-note', '「设为全局默认」会固定用它，所有 AI 请求都走它。\n「加入轮换池」会按分组自动切换，更稳。')
+    el('p', 'settings-free-note', '点一下分组就能保存。有 Key 的建议放付费组，失败会自动切；没 Key 的放免费组。'),
+    name.wrap,
+    model.wrap,
+    modelArea,
+    el('div', 'settings-label', '放到哪个分组'),
+    groupSelector
   );
 
   sheet.actions.append(
+    actionBtn('check', '保存到轮换池', async () => {
+      const finalName = name.input.value.trim() || apiData.name || '未命名接口';
+      const finalModel = model.input.value.trim() || apiData.model || '';
+
+      if (selectedGroup !== 'free' && !finalModel) {
+        showToast('先填主模型哦');
+        return;
+      }
+
+      const groupsNow = getPoolGroups();
+      await addPoolEndpoint({
+        id: generateId('pool'),
+        groupType: selectedGroup,
+        groupName: selectedGroup === 'free' ? (groupsNow.free?.name || '免费组') : (groupsNow.paid?.name || '付费组'),
+        name: finalName,
+        endpoint: apiData.endpoint,
+        provider: apiData.provider,
+        keys: apiData.apiKey ? [apiData.apiKey] : [],
+        model: finalModel,
+        models: apiData.modelList || [],
+        source: '',
+        status: 'active'
+      });
+
+      hideBottomSheet();
+      showToast('接口已加入轮换池');
+    }),
+
     actionBtn('star', '设为全局默认', () => {
       const settings = getSettings();
       const newApi = {
         id: generateId(),
-        name: apiData.name,
+        name: name.input.value.trim() || apiData.name || '未命名接口',
         endpoint: apiData.endpoint,
         apiKey: apiData.apiKey,
         provider: apiData.provider,
-        model: apiData.model,
+        model: model.input.value.trim() || apiData.model,
         modelList: apiData.modelList
       };
       settings.apiEndpoints = [...settings.apiEndpoints.filter((item) => item.endpoint !== apiData.endpoint), newApi];
@@ -551,74 +623,10 @@ function askAfterTest(apiData) {
       hideBottomSheet();
       showToast('已设为全局默认接口');
       render('apiTest');
-    }),
-
-    actionBtn('settings', '加入轮换池', () => {
-      hideBottomSheet();
-      openPoolGroupSelector(apiData);
     })
   );
 
   showBottomSheet(sheet.root);
-}
-
-function openPoolGroupSelector(apiData) {
-  const sheet = sheetBox('放进哪个组？');
-  let selected = apiData.groupType || '';
-
-  const note = el('p', 'settings-free-note', '免费组：免 Key 或免费额度接口，失败会安静等。\n付费组：自己的 Key 接口，失败会自动切下一条。');
-  sheet.body.append(note);
-
-  const paidBtn = actionBtn('settings', '付费组', () => {
-    selected = 'paid';
-    updateButtons();
-  });
-  const freeBtn = actionBtn('play', '免费组', () => {
-    selected = 'free';
-    updateButtons();
-  });
-
-  function updateButtons() {
-    paidBtn.classList.toggle('active-selected', selected === 'paid');
-    freeBtn.classList.toggle('active-selected', selected === 'free');
-  }
-
-  sheet.actions.append(paidBtn, freeBtn);
-
-  sheet.actions.append(actionBtn('check', '确认加入', () => {
-    if (!selected) {
-      showToast('先选一个分组哦');
-      return;
-    }
-    addToPool({ ...apiData, groupType: selected });
-    hideBottomSheet();
-  }));
-
-  updateButtons();
-  showBottomSheet(sheet.root);
-}
-
-async function addToPool(apiData) {
-  const { getPoolGroups, addPoolEndpoint } = await import('../core/api.js');
-  const groups = getPoolGroups();
-  const groupType = apiData.groupType === 'free' ? 'free' : 'paid';
-
-  await addPoolEndpoint({
-    id: generateId('pool'),
-    groupType,
-    groupName: groupType === 'free' ? (groups.free?.name || '免费组') : (groups.paid?.name || '付费组'),
-    name: apiData.name,
-    endpoint: apiData.endpoint,
-    provider: apiData.provider,
-    keys: apiData.apiKey ? [apiData.apiKey] : [],
-    model: apiData.model,
-    models: apiData.modelList || [],
-    source: '',
-    status: 'active'
-  });
-
-  showToast('已加入轮换池');
-  render('apiPool');
 }
 
 // ═══════════════════════════════════════
@@ -2699,6 +2707,16 @@ function injectStyle() {
       gap: 2px;
     }
 
+    .api-pool-quick-group {
+      display: flex;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .api-pool-quick-group .settings-preset {
+      flex: 1;
+    }
+
     .settings-api-top-buttons {
       display: flex;
       flex-wrap: wrap;
@@ -2903,5 +2921,5 @@ function injectStyle() {
   document.head.appendChild(styleEl);
 }
 
-// depends: ../core/storage.js(getData,setData,removeData,generateId,getNow,getStorageUsage,getDB,setDB,getAllDB,deleteDB,clearStoreDB)；../core/theme.js(getThemePresets,getCurrentTheme,setPreset,setThemeMode,applyTheme,saveTheme,exportTheme,importTheme)；../core/ui.js(showToast,showBottomSheet,hideBottomSheet,showConfirm,createIcon)；../core/api.js(fetchModels,smartModelsUrl,parseErrorResponse,buildHeaders)；../core/mcp.js(resetSession,getMcpServers,listMcpTools)；../core/storage-manager.js(testCloudConnection)；./settings/api-pool-settings.js；./settings/tts-settings.js
+// depends: ../core/storage.js(getData,setData,removeData,generateId,getNow,getStorageUsage,getDB,setDB,getAllDB,deleteDB,clearStoreDB)；../core/theme.js(getThemePresets,getCurrentTheme,setPreset,setThemeMode,applyTheme,saveTheme,exportTheme,importTheme)；../core/ui.js(showToast,showBottomSheet,hideBottomSheet,showConfirm,createIcon)；../core/api.js(fetchModels,smartModelsUrl,parseErrorResponse,buildHeaders,addPoolEndpoint,getPoolGroups)；../core/mcp.js(resetSession,getMcpServers,listMcpTools)；../core/storage-manager.js(testCloudConnection)；./settings/api-pool-settings.js；./settings/tts-settings.js
 
