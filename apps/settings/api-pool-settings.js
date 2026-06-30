@@ -27,6 +27,8 @@ let refreshHandler = null;
 let styleEl = null;
 let testingAll = false;
 
+const GROUP_COLLAPSE_KEY = 'app_api_pool_collapsed';
+
 const STATUS_LABELS = {
   active: '可用',
   ok: '可用',
@@ -82,6 +84,7 @@ export async function renderApiPoolSettings(options = {}) {
   const rawItems = await getApiPoolItems();
   const items = sortPoolItems(rawItems);
   const mergedModels = await getMergedPoolModels();
+  const collapsed = getCollapsedGroups();
 
   const top = card('API 轮换池', '按可用性、模型、最近成功、延迟和分组自动排队，不会把低延迟异常源当成好接口');
   top.append(actionRow([
@@ -97,22 +100,6 @@ export async function renderApiPoolSettings(options = {}) {
     actionBtn('play', '免费API预设', openFreeApiSelector)
   ]));
   wrap.append(quick);
-
-  const groupEditor = card('分组名字', '保留原来的分组数据，只改显示名字');
-  const paidNameInput = inputRow('付费组名字', groups.paid?.name || '付费组', '付费组');
-  const freeNameInput = inputRow('免费组名字', groups.free?.name || '免费组', '免费组');
-  groupEditor.append(paidNameInput.wrap, freeNameInput.wrap);
-  groupEditor.append(actionRow([
-    actionBtn('check', '保存分组', () => {
-      setPoolGroups({
-        paid: { id: 'paid', name: paidNameInput.input.value.trim() || '付费组', type: 'paid' },
-        free: { id: 'free', name: freeNameInput.input.value.trim() || '免费组', type: 'free' }
-      });
-      showToast('分组名字收好啦');
-      rerender();
-    })
-  ]));
-  wrap.append(groupEditor);
 
   const stat = card('模型总览', `已合并 ${mergedModels.length} 个模型名`);
   stat.append(actionRow([
@@ -130,12 +117,161 @@ export async function renderApiPoolSettings(options = {}) {
     const paidItems = items.filter((item) => item.groupType !== 'free');
     const freeItems = items.filter((item) => item.groupType === 'free');
 
-    listContainer.append(poolGroupCard(groups.paid?.name || '付费组', '失败会自动切下一个，优先记住上次成功的那条', paidItems));
-    listContainer.append(poolGroupCard(groups.free?.name || '免费组', '只试第一条，超过一分钟才提醒换模型', freeItems));
+    listContainer.append(
+      collapsibleGroupCard({
+        groupKey: 'paid',
+        title: groups.paid?.name || '付费组',
+        desc: '失败会自动切下一个，优先记住上次成功的那条',
+        items: paidItems,
+        enabled: groups.paid?.enabled !== false,
+        collapsed: collapsed.paid !== false
+      })
+    );
+
+    listContainer.append(
+      collapsibleGroupCard({
+        groupKey: 'free',
+        title: groups.free?.name || '免费组',
+        desc: '只试第一条，超过一分钟才提醒换模型',
+        items: freeItems,
+        enabled: groups.free?.enabled !== false,
+        collapsed: collapsed.free !== false
+      })
+    );
   }
 
   wrap.append(listContainer);
   return wrap;
+}
+
+// ═══════════════════════════════════════
+// 【折叠分组卡片】
+// ═══════════════════════════════════════
+
+function getCollapsedGroups() {
+  return getData_local(GROUP_COLLAPSE_KEY) || { paid: true, free: true };
+}
+
+function saveCollapsedGroups(state) {
+  setData_local(GROUP_COLLAPSE_KEY, state || { paid: true, free: true });
+}
+
+function getData_local(key) {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function setData_local(key, value) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {}
+}
+
+function collapsibleGroupCard({ groupKey, title, desc, items, enabled, collapsed }) {
+  const box = el('div', 'api-pool-collapsible-group');
+  box.dataset.groupKey = groupKey;
+  box.dataset.collapsed = collapsed ? 'true' : 'false';
+
+  // ── 标题行 ──
+  const header = el('div', 'api-pool-group-header');
+
+  const toggleBtn = el('button', 'api-pool-group-toggle');
+  toggleBtn.type = 'button';
+  toggleBtn.setAttribute('aria-label', `展开或收起 ${title}`);
+
+  const toggleIcon = el('span', 'api-pool-group-toggle-icon');
+  toggleIcon.append(safeIcon('chevron', 16));
+
+  const titleBox = el('div', 'api-pool-group-title-box');
+  const nameInput = el('input', 'api-pool-group-name-input');
+  nameInput.type = 'text';
+  nameInput.value = title;
+  nameInput.setAttribute('aria-label', `${title} 分组名字`);
+  nameInput.addEventListener('blur', () => {
+    const newName = nameInput.value.trim() || title;
+    const groups = getPoolGroups();
+    setPoolGroups({ ...groups, [groupKey]: { ...groups[groupKey], name: newName } });
+    showToast('分组名字收好啦');
+  });
+  nameInput.addEventListener('click', (e) => e.stopPropagation());
+
+  const countBadge = el('span', 'api-pool-group-count', String(items.length));
+
+  titleBox.append(nameInput, countBadge);
+
+  toggleBtn.append(toggleIcon, titleBox);
+  toggleBtn.addEventListener('click', () => {
+    const isCollapsed = box.dataset.collapsed === 'true';
+    const nextCollapsed = !isCollapsed;
+    box.dataset.collapsed = nextCollapsed ? 'true' : 'false';
+    const state = getCollapsedGroups();
+    state[groupKey] = nextCollapsed;
+    saveCollapsedGroups(state);
+  });
+
+  // ── 启用开关 ──
+  const switchEl = el('button', `api-pool-group-switch ${enabled ? 'on' : ''}`);
+  switchEl.type = 'button';
+  switchEl.dataset.value = enabled ? 'true' : 'false';
+  switchEl.append(el('i', 'api-pool-group-switch-dot'));
+  switchEl.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const next = switchEl.dataset.value !== 'true';
+    switchEl.dataset.value = next ? 'true' : 'false';
+    switchEl.classList.toggle('on', next);
+    const groups = getPoolGroups();
+    setPoolGroups({ ...groups, [groupKey]: { ...groups[groupKey], enabled: next } });
+    showToast(next ? `${title} 开启啦` : `${title} 关好啦`);
+  });
+
+  header.append(toggleBtn, switchEl);
+  box.append(header);
+
+  // ── 描述 ──
+  const descEl = el('p', 'api-pool-group-desc', desc);
+  box.append(descEl);
+
+  // ── 折叠摘要 ──
+  const summary = el('div', 'api-pool-group-summary');
+  if (items.length) {
+    items.slice(0, 3).forEach((item) => {
+      const row = el('div', 'api-pool-summary-row');
+      const status = normalizeStatus(item.status, item.lastErrorMessage);
+      const statusLabel = STATUS_LABELS[status] || STATUS_LABELS.unknown;
+      const model = item.model || item.models?.[0] || '未选择';
+      const latency = Number(item.lastLatencyMs || 0) > 0 ? `${item.lastLatencyMs}ms` : '';
+      row.append(
+        el('span', `api-pool-summary-dot api-pool-status-dot-${status}`, ''),
+        el('strong', '', item.name || '未命名接口'),
+        el('small', '', model),
+        latency ? el('small', 'api-pool-summary-latency', latency) : el('span', ''),
+        el('span', `api-pool-summary-badge api-pool-status-${status}`, statusLabel)
+      );
+      summary.append(row);
+    });
+    if (items.length > 3) {
+      summary.append(el('div', 'api-pool-summary-more', `还有 ${items.length - 3} 条，点展开看全部`));
+    }
+  } else {
+    summary.append(empty('还没有接口'));
+  }
+  box.append(summary);
+
+  // ── 展开详情区 ──
+  const detail = el('div', 'api-pool-group-detail');
+  items.forEach((item) => {
+    detail.append(poolProviderCard(item, title));
+  });
+  detail.append(actionRow([
+    actionBtn('add', `加${title}接口`, () => openPoolEndpointEditor({ groupType }))
+  ]));
+  box.append(detail);
+
+  return box;
 }
 
 async function render() {
@@ -163,6 +299,7 @@ async function refreshList() {
   const groups = getPoolGroups();
   const rawItems = await getApiPoolItems();
   const items = sortPoolItems(rawItems);
+  const collapsed = getCollapsedGroups();
 
   container.innerHTML = '';
 
@@ -174,8 +311,27 @@ async function refreshList() {
   const paidItems = items.filter((item) => item.groupType !== 'free');
   const freeItems = items.filter((item) => item.groupType === 'free');
 
-  container.append(poolGroupCard(groups.paid?.name || '付费组', '失败会自动切下一个，优先记住上次成功的那条', paidItems));
-  container.append(poolGroupCard(groups.free?.name || '免费组', '只试第一条，超过一分钟才提醒换模型', freeItems));
+  container.append(
+    collapsibleGroupCard({
+      groupKey: 'paid',
+      title: groups.paid?.name || '付费组',
+      desc: '失败会自动切下一个，优先记住上次成功的那条',
+      items: paidItems,
+      enabled: groups.paid?.enabled !== false,
+      collapsed: collapsed.paid !== false
+    })
+  );
+
+  container.append(
+    collapsibleGroupCard({
+      groupKey: 'free',
+      title: groups.free?.name || '免费组',
+      desc: '只试第一条，超过一分钟才提醒换模型',
+      items: freeItems,
+      enabled: groups.free?.enabled !== false,
+      collapsed: collapsed.free !== false
+    })
+  );
 }
 
 function goBack() {
@@ -184,25 +340,6 @@ function goBack() {
     return;
   }
   window.dispatchEvent(new CustomEvent('settings:back'));
-}
-
-function poolGroupCard(title, desc, items) {
-  const box = card(title, desc);
-  box.dataset.groupType = title === '免费组' ? 'free' : 'paid';
-
-  if (!items.length) {
-    box.append(empty(title === '免费组' ? '还没有免费组接口' : '还没有付费组接口'));
-  }
-
-  items.forEach((item) => {
-    box.append(poolProviderCard(item, title));
-  });
-
-  box.append(actionRow([
-    actionBtn('add', title === '免费组' ? '加免费接口' : '加付费接口', () => openPoolEndpointEditor({ groupType: title === '免费组' ? 'free' : 'paid' }))
-  ]));
-
-  return box;
 }
 
 function poolProviderCard(api, groupName) {
@@ -243,6 +380,7 @@ function poolProviderCard(api, groupName) {
   const actions = actionRow([
     actionBtn('check', '单独测试', async () => testOne(api.id)),
     actionBtn('refresh', '拉取模型', () => fetchModelsForExisting(api)),
+    actionBtn('copy', '复制', () => duplicatePoolItem(api)),
     actionBtn('edit', '编辑', () => openPoolEndpointEditor(api)),
     actionBtn('delete', '删除', async () => {
       const ok = await showConfirm(`要删除 ${api.name || '这条接口'} 吗？`);
@@ -261,6 +399,25 @@ function metaItem(label, value) {
   const node = el('div', 'api-pool-meta-item');
   node.append(el('span', '', label), el('strong', '', value || '未填写'));
   return node;
+}
+
+async function duplicatePoolItem(api) {
+  const groups = getPoolGroups();
+  await addPoolEndpoint({
+    id: generateId('pool'),
+    groupType: api.groupType,
+    groupName: api.groupName || (api.groupType === 'free' ? '免费组' : '付费组'),
+    name: `${api.name || '未命名接口'} 副本`,
+    endpoint: api.endpoint,
+    provider: api.provider,
+    keys: [...(api.keys || [])],
+    model: api.model,
+    models: [...(api.models || [])],
+    source: api.source || '',
+    status: 'active'
+  });
+  showToast('复制好啦，改一下名字和 Key 就能用');
+  refreshList();
 }
 
 async function testOne(id) {
@@ -1148,11 +1305,248 @@ function injectStyle() {
       gap: 14px;
     }
 
+    /* ── 折叠分组卡片 ── */
+
+    .api-pool-collapsible-group {
+      border-radius: var(--radius-lg);
+      background: var(--bg-card);
+      box-shadow: var(--shadow-sm);
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .api-pool-group-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-height: 44px;
+    }
+
+    .api-pool-group-toggle {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0;
+      border: none;
+      outline: none;
+      background: transparent;
+      color: var(--text-primary);
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .api-pool-group-toggle-icon {
+      width: 24px;
+      height: 24px;
+      flex: 0 0 24px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 8px;
+      background: var(--accent-light);
+      color: var(--accent-dark);
+      transition: transform 200ms ease;
+    }
+
+    .api-pool-collapsible-group[data-collapsed="false"] .api-pool-group-toggle-icon {
+      transform: rotate(90deg);
+    }
+
+    .api-pool-group-title-box {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .api-pool-group-name-input {
+      flex: 1;
+      min-width: 0;
+      max-width: 160px;
+      padding: 4px 8px;
+      border: none;
+      outline: none;
+      border-radius: 10px;
+      background: var(--surface-muted);
+      color: var(--text-primary);
+      font-size: var(--font-size-base);
+      font-weight: 600;
+    }
+
+    .api-pool-group-count {
+      flex: 0 0 auto;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: var(--surface-muted);
+      color: var(--text-secondary);
+      font-size: var(--font-size-small);
+      font-weight: 600;
+    }
+
+    .api-pool-group-switch {
+      flex: 0 0 auto;
+      position: relative;
+      width: 44px;
+      height: 26px;
+      border: none;
+      outline: none;
+      border-radius: 999px;
+      background: var(--bg-secondary);
+      transition: var(--motion);
+      cursor: pointer;
+    }
+
+    .api-pool-group-switch.on {
+      background: var(--accent);
+    }
+
+    .api-pool-group-switch-dot {
+      position: absolute;
+      top: 4px;
+      left: 4px;
+      width: 18px;
+      height: 18px;
+      border-radius: 999px;
+      background: var(--bg-card);
+      box-shadow: var(--shadow-sm);
+      transition: var(--motion);
+    }
+
+    .api-pool-group-switch.on .api-pool-group-switch-dot {
+      transform: translateX(18px);
+    }
+
+    .api-pool-group-desc {
+      margin: 0;
+      color: var(--text-secondary);
+      font-size: var(--font-size-small);
+      line-height: 1.45;
+    }
+
+    /* ── 折叠摘要 ── */
+
+    .api-pool-group-summary {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .api-pool-collapsible-group[data-collapsed="false"] .api-pool-group-summary {
+      display: none;
+    }
+
+    .api-pool-summary-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      border-radius: 14px;
+      background: var(--surface-muted);
+    }
+
+    .api-pool-summary-dot {
+      width: 8px;
+      height: 8px;
+      flex: 0 0 8px;
+      border-radius: 999px;
+      background: var(--text-hint);
+    }
+
+    .api-pool-status-dot-active,
+    .api-pool-status-dot-ok {
+      background: var(--accent);
+    }
+
+    .api-pool-status-dot-error,
+    .api-pool-status-dot-unknown,
+    .api-pool-status-dot-network_error {
+      background: var(--text-secondary);
+    }
+
+    .api-pool-summary-row strong {
+      flex: 0 1 auto;
+      min-width: 0;
+      overflow: hidden;
+      color: var(--text-primary);
+      font-size: var(--font-size-small);
+      font-weight: 600;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .api-pool-summary-row small {
+      flex: 0 1 auto;
+      min-width: 0;
+      overflow: hidden;
+      color: var(--text-secondary);
+      font-size: var(--font-size-small);
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .api-pool-summary-latency {
+      color: var(--text-hint);
+      font-size: calc(var(--font-size-small) * 0.86);
+    }
+
+    .api-pool-summary-badge {
+      flex: 0 0 auto;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: var(--bg-card);
+      color: var(--text-secondary);
+      font-size: calc(var(--font-size-small) * 0.86);
+      font-weight: 600;
+    }
+
+    .api-pool-status-active,
+    .api-pool-status-ok {
+      background: var(--accent-light);
+      color: var(--accent-dark);
+    }
+
+    .api-pool-status-billing,
+    .api-pool-status-invalid_key,
+    .api-pool-status-model_not_found,
+    .api-pool-status-rate_limited,
+    .api-pool-status-network_error,
+    .api-pool-status-bad_response,
+    .api-pool-status-error,
+    .api-pool-status-unknown {
+      background: var(--surface-muted);
+      color: var(--text-secondary);
+    }
+
+    .api-pool-summary-more {
+      padding: 6px 10px;
+      color: var(--text-hint);
+      font-size: var(--font-size-small);
+      text-align: center;
+    }
+
+    /* ── 展开详情区 ── */
+
+    .api-pool-group-detail {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .api-pool-collapsible-group[data-collapsed="true"] .api-pool-group-detail {
+      display: none;
+    }
+
+    /* ── 接口卡片（展开态） ── */
+
     .api-pool-provider-card {
       display: flex;
       flex-direction: column;
       gap: 10px;
-      margin-top: 10px;
       padding: 12px;
       border-radius: var(--radius-md);
       background: var(--surface-muted);
@@ -1216,24 +1610,6 @@ function injectStyle() {
       font-size: var(--font-size-small);
       font-weight: 600;
       white-space: nowrap;
-    }
-
-    .api-pool-status-active,
-    .api-pool-status-ok {
-      background: var(--accent-light);
-      color: var(--accent-dark);
-    }
-
-    .api-pool-status-billing,
-    .api-pool-status-invalid_key,
-    .api-pool-status-model_not_found,
-    .api-pool-status-rate_limited,
-    .api-pool-status-network_error,
-    .api-pool-status-bad_response,
-    .api-pool-status-error,
-    .api-pool-status-unknown {
-      background: var(--surface-muted);
-      color: var(--text-secondary);
     }
 
     .api-pool-meta {
@@ -1333,7 +1709,7 @@ function injectStyle() {
       display: none;
     }
 
-    .api-pool-model-chip {
+        .api-pool-model-chip {
       min-width: 148px;
       max-width: 220px;
       min-height: 58px;
@@ -1432,8 +1808,13 @@ function injectStyle() {
         overflow: hidden;
         text-overflow: ellipsis;
       }
+
+      .api-pool-group-name-input {
+        max-width: 100px;
+      }
     }
   `;
 
   document.head.appendChild(styleEl);
 }
+
