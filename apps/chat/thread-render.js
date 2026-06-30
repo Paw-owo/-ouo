@@ -2643,14 +2643,14 @@ function injectStyle() {
       display: flex;
       flex-wrap: nowrap;
       gap: 5px;
-      opacity: 0.4;
+      opacity: 0.62;
       overflow: hidden;
       transition: all 200ms ease;
       touch-action: manipulation;
     }
 
     .chat-message-body:hover .chat-message-actions {
-      opacity: 0.82;
+      opacity: 1;
     }
 
     .chat-message-body.role-user .chat-message-actions {
@@ -2663,7 +2663,7 @@ function injectStyle() {
 
     .chat-message-row.mode-dialog .chat-message-actions {
       margin-top: 1px;
-      opacity: 0.3;
+      opacity: 0.55;
     }
 
     .chat-message-row.mode-dialog.role-user .chat-message-actions {
@@ -2675,7 +2675,7 @@ function injectStyle() {
     }
 
     .chat-message-row.mode-dialog .chat-message-body:hover .chat-message-actions {
-      opacity: 0.72;
+      opacity: 0.9;
     }
 
     .chat-message-action-btn {
@@ -3176,6 +3176,5 @@ function injectStyle() {
   document.head.appendChild(style);
 }
 
-// 改了什么：1) createBubbleContent/createMessageContent/createErrorBubble 新增 pageEl 参数透传；2) createErrorBubble 加"再试一次"按钮，点击调 regenerateThreadMessage；3) CSS 加 .chat-error-retry 按钮样式。
-// 不动的：renderThreadMessages 主入口、所有渲染逻辑、气泡/对话模式、语音卡片、骰子、商店卡片、代码块、思维链渲染、所有导入导出。
+// 改了什么：操作栏 opacity 从 0.4 改成 0.62，hover 从 0.82 改成 1，对话模式从 0.3 改成 0.55，对话模式 hover 从 0.72 改成 0.9。其他全部不动。
 // 依赖：../../core/storage.js(getData)；../../core/ui.js(showToast,showBottomSheet,hideBottomSheet)；./thread-actions.js(copyThreadMessage,quoteThreadMessage,editThreadMessage,deleteThreadMessage,regenerateThreadMessage,resendThreadMessage,playThreadTTS,stopThreadTTS)；./thinking-chain.js(createThinkingCard,hasThinkingChain)
