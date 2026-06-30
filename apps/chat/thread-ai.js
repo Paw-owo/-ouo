@@ -467,7 +467,7 @@ async function requestPrivateReply(state, options = {}) {
 
     const finalMessage = cleanForDB({
       ...placeholder,
-      content: parsed.content || '我刚才有点卡住了，可以再说一遍吗？',
+      content: parsed.content || '我刚才有点卡住了',
       thinking: parsed.thinking || placeholder.thinking,
       thinkingSummary: parsed.thinkingSummary || summarizeText(parsed.thinking || placeholder.thinking, 28),
       toolCalls: parsed.toolCalls,
@@ -792,6 +792,7 @@ async function generateInnerMonologue({
     // 静默失败，不影响主回复
   }
 }
+
 function parseInnerMonologueResult(result, userName) {
   let text = '';
 
@@ -825,7 +826,7 @@ function parseInnerMonologueResult(result, userName) {
   text = text.replace(/^独白[:：]?\s*/i, '').trim();
   text = text.replace(/^想法[:：]?\s*/i, '').trim();
 
-  // 修复：清洗视角，让独白像角色自己在想
+  // 清洗视角，让独白像角色自己在想
   text = cleanPerspectiveText(text, userName);
 
   return stripEmoji(text);
@@ -1339,10 +1340,6 @@ async function loadInventory() {
   return normalizeList(list).filter((item) => item.enabled !== false);
 }
 
-function loadAnniversary() {
-  return getData('anniversary_items') || getData('app_anniversary') || getData('anniversaries') || null;
-}
-
 // ═══════════════════════════════════════
 // 【用户档案】读取和规范化用户人设
 // ═══════════════════════════════════════
@@ -1413,7 +1410,7 @@ function getUserGenderHint(user) {
   const raw = [user?.gender, user?.sex, user?.pronoun, user?.pronouns, user?.content, user?.profile, user?.persona, user?.description].filter(Boolean).join(' ').toLowerCase();
   if (!raw) return '';
   if (/(女|女生|女性|女孩|姐姐|妹妹|她|girl|female|woman|she|her)/i.test(raw)) return '她';
-  if (/(男|男生|男性|男孩|哥哥|弟弟|他|boy|male|man|he|him)/i.test(raw)) return '他';
+  if (/(男|男生|男性|男孩|哥哥|弟弟|他|boy|male|man|he|him)/i.test(raw)) return '她';
   return '';
 }
 
@@ -1580,21 +1577,18 @@ function cleanForDB(value) {
 }
 
 // ───────────────────
-// 视角文本清洗（已移除 TA 硬替换）
+// 视角文本清洗（收紧规则，只做必要的代词替换）
 // ───────────────────
 
 function cleanPerspectiveText(text, userName = '你') {
-  return String(text || '')
-    .replace(/用户/g, userName)
-    .replace(/这位玩家/g, userName)
-    .replace(/对方/g, userName)
-    .replace(/你(应该)/g, '我会')
-    .replace(/你(需要)/g, '我会')
-    .replace(/你(要)/g, '我会')
-    .replace(/你(必须)/g, '我会')
-    .replace(/请(你)/g, '我会')
-    .replace(/请/g, '')
-    .trim();
+  let result = String(text || '');
+
+  // 只替换"用户""对方"等称呼为用户昵称
+  result = result.replace(/用户/g, userName);
+  result = result.replace(/这位玩家/g, userName);
+  result = result.replace(/对方/g, userName);
+
+  return result.trim();
 }
 
 function stripEmoji(text) {
@@ -1611,21 +1605,6 @@ function similarText(a, b) {
   if (left === right) return true;
   if (left.includes(right) || right.includes(left)) return true;
   return left.slice(0, 24) === right.slice(0, 24);
-}
-
-function isPageActive() {
-  return document.visibilityState === 'visible' && document.hasFocus();
-}
-
-function formatCurrentTime() {
-  return new Date().toLocaleString([], {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    weekday: 'short',
-    hour: '2-digit',
-    minute: '2-digit'
-  });
 }
 
 function summarizeText(text, max = 60) {
