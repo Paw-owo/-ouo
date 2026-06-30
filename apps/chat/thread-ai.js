@@ -31,7 +31,7 @@ import { getIdentityCore } from './identity-core.js';
 import { tryLocalOrSiliconFlowReply } from './thread-ai-local.js';
 
 // ═══════════════════════════════════════
-// 【基础配置】聊天 AI 常量和运行状态
+// 基础配置
 // ═══════════════════════════════════════
 
 const PRIVATE_STORE = 'messages';
@@ -62,56 +62,12 @@ const DEFAULT_PROACTIVE_CONFIG = {
 };
 
 const PUNISHMENT_POOL = [
-  {
-    type: 'cooldown',
-    title: '冷战几分钟',
-    description: '我现在不太想马上理人。倒计时结束前，我会先保持距离，等对方好好想想怎么哄我。',
-    lockType: 'cooldown',
-    level: 2,
-    minutes: 5,
-    requiredCount: 1
-  },
-  {
-    type: 'apology',
-    title: '认真道歉',
-    description: '我想听到认真说清楚哪里错了、以后准备怎么补救。太敷衍的话，我会继续记着。',
-    lockType: 'apology_required',
-    level: 2,
-    minutes: 10,
-    requiredCount: 1
-  },
-  {
-    type: 'nickname',
-    title: '叫我专属称呼',
-    description: '我想听到连续三次好好叫我的专属称呼，然后我才考虑不继续冷着。',
-    lockType: 'nickname_required',
-    level: 2,
-    minutes: 8,
-    requiredCount: 3
-  },
-  {
-    type: 'blackout',
-    title: '假装拉黑',
-    description: '我会先从聊天列表里消失一小会儿。不是彻底离开，只是我真的有点不想出现。',
-    lockType: 'soft_block',
-    level: 3,
-    minutes: 6,
-    requiredCount: 1
-  },
-  {
-    type: 'ultimatum',
-    title: '最后解释机会',
-    description: '我只给一次认真解释的机会。说得真诚，我就回来；继续敷衍，我会把冷战延长。',
-    lockType: 'ultimatum',
-    level: 4,
-    minutes: 12,
-    requiredCount: 1
-  }
+  { type: 'cooldown', title: '冷战几分钟', description: '我现在不太想马上理人。倒计时结束前，我会先保持距离，等对方好好想想怎么哄我。', lockType: 'cooldown', level: 2, minutes: 5, requiredCount: 1 },
+  { type: 'apology', title: '认真道歉', description: '我想听到认真说清楚哪里错了、以后准备怎么补救。太敷衍的话，我会继续记着。', lockType: 'apology_required', level: 2, minutes: 10, requiredCount: 1 },
+  { type: 'nickname', title: '叫我专属称呼', description: '我想听到连续三次好好叫我的专属称呼，然后我才考虑不继续冷着。', lockType: 'nickname_required', level: 2, minutes: 8, requiredCount: 3 },
+  { type: 'blackout', title: '假装拉黑', description: '我会先从聊天列表里消失一小会儿。不是彻底离开，只是我真的有点不想出现。', lockType: 'soft_block', level: 3, minutes: 6, requiredCount: 1 },
+  { type: 'ultimatum', title: '最后解释机会', description: '我只给一次认真解释的机会。说得真诚，我就回来；继续敷衍，我会把冷战延长。', lockType: 'ultimatum', level: 4, minutes: 12, requiredCount: 1 }
 ];
-
-// ═══════════════════════════════════════
-// 【可爱报错文案】按 HTTP 状态码返回
-// ═══════════════════════════════════════
 
 const FRIENDLY_ERROR_MAP = {
   400: '这波啊，这波是格式没整对，',
@@ -128,89 +84,61 @@ const FRIENDLY_ERROR_MAP = {
 };
 
 function getFriendlyErrorMessage(status) {
+  if (Number(status) === 0) return '网络好像断了，检查一下连接？';
   return FRIENDLY_ERROR_MAP[Number(status)] || '我刚刚出了点小状况，再说一遍试试？';
 }
 
 // ═══════════════════════════════════════
-// 【公开接口】私聊、群聊、停止、主动消息
+// 公开接口
 // ═══════════════════════════════════════
 
 export async function requestThreadAIReply(state, options = {}) {
   if (!state) return null;
-
-  if (state.mode === 'group') {
-    return requestGroupReply(state, options);
-  }
-
+  if (state.mode === 'group') return requestGroupReply(state, options);
   return requestPrivateReply(state, options);
 }
 
 export async function stopThreadAIReply(state, options = {}) {
   if (!state) return false;
-
   const key = getAIJobKey(state);
   const job = activeAIJobs.get(key);
-
   state.aiGenerating = false;
   state.isSending = false;
-
   if (!job) return false;
-
   job.stopped = true;
   job.stoppedAt = getNow();
-
-  try {
-    job.controller?.abort?.();
-  } catch (_) {}
-
+  try { job.controller?.abort?.(); } catch (_) {}
   await markJobPlaceholdersStopped(job, options.message || '我先停在这里了。');
-
   if (state.mode === 'group') {
     await syncGroupState(state, state.groupId || job.groupId || '');
   } else {
     await syncPrivateState(state, state.characterId || job.characterId || '');
   }
-
   activeAIJobs.delete(key);
   return true;
 }
 
 export async function checkThreadProactiveMessages(state, options = {}) {
   if (!state || state.mode === 'group') return null;
-
   const character = state.character;
   const characterId = character?.id || state.characterId;
   if (!characterId) return null;
-
   if (document.visibilityState !== 'visible') return null;
-
   const activeLock = await getActiveRelationshipLock(characterId);
-  if (activeLock && ['soft_block', 'cooldown', 'ultimatum'].includes(activeLock.type)) {
-    return null;
-  }
-
+  if (activeLock && ['soft_block', 'cooldown', 'ultimatum'].includes(activeLock.type)) return null;
   const config = getChatConfig(characterId);
   const messages = await loadPrivateMessages(characterId);
   const last = messages[messages.length - 1] || null;
-
   if (!last) return null;
-
   const now = Date.now();
   const lastTime = new Date(last.timestamp || last.createdAt || 0).getTime();
   if (!lastTime) return null;
-
   await markUserReplyIfNeeded(characterId, config, last);
-
   const refreshedConfig = getChatConfig(characterId);
-
-  if (refreshedConfig.proactiveAwaitingUserReply) {
-    return null;
-  }
-
+  if (refreshedConfig.proactiveAwaitingUserReply) return null;
   if (refreshedConfig.proactiveMode1Enabled) {
     const minutes = clampNumber(refreshedConfig.proactiveMode1Minutes, 1, 240);
     const due = now - lastTime >= minutes * 60 * 1000;
-
     if (last.role === 'user' && due) {
       return sendProactivePrivateMessage(state, {
         reason: 'offline_timeout',
@@ -219,21 +147,15 @@ export async function checkThreadProactiveMessages(state, options = {}) {
       });
     }
   }
-
   return null;
 }
 
 export async function requestProactiveThreadMessage(state, reason = 'manual') {
   if (!state || state.mode === 'group') return null;
-
   const characterId = state.character?.id || state.characterId;
   if (!characterId) return null;
-
   const activeLock = await getActiveRelationshipLock(characterId);
-  if (activeLock && ['soft_block', 'cooldown', 'ultimatum'].includes(activeLock.type)) {
-    return null;
-  }
-
+  if (activeLock && ['soft_block', 'cooldown', 'ultimatum'].includes(activeLock.type)) return null;
   return sendProactivePrivateMessage(state, {
     reason,
     config: getChatConfig(characterId),
@@ -242,30 +164,23 @@ export async function requestProactiveThreadMessage(state, reason = 'manual') {
 }
 
 // ═══════════════════════════════════════
-// 【AI 任务管理】启动、停止、创建占位
+// AI 任务管理
 // ═══════════════════════════════════════
 
 function getAIJobKey(state) {
   if (!state) return 'ai-job:empty';
-  if (state.mode === 'group') {
-    return `ai-job:group:${state.groupId || state.group?.id || 'none'}`;
-  }
+  if (state.mode === 'group') return `ai-job:group:${state.groupId || state.group?.id || 'none'}`;
   return `ai-job:private:${state.characterId || state.character?.id || 'none'}`;
 }
 
 function startAIJob(state, options = {}) {
   const key = getAIJobKey(state);
-
   const existing = activeAIJobs.get(key);
   if (existing) {
-    try {
-      existing.controller?.abort?.();
-    } catch (_) {}
+    try { existing.controller?.abort?.(); } catch (_) {}
     activeAIJobs.delete(key);
   }
-
   const controller = new AbortController();
-
   const job = {
     id: generateId('ai-job'),
     key,
@@ -278,41 +193,26 @@ function startAIJob(state, options = {}) {
     stoppedAt: null,
     startedAt: getNow()
   };
-
   activeAIJobs.set(key, job);
   return job;
 }
 
 function finishAIJob(state, job) {
   if (!job) return;
-
-  if (activeAIJobs.get(job.key) === job) {
-    activeAIJobs.delete(job.key);
-  }
-
+  if (activeAIJobs.get(job.key) === job) activeAIJobs.delete(job.key);
   state.aiGenerating = false;
   state.isSending = false;
 }
 
-function createAssistantPlaceholder({
-  characterId,
-  groupId,
-  character,
-  content,
-  thinking,
-  thinkingSummary,
-  toolCalls,
-  isPending,
-  status
-}) {
+function createAssistantPlaceholder({ characterId, groupId, character, content, thinking, thinkingSummary, toolCalls, isPending, status, replyToMessageId }) {
   return cleanForDB({
     id: generateId('msg'),
     role: 'assistant',
     type: 'text',
     characterId: characterId || character?.id || '',
     groupId: groupId || '',
-    characterName: character?.name || character?.characterName || 'TA',
-    characterAvatar: character?.avatar || '',
+    characterName: String(character?.name || character?.characterName || 'TA'),
+    characterAvatar: String(character?.avatar || ''),
     content: String(content || ''),
     thinking: String(thinking || ''),
     thinkingSummary: String(thinkingSummary || ''),
@@ -324,6 +224,8 @@ function createAssistantPlaceholder({
     isStopped: false,
     isError: false,
     status: String(status || 'pending'),
+    versionStatus: 'active',
+    replyToMessageId: String(replyToMessageId || ''),
     timestamp: getNow(),
     updatedAt: getNow()
   });
@@ -342,30 +244,22 @@ function isAbortError(error) {
 
 async function markJobPlaceholdersStopped(job, content = '我先停在这里了。') {
   if (!job || !Array.isArray(job.placeholderIds)) return;
-
   const message = String(content || '我先停在这里了。');
-
   await Promise.all(job.placeholderIds.map(async (id) => {
     await markMessageStopped(job.store, id, message).catch(() => {});
   }));
 }
 
 // ═══════════════════════════════════════
-// 【私聊回复】生成单人聊天回复并触发统一记忆系统
+// 私聊回复（流式）
 // ═══════════════════════════════════════
 
 async function requestPrivateReply(state, options = {}) {
   const character = state.character;
   const characterId = character?.id || state.characterId;
-
   if (!characterId) return null;
 
-  const job = startAIJob(state, {
-    store: PRIVATE_STORE,
-    characterId,
-    groupId: ''
-  });
-
+  const job = startAIJob(state, { store: PRIVATE_STORE, characterId, groupId: '' });
   state.aiGenerating = true;
 
   const activeLock = await getActiveRelationshipLock(characterId);
@@ -379,6 +273,8 @@ async function requestPrivateReply(state, options = {}) {
     return null;
   }
 
+  const replyToMessageId = options.replyToMessageId || (options.regenerate ? (userMessage?.id || '') : '');
+
   const placeholder = createAssistantPlaceholder({
     characterId,
     groupId: '',
@@ -388,7 +284,8 @@ async function requestPrivateReply(state, options = {}) {
     thinkingSummary: options.proactive ? '想主动开口' : '正在整理思路',
     toolCalls: [],
     isPending: true,
-    status: 'pending'
+    status: 'pending',
+    replyToMessageId
   });
 
   job.placeholderIds.push(placeholder.id);
@@ -402,10 +299,7 @@ async function requestPrivateReply(state, options = {}) {
   let streamedThinking = '';
 
   const flushStreamUpdate = async () => {
-    if (streamTimer) {
-      window.clearTimeout(streamTimer);
-      streamTimer = null;
-    }
+    if (streamTimer) { window.clearTimeout(streamTimer); streamTimer = null; }
     await updatePlaceholderStream(PRIVATE_STORE, placeholder.id, streamedContent, streamedThinking, state);
   };
 
@@ -416,10 +310,7 @@ async function requestPrivateReply(state, options = {}) {
       group: null,
       messages,
       targetCharacter: character,
-      options: {
-        ...options,
-        activeLock
-      }
+      options: { ...options, activeLock }
     });
 
     let result = null;
@@ -436,7 +327,6 @@ async function requestPrivateReply(state, options = {}) {
           streamedContent += chunk.content || '';
           streamedThinking = appendValue(streamedThinking, chunk.thinking);
           state.updateMessageContent?.(placeholder.id, streamedContent, streamedThinking);
-
           if (streamTimer) window.clearTimeout(streamTimer);
           streamTimer = window.setTimeout(flushStreamUpdate, 120);
         }
@@ -447,19 +337,17 @@ async function requestPrivateReply(state, options = {}) {
       if (isAbortError(apiError) || isJobStopped(job)) {
         await markMessageStopped(PRIVATE_STORE, placeholder.id, '我先停在这里了。');
         await syncPrivateState(state, characterId);
+        state.renderOnly?.();
         return null;
       }
 
-      result = await tryLocalOrSiliconFlowReply(state, {
-        messages,
-        userName,
-        signal: job.controller.signal
-      });
+      result = await tryLocalOrSiliconFlowReply(state, { messages, userName, signal: job.controller.signal });
 
       if (!result) {
         const friendlyMessage = getFriendlyErrorMessage(apiError?.status || 0);
         await markMessageError(PRIVATE_STORE, placeholder.id, friendlyMessage);
         await syncPrivateState(state, characterId);
+        state.renderOnly?.();
         return null;
       }
     } finally {
@@ -471,23 +359,13 @@ async function requestPrivateReply(state, options = {}) {
     if (!parsed.content && !parsed.thinking) {
       await deleteDB(PRIVATE_STORE, placeholder.id);
       await syncPrivateState(state, characterId);
+      state.renderOnly?.();
       return null;
     }
 
     const memoryMessages = [...messages, placeholder];
-
-    const memoryResult = await runMemoryTasks(characterId, memoryMessages, {
-      character,
-      userProfile,
-      callName: userName
-    });
-
-    const grudge = await maybeWriteGrudge({
-      character,
-      sourceMessage: userMessage,
-      aiText: parsed.content || '',
-      activeLock
-    });
+    const memoryResult = await runMemoryTasks(characterId, memoryMessages, { character, userProfile, callName: userName });
+    const grudge = await maybeWriteGrudge({ character, sourceMessage: userMessage, aiText: parsed.content || '', activeLock });
 
     const finalMessage = cleanForDB({
       ...placeholder,
@@ -508,17 +386,8 @@ async function requestPrivateReply(state, options = {}) {
 
     await safeSetMessage(PRIVATE_STORE, finalMessage);
 
-    // 后台生成内心独白（不阻塞主回复）
     if (!parsed.thinking) {
-      generateInnerMonologue({
-        character,
-        store: PRIVATE_STORE,
-        messageId: finalMessage.id,
-        recentMessages: memoryMessages.slice(-6),
-        aiContent: finalMessage.content,
-        userName,
-        state
-      });
+      generateInnerMonologue({ character, store: PRIVATE_STORE, messageId: finalMessage.id, recentMessages: memoryMessages.slice(-6), aiContent: finalMessage.content, userName, state });
     }
 
     await syncPrivateState(state, characterId);
@@ -539,17 +408,16 @@ async function requestPrivateReply(state, options = {}) {
     if (isAbortError(error) || isJobStopped(job)) {
       await markMessageStopped(PRIVATE_STORE, placeholder.id, '我先停在这里了。');
       await syncPrivateState(state, characterId);
+      state.renderOnly?.();
       return null;
     }
 
     await deleteDB(PRIVATE_STORE, placeholder.id).catch(() => {});
     await syncPrivateState(state, characterId);
+    state.renderOnly?.();
     throw error;
   } finally {
-    if (streamTimer) {
-      window.clearTimeout(streamTimer);
-      streamTimer = null;
-    }
+    if (streamTimer) { window.clearTimeout(streamTimer); streamTimer = null; }
     finishAIJob(state, job);
   }
 }
@@ -563,21 +431,15 @@ async function sendProactivePrivateMessage(state, options = {}) {
 }
 
 // ═══════════════════════════════════════
-// 【群聊回复】多人聊天回复并为对应角色写入记忆
+// 群聊回复（流式）
 // ═══════════════════════════════════════
 
 async function requestGroupReply(state, options = {}) {
   const group = state.group;
   const groupId = group?.id || state.groupId;
-
   if (!groupId) return [];
 
-  const job = startAIJob(state, {
-    store: GROUP_STORE,
-    characterId: '',
-    groupId
-  });
-
+  const job = startAIJob(state, { store: GROUP_STORE, characterId: '', groupId });
   state.aiGenerating = true;
 
   const groupMessages = await loadGroupMessages(groupId);
@@ -608,7 +470,8 @@ async function requestGroupReply(state, options = {}) {
         thinkingSummary: '正在接话',
         toolCalls: [],
         isPending: true,
-        status: 'pending'
+        status: 'pending',
+        replyToMessageId: options.replyToMessageId || ''
       });
 
       job.placeholderIds.push(placeholder.id);
@@ -622,10 +485,7 @@ async function requestGroupReply(state, options = {}) {
       let streamedThinking = '';
 
       const flushStreamUpdate = async () => {
-        if (streamTimer) {
-          window.clearTimeout(streamTimer);
-          streamTimer = null;
-        }
+        if (streamTimer) { window.clearTimeout(streamTimer); streamTimer = null; }
         await updatePlaceholderStream(GROUP_STORE, placeholder.id, streamedContent, streamedThinking, state);
       };
 
@@ -653,7 +513,6 @@ async function requestGroupReply(state, options = {}) {
               streamedContent += chunk.content || '';
               streamedThinking = appendValue(streamedThinking, chunk.thinking);
               state.updateMessageContent?.(placeholder.id, streamedContent, streamedThinking);
-
               if (streamTimer) window.clearTimeout(streamTimer);
               streamTimer = window.setTimeout(flushStreamUpdate, 120);
             }
@@ -667,11 +526,7 @@ async function requestGroupReply(state, options = {}) {
             break;
           }
 
-          result = await tryLocalOrSiliconFlowReply(state, {
-            messages: groupMessages,
-            userName,
-            signal: job.controller.signal
-          });
+          result = await tryLocalOrSiliconFlowReply(state, { messages: groupMessages, userName, signal: job.controller.signal });
 
           if (!result) {
             const friendlyMessage = getFriendlyErrorMessage(apiError?.status || 0);
@@ -692,21 +547,9 @@ async function requestGroupReply(state, options = {}) {
         }
 
         const memoryMessages = [...groupMessages, placeholder];
-
-        const memoryResult = await runMemoryTasks(character.id, memoryMessages, {
-          character,
-          userProfile,
-          callName: userName
-        });
-
+        const memoryResult = await runMemoryTasks(character.id, memoryMessages, { character, userProfile, callName: userName });
         const characterLock = await getActiveRelationshipLock(character.id);
-
-        const grudge = await maybeWriteGrudge({
-          character,
-          sourceMessage: userMessage,
-          aiText: parsed.content || '',
-          activeLock: characterLock
-        });
+        const grudge = await maybeWriteGrudge({ character, sourceMessage: userMessage, aiText: parsed.content || '', activeLock: characterLock });
 
         const finalMessage = cleanForDB({
           ...placeholder,
@@ -716,8 +559,8 @@ async function requestGroupReply(state, options = {}) {
           toolCalls: parsed.toolCalls,
           memoryWrites: memoryResult.memoryWrites || [],
           grudgeWrites: grudge ? [grudge] : [],
-          characterName: character.name || 'TA',
-          characterAvatar: character.avatar || '',
+          characterName: String(character.name || 'TA'),
+          characterAvatar: String(character.avatar || ''),
           isPending: false,
           isStopped: false,
           status: 'done',
@@ -726,17 +569,8 @@ async function requestGroupReply(state, options = {}) {
 
         await safeSetMessage(GROUP_STORE, finalMessage);
 
-        // 后台生成内心独白（不阻塞群聊回复）
         if (!parsed.thinking) {
-          generateInnerMonologue({
-            character,
-            store: GROUP_STORE,
-            messageId: finalMessage.id,
-            recentMessages: [...groupMessages, finalMessage].slice(-6),
-            aiContent: finalMessage.content,
-            userName,
-            state
-          });
+          generateInnerMonologue({ character, store: GROUP_STORE, messageId: finalMessage.id, recentMessages: [...groupMessages, finalMessage].slice(-6), aiContent: finalMessage.content, userName, state });
         }
 
         replies.push(finalMessage);
@@ -753,10 +587,7 @@ async function requestGroupReply(state, options = {}) {
         await syncGroupState(state, groupId);
         continue;
       } finally {
-        if (streamTimer) {
-          window.clearTimeout(streamTimer);
-          streamTimer = null;
-        }
+        if (streamTimer) { window.clearTimeout(streamTimer); streamTimer = null; }
       }
     }
 
@@ -767,20 +598,11 @@ async function requestGroupReply(state, options = {}) {
     finishAIJob(state, job);
   }
 }
-
 // ═══════════════════════════════════════
-// 【内心独白】后台生成角色思考过程
+// 内心独白
 // ═══════════════════════════════════════
 
-async function generateInnerMonologue({
-  character,
-  store,
-  messageId,
-  recentMessages,
-  aiContent,
-  userName,
-  state
-}) {
+async function generateInnerMonologue({ character, store, messageId, recentMessages, aiContent, userName, state }) {
   try {
     const name = character?.name || '我';
     const callName = String(character?.nicknameForUser || '').trim() || userName;
@@ -852,7 +674,7 @@ async function generateInnerMonologue({
       state.renderOnly?.();
     }
   } catch (_) {
-    // 静默失败，不影响主回复
+    // 静默失败
   }
 }
 
@@ -874,29 +696,23 @@ function parseInnerMonologueResult(result, userName) {
 
   if (!text) return '';
 
-  // 去掉 think 标签（有些模型会带）
   text = text.replace(/<think\b[^>]*>[\s\S]*?<\/think>/gi, '').trim();
   text = text.replace(/<thinking\b[^>]*>[\s\S]*?<\/thinking>/gi, '').trim();
-
-  // 去掉 markdown 粗体标记
   text = text.replace(/\*\*(.+?)\*\*/g, '$1').trim();
 
-  // 限制长度
   if (text.length > 400) text = text.slice(0, 400);
 
-  // 去掉前缀标签
   text = text.replace(/^内心独白[:：]?\s*/i, '').trim();
   text = text.replace(/^独白[:：]?\s*/i, '').trim();
   text = text.replace(/^想法[:：]?\s*/i, '').trim();
 
-  // 清洗视角，让独白像角色自己在想
   text = cleanPerspectiveText(text, userName);
 
   return stripEmoji(text);
 }
 
 // ═══════════════════════════════════════
-// 【AI请求】走 callAPI + 本地 fallback
+// AI 请求（流式 + 本地 fallback）
 // ═══════════════════════════════════════
 
 async function requestAIText(messages, options = {}) {
@@ -931,8 +747,10 @@ async function requestAIText(messages, options = {}) {
       onChunk,
       onDone: options.onDone,
       onError: (error) => {
-        lastApiError = error;
-        options.onError?.(error);
+        if (error) {
+          lastApiError = error;
+          options.onError?.(error);
+        }
       }
     });
 
@@ -940,7 +758,12 @@ async function requestAIText(messages, options = {}) {
       return result;
     }
 
-    lastApiError = new Error('接口没返回内容');
+    // callAPI 返回了 null 但没有触发 onError，构造一个带 status 的错误
+    if (!lastApiError) {
+      const status = lastApiError?.status || lastApiError?.raw?.status || 0;
+      lastApiError = new Error('接口没返回内容');
+      lastApiError.status = status;
+    }
   } catch (error) {
     if (isAbortError(error) || signal?.aborted) {
       throw Object.assign(new Error('已取消'), { status: 408, isAbort: true });
@@ -961,32 +784,29 @@ async function requestAIText(messages, options = {}) {
         return localResult;
       }
     } catch (localError) {
-      // 本地 fallback 也失败，把错误合并到原来的 API 错误上
-      lastApiError = lastApiError || localError;
+      if (!lastApiError) lastApiError = localError;
     }
   }
 
-  // fallback 被禁用或也失败了
-  if (lastApiError) throw lastApiError;
+  // fallback 也失败了
+  if (lastApiError) {
+    const status = lastApiError.status || lastApiError?.raw?.status || 0;
+    const error = new Error(lastApiError.message || 'AI 请求失败');
+    error.status = status;
+    throw error;
+  }
 
   throw new Error('AI 请求失败，没有可用回复');
 }
 
 function resolveGroupTypes(character) {
   if (!character) return ['paid', 'free'];
-
   const apiConfig = character?.apiConfig || {};
   const poolGroup = apiConfig?.poolGroup || apiConfig?.groupType || '';
-
   if (poolGroup === 'paid') return ['paid'];
   if (poolGroup === 'free') return ['free'];
   if (poolGroup === 'all') return ['paid', 'free'];
-
-  // 旧字段兼容
-  if (apiConfig?.useGlobal === false && apiConfig?.endpointId) {
-    return ['paid'];
-  }
-
+  if (apiConfig?.useGlobal === false && apiConfig?.endpointId) return ['paid'];
   return ['paid', 'free'];
 }
 
@@ -1053,10 +873,8 @@ function parseAIText(text, userName = '你') {
 
 function normalizeToolCalls(value) {
   if (!Array.isArray(value)) return [];
-
   return value.map((tool, index) => {
     const fn = tool.function || {};
-
     return cleanForDB({
       id: tool.id || generateId('tool'),
       name: tool.name || fn.name || tool.toolName || `工具 ${index + 1}`,
@@ -1068,7 +886,7 @@ function normalizeToolCalls(value) {
 }
 
 // ═══════════════════════════════════════
-// 【流式占位更新】节流写数据库，实时刷 UI
+// 流式占位更新
 // ═══════════════════════════════════════
 
 async function updatePlaceholderStream(store, id, content, thinking, state) {
@@ -1101,7 +919,7 @@ function appendValue(base, value) {
 }
 
 // ═══════════════════════════════════════
-// 【记忆任务】实时检查和自动总结
+// 记忆任务
 // ═══════════════════════════════════════
 
 async function runMemoryTasks(characterId, messages, options = {}) {
@@ -1114,17 +932,11 @@ async function runMemoryTasks(characterId, messages, options = {}) {
   const memoryWrites = [];
 
   try {
-    const infoResult = await checkImportantInfo(characterId, messages, {
-      character,
-      userProfile,
-      callName
-    });
-
+    const infoResult = await checkImportantInfo(characterId, messages, { character, userProfile, callName });
     const items = Array.isArray(infoResult) ? infoResult : [];
 
     items.forEach((item) => {
       if (!item || typeof item !== 'object') return;
-
       memoryWrites.push({
         title: item.title || '记下一件事',
         content: item.content || item.text || item.summary || '',
@@ -1137,17 +949,17 @@ async function runMemoryTasks(characterId, messages, options = {}) {
   }
 
   try {
-    await checkAndSummarize(characterId, {
-      character,
-      userProfile,
-      callName
-    });
+    await checkAndSummarize(characterId, { character, userProfile, callName });
   } catch (error) {
     console.warn('[chat-thread-ai] checkAndSummarize failed:', error);
   }
 
   return { memoryWrites };
 }
+
+// ═══════════════════════════════════════
+// 消息状态更新
+// ═══════════════════════════════════════
 
 async function markMessageStopped(store, id, content) {
   if (!store || !id) return null;
@@ -1170,10 +982,6 @@ async function markMessageStopped(store, id, content) {
   await setDB(store, next);
   return next;
 }
-
-// ═══════════════════════════════════════
-// 【错误消息】把 placeholder 更新为可爱报错文案
-// ═══════════════════════════════════════
 
 async function markMessageError(store, id, content) {
   if (!store || !id) return null;
@@ -1203,7 +1011,7 @@ async function getMessageByIdFromStore(store, id) {
 }
 
 // ═══════════════════════════════════════
-// 【记仇系统】检测信号、触发惩罚
+// 记仇系统
 // ═══════════════════════════════════════
 
 async function maybeWriteGrudge({ character, sourceMessage, aiText, activeLock }) {
@@ -1230,7 +1038,7 @@ async function maybeWriteGrudge({ character, sourceMessage, aiText, activeLock }
   const grudge = cleanForDB({
     id: generateId('grudge'),
     characterId,
-    characterName: character?.name || sourceMessage.characterName || 'TA',
+    characterName: String(character?.name || sourceMessage.characterName || 'TA'),
     reason: hit.reason,
     mood: hit.mood,
     severity: hit.severity,
@@ -1295,7 +1103,7 @@ async function maybeTriggerPunishment(character, latestGrudge) {
   const punishment = cleanForDB({
     id: generateId('punishment'),
     characterId,
-    characterName: character?.name || latestGrudge.characterName || 'TA',
+    characterName: String(character?.name || latestGrudge.characterName || 'TA'),
     title: selected.title,
     description: selected.description,
     type: selected.type,
@@ -1312,7 +1120,7 @@ async function maybeTriggerPunishment(character, latestGrudge) {
   const lock = cleanForDB({
     id: generateId('lock'),
     characterId,
-    characterName: character?.name || latestGrudge.characterName || 'TA',
+    characterName: String(character?.name || latestGrudge.characterName || 'TA'),
     type: selected.lockType,
     status: 'active',
     level: selected.level,
@@ -1342,40 +1150,32 @@ function choosePunishment(score) {
 }
 
 // ═══════════════════════════════════════
-// 【关系锁】读取和管理锁定状态
+// 关系锁
 // ═══════════════════════════════════════
 
 async function loadGrudgeContext(characterId) {
   if (!characterId) return { score: 0, entries: [], punishment: null, lock: null };
-
   const grudges = await getByIndexDB(GRUDGE_STORE, 'characterId', characterId).catch(() => []);
   const active = normalizeList(grudges).filter((item) => item.status === 'active').sort(sortByUpdatedAtDesc);
   const score = active.reduce((sum, item) => sum + Number(item.severity || 1), 0);
   const lock = await getActiveRelationshipLock(characterId);
   const punishment = lock?.punishmentId ? await getPunishment(lock.punishmentId) : await getLatestActivePunishment(characterId);
-
   return { score, entries: active, punishment, lock };
 }
 
 async function getActiveRelationshipLock(characterId) {
   if (!characterId) return null;
-
   const locks = await getByIndexDB(LOCK_STORE, 'characterId', characterId).catch(() => []);
   const now = Date.now();
-
   const active = normalizeList(locks).filter((item) => item.status === 'active').sort(sortByUpdatedAtDesc);
-
   for (const lock of active) {
     const endsAt = new Date(lock.endsAt || 0).getTime();
-
     if (endsAt && endsAt <= now) {
       await setDB(LOCK_STORE, { ...lock, status: 'expired', updatedAt: getNow() });
       continue;
     }
-
     return lock;
   }
-
   return null;
 }
 
@@ -1389,9 +1189,8 @@ async function getLatestActivePunishment(characterId) {
   const list = await getByIndexDB(PUNISHMENT_STORE, 'characterId', characterId).catch(() => []);
   return normalizeList(list).filter((item) => item.status === 'pending').sort(sortByUpdatedAtDesc)[0] || null;
 }
-
 // ═══════════════════════════════════════
-// 【数据加载】消息、群聊、世界书、道具
+// 数据加载
 // ═══════════════════════════════════════
 
 async function loadPrivateMessages(characterId) {
@@ -1417,24 +1216,17 @@ async function syncGroupState(state, groupId) {
 async function loadWorldbookForCharacter(character) {
   const list = await getAllDB('worldbook').catch(() => []);
   const all = normalizeList(list).filter((item) => item.enabled !== false);
-
   if (!character?.id) return all;
-
   const ids = normalizeList(character.worldbookIds).map(String);
   const mode = character.worldbookMode || 'bound_plus_global';
-
   if (!ids.length) return mode === 'only_bound' ? [] : all;
-
   const bound = all.filter((item) => ids.includes(String(item.id)));
-
   if (mode === 'only_bound') return bound;
-
   const global = all.filter((item) => {
     if (ids.includes(String(item.id))) return false;
     if (item.characterId && String(item.characterId) !== String(character.id)) return false;
     return item.global === true || item.isGlobal === true || !item.characterId;
   });
-
   return [...bound, ...global];
 }
 
@@ -1444,7 +1236,7 @@ async function loadInventory() {
 }
 
 // ═══════════════════════════════════════
-// 【用户档案】读取和规范化用户人设
+// 用户档案
 // ═══════════════════════════════════════
 
 function loadUserProfileForCharacter(character) {
@@ -1474,19 +1266,12 @@ function loadUserProfileForCharacter(character) {
 function loadAllUserProfiles() {
   const current = getData('user_profiles');
   const legacy = getData('app_user_profiles');
-
-  const source = Array.isArray(current) && current.length
-    ? current
-    : Array.isArray(legacy)
-      ? legacy
-      : [];
-
+  const source = Array.isArray(current) && current.length ? current : Array.isArray(legacy) ? legacy : [];
   return source.map(normalizeUserLike).filter((item) => item.id || item.name || item.content || item.profile || item.persona);
 }
 
 function normalizeUserLike(value) {
   const raw = value && typeof value === 'object' ? value : {};
-
   return {
     ...raw,
     id: raw.id || '',
@@ -1509,22 +1294,13 @@ function getUserDisplayName(user) {
   return name || '你';
 }
 
-function getUserGenderHint(user) {
-  const raw = [user?.gender, user?.sex, user?.pronoun, user?.pronouns, user?.content, user?.profile, user?.persona, user?.description].filter(Boolean).join(' ').toLowerCase();
-  if (!raw) return '';
-  if (/(女|女生|女性|女孩|姐姐|妹妹|她|girl|female|woman|she|her)/i.test(raw)) return '她';
-  if (/(男|男生|男性|男孩|哥哥|弟弟|他|boy|male|man|he|him)/i.test(raw)) return '她';
-  return '';
-}
-
 // ═══════════════════════════════════════
-// 【群聊成员】解析和选择发言人
+// 群聊成员
 // ═══════════════════════════════════════
 
 async function resolveGroupMembers(group) {
   const ids = Array.isArray(group?.memberIds) ? group.memberIds.map(String) : [];
   const characters = await getAllDB('characters').catch(() => []);
-
   if (!ids.length) return normalizeList(characters).slice(0, GROUP_REPLY_MAX);
   return normalizeList(characters).filter((item) => ids.includes(String(item.id)));
 }
@@ -1532,14 +1308,12 @@ async function resolveGroupMembers(group) {
 function chooseGroupSpeakers(members, messages) {
   const list = normalizeList(members);
   if (!list.length) return [];
-
   const recentAssistantIds = normalizeList(messages).slice(-6).filter((item) => item.role === 'assistant').map((item) => item.characterId).filter(Boolean);
   const sorted = [...list].sort((a, b) => {
     const aRecent = recentAssistantIds.includes(a.id) ? 1 : 0;
     const bRecent = recentAssistantIds.includes(b.id) ? 1 : 0;
     return aRecent - bRecent;
   });
-
   const count = Math.min(sorted.length, Math.max(1, Math.ceil(Math.random() * GROUP_REPLY_MAX)));
   return sorted.slice(0, count);
 }
@@ -1549,13 +1323,12 @@ function getLastUserMessage(messages) {
 }
 
 // ═══════════════════════════════════════
-// 【聊天配置】主动消息和记忆参数
+// 聊天配置
 // ═══════════════════════════════════════
 
 function getChatConfig(characterId) {
   const key = getChatConfigKey(characterId);
   const stored = getData(key) || {};
-
   return {
     ...DEFAULT_PROACTIVE_CONFIG,
     ...stored,
@@ -1579,10 +1352,8 @@ function getChatConfigKey(characterId) {
 
 async function markUserReplyIfNeeded(characterId, config, lastMessage) {
   if (!characterId || !lastMessage || lastMessage.role !== 'user') return;
-
   const lastUserTime = new Date(lastMessage.timestamp || lastMessage.createdAt || 0).getTime();
   const proactiveTime = new Date(config.proactiveLastSentAt || 0).getTime();
-
   if (config.proactiveAwaitingUserReply && lastUserTime > proactiveTime) {
     saveChatConfig(characterId, { ...config, proactiveAwaitingUserReply: false });
   }
@@ -1591,7 +1362,6 @@ async function markUserReplyIfNeeded(characterId, config, lastMessage) {
 function markProactiveSent(characterId) {
   const config = getChatConfig(characterId);
   const now = getNow();
-
   saveChatConfig(characterId, {
     ...config,
     proactiveLastSentAt: now,
@@ -1602,32 +1372,26 @@ function markProactiveSent(characterId) {
 
 async function updateUnreadCount(characterId, delta = 0) {
   if (!characterId) return;
-
   const key = 'chat_unread_counts';
   const counts = getData(key) || {};
   const current = Number(counts[characterId] || 0);
   const next = { ...counts, [characterId]: Math.max(0, current + Number(delta || 0)) };
-
   setData(key, next);
-
   window.AppEvents?.emit?.('badge:chat', { characterId, count: next[characterId] });
-
   if (typeof window.refreshDesktopBadges === 'function') window.refreshDesktopBadges();
 }
 
 // ═══════════════════════════════════════
-// 【安全写入】数据库写入带降级
+// 安全写入
 // ═══════════════════════════════════════
 
 async function safeSetMessage(store, message) {
   const clean = cleanForDB(message);
-
   try {
     await setDB(store, clean);
     return clean;
   } catch (error) {
     console.error('AI message write failed', error);
-
     const fallback = cleanForDB({
       ...clean,
       content: String(clean.content || '').slice(0, 4000),
@@ -1636,61 +1400,248 @@ async function safeSetMessage(store, message) {
       memoryWrites: [],
       grudgeWrites: []
     });
-
     await setDB(store, fallback);
     return fallback;
   }
 }
 
 // ═══════════════════════════════════════
-// 【通用工具】清理、文本处理、排序
+// Prompt 构建
+// ═══════════════════════════════════════
+
+async function buildPrompt({ mode, character, group, messages, targetCharacter, options = {} }) {
+  const allMessages = normalizeList(messages).filter((msg) => msg.versionStatus !== 'archived');
+  const recentMessages = allMessages.slice(-AI_CONTEXT_LIMIT);
+  const userProfile = loadUserProfileForCharacter(targetCharacter || character);
+  const userName = getUserDisplayName(userProfile);
+  const memories = await loadRelevantMemories(targetCharacter?.id || character?.id || '', recentMessages, options);
+  const worldbook = await loadWorldbookForCharacter(targetCharacter || character);
+  const inventory = await loadInventory();
+  const activeLock = options.activeLock || null;
+  const grudgeContext = await loadGrudgeContext(targetCharacter?.id || character?.id || '');
+
+  const systemPrompt = buildIdentityPrompt({
+    character: targetCharacter || character,
+    group,
+    mode,
+    userProfile,
+    userName,
+    memories,
+    worldbook,
+    inventory,
+    activeLock,
+    grudgeContext,
+    options
+  });
+
+  const promptMessages = recentMessages
+    .map((msg) => {
+      const role = msg.role === 'assistant' ? 'assistant' : 'user';
+      let content = String(msg.content || '').trim();
+      if (!content) {
+        if (msg.type === 'image') content = '[图片]';
+        else if (msg.type === 'sticker') content = `[表情包] ${msg.stickerDescription || ''}`.trim();
+        else if (msg.type === 'dice') content = `[骰子 ${msg.diceValue || ''}]`;
+        else if (msg.type === 'rps') content = `[石头剪刀布 ${msg.rpsChoice || ''}]`;
+        else if (msg.type === 'transfer') content = `[转账 ${msg.transferAmount || 0}]`;
+        else content = '[消息]';
+      }
+      return { role, content };
+    })
+    .filter((msg) => msg.content);
+
+  return [{ role: 'system', content: systemPrompt }, ...promptMessages];
+}
+
+async function loadRelevantMemories(characterId, messages, options = {}) {
+  if (!characterId) return [];
+  try {
+    const config = getChatConfig(characterId);
+    const injectLimit = Number(config.memoryInjectLimit || 12);
+    const candidateLimit = Number(config.memoryCandidateLimit || 80);
+
+    const allMemories = await getByIndexDB('memories', 'characterId', characterId).catch(() => []);
+    const candidates = normalizeList(allMemories)
+      .filter((m) => m.content || m.summary || m.title)
+      .sort((a, b) => {
+        const aImport = Number(a.importance || 0);
+        const bImport = Number(b.importance || 0);
+        if (bImport !== aImport) return bImport - aImport;
+        return String(b.updatedAt || b.createdAt || '').localeCompare(String(a.updatedAt || a.createdAt || ''));
+      })
+      .slice(0, candidateLimit);
+
+    if (!candidates.length) return [];
+
+    const recentText = messages.map((m) => String(m.content || '').slice(0, 100)).join(' ');
+
+    const scored = candidates.map((memory) => {
+      const memoryText = String(memory.content || memory.summary || memory.title || '').toLowerCase();
+      let score = Number(memory.importance || 0);
+      const keywords = memoryText.split(/[\s,，。、；;:：]+/).filter((w) => w.length >= 2);
+      for (const keyword of keywords) {
+        if (recentText.toLowerCase().includes(keyword)) score += 3;
+      }
+      return { memory, score };
+    });
+
+    return scored
+      .sort((a, b) => b.score - a.score)
+      .slice(0, injectLimit)
+      .map((item) => item.memory);
+  } catch (error) {
+    console.warn('[chat-thread-ai] loadRelevantMemories failed:', error);
+    return [];
+  }
+}
+
+function buildIdentityPrompt({ character, group, mode, userProfile, userName, memories, worldbook, inventory, activeLock, grudgeContext, options }) {
+  const name = String(character?.name || 'TA').trim();
+  const nicknameForUser = String(character?.nicknameForUser || '').trim();
+  const callName = nicknameForUser || userName;
+
+  const parts = [];
+
+  parts.push(`我是${name}。`);
+
+  if (character?.systemPrompt) {
+    parts.push(String(character.systemPrompt));
+  }
+
+  if (character?.persona) {
+    parts.push(`我的性格：${character.persona}`);
+  }
+
+  if (character?.description) {
+    parts.push(`关于我：${character.description}`);
+  }
+
+  if (character?.speakingStyle) {
+    parts.push(`我说话的风格：${character.speakingStyle}`);
+  }
+
+  if (character?.relationship) {
+    parts.push(`我和${callName}的关系：${character.relationship}`);
+  }
+
+  if (character?.style) {
+    parts.push(`我的风格：${character.style}`);
+  }
+
+  if (character?.mood) {
+    parts.push(`我现在的心情：${character.mood}`);
+  }
+
+  if (character?.extraReplyRules) {
+    parts.push(`额外规则：${character.extraReplyRules}`);
+  }
+
+  if (character?.replyLength) {
+    parts.push(`回复长度偏好：${character.replyLength}`);
+  }
+
+  if (userProfile?.content || userProfile?.profile || userProfile?.persona) {
+    parts.push(`关于${callName}：${userProfile.content || userProfile.profile || userProfile.persona}`);
+  }
+
+  if (nicknameForUser) {
+    parts.push(`我叫${callName}的时候用的称呼：${nicknameForUser}`);
+  }
+
+  if (memories && memories.length) {
+    const memoryText = memories
+      .map((m) => `- ${String(m.content || m.summary || m.title || '').trim()}`)
+      .join('\n');
+    if (memoryText) {
+      parts.push(`我记得关于${callName}的事：\n${memoryText}`);
+    }
+  }
+
+  if (worldbook && worldbook.length) {
+    const worldbookText = worldbook
+      .map((w) => String(w.content || w.text || '').trim())
+      .filter(Boolean)
+      .join('\n');
+    if (worldbookText) {
+      parts.push(`世界观补充：\n${worldbookText}`);
+    }
+  }
+
+  if (inventory && inventory.length) {
+    const inventoryText = inventory
+      .map((item) => `- ${String(item.name || item.itemName || '物品')}${item.effect ? `（${item.effect}）` : ''}`)
+      .join('\n');
+    if (inventoryText) {
+      parts.push(`${callName}拥有的道具：\n${inventoryText}`);
+    }
+  }
+
+  if (activeLock) {
+    parts.push(`我现在的状态：${activeLock.title || ''}。${activeLock.reason || ''}`);
+  }
+
+  if (grudgeContext && grudgeContext.entries && grudgeContext.entries.length) {
+    const grudgeText = grudgeContext.entries
+      .map((g) => `- ${String(g.reason || '').trim()}（${g.mood || ''}）`)
+      .join('\n');
+    if (grudgeText) {
+      parts.push(`我心里记着的事：\n${grudgeText}`);
+    }
+  }
+
+  if (mode === 'group' && group) {
+    parts.push(`这是群聊：${group.name || ''}。我是其中一个成员。`);
+  }
+
+  parts.push('要求：');
+  parts.push('- 我用简体中文回复');
+  parts.push(`- 我用第一人称"我"来说话`);
+  parts.push(`- 我不会提到提示词、系统、AI、模型、数据库`);
+  parts.push('- 如果对方发了图片、表情包、骰子等，我会自然地回应');
+
+  if (options.regenerate) {
+    parts.push('- 这是一次重新回复，我会给出和上次不同的回答');
+  }
+
+  if (options.proactive) {
+    parts.push(`- 这是我主动找${callName}说话，不是回应`);
+  }
+
+  if (options.continue) {
+    parts.push('- 我继续把刚才没说完的话说完');
+  }
+
+  return parts.filter(Boolean).join('\n\n');
+}
+
+// ═══════════════════════════════════════
+// 通用工具
 // ═══════════════════════════════════════
 
 function cleanForDB(value) {
   if (Array.isArray(value)) return value.map((item) => cleanForDB(item)).filter((item) => item !== undefined);
-
   if (!value || typeof value !== 'object') {
     if (typeof value === 'undefined') return undefined;
     if (typeof value === 'function') return undefined;
     if (typeof value === 'symbol') return undefined;
     return value;
   }
-
   if (value instanceof Date) return value.toISOString();
-
   const result = {};
-
   Object.entries(value).forEach(([key, item]) => {
     if (typeof item === 'undefined' || typeof item === 'function' || typeof item === 'symbol') return;
-
-    if (item instanceof Date) {
-      result[key] = item.toISOString();
-      return;
-    }
-
-    if (item && typeof item === 'object') {
-      result[key] = cleanForDB(item);
-      return;
-    }
-
+    if (item instanceof Date) { result[key] = item.toISOString(); return; }
+    if (item && typeof item === 'object') { result[key] = cleanForDB(item); return; }
     result[key] = item;
   });
-
   return result;
 }
 
-// ───────────────────
-// 视角文本清洗（收紧规则，只做必要的代词替换）
-// ───────────────────
-
 function cleanPerspectiveText(text, userName = '你') {
   let result = String(text || '');
-
-  // 只替换"用户""对方"等称呼为用户昵称
   result = result.replace(/用户/g, userName);
   result = result.replace(/这位玩家/g, userName);
   result = result.replace(/对方/g, userName);
-
   return result.trim();
 }
 
@@ -1721,7 +1672,7 @@ function normalizeList(value) {
 }
 
 function sortByTimestamp(a, b) {
-  return String(a?.timestamp || '').localeCompare(String(b?.timestamp || ''));
+  return String(a?.timestamp || a?.createdAt || '').localeCompare(String(b?.timestamp || b?.createdAt || ''));
 }
 
 function sortByUpdatedAtDesc(a, b) {
@@ -1735,4 +1686,3 @@ function clampNumber(value, min, max) {
 }
 
 // 依赖：../../core/storage.js / ../../core/api.js(callAPI) / ../../core/memory.js / ./identity-core.js / ./thread-ai-local.js
-
