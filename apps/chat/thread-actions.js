@@ -25,7 +25,57 @@ let stopThreadAIReplyFn = null;
 // 【公开接口】消息发送、编辑、删除、引用、复制、重来、续写、停止
 // ═══════════════════════════════════════
 
+export async function saveMessageOnly(state, text, extra = {}) {
+  const content = String(text || '').trim();
+  if (!content) return null;
+
+  const type = normalizeMessageType(extra.type || 'text');
+
+  const message = buildBaseMessage(state, {
+    ...extra,
+    role: normalizeRole(extra.role || 'user'),
+    content,
+    type,
+    quoteMessageId: state.quotedMessageId || extra.quoteMessageId || '',
+    quoteText: await resolveQuoteText(state, state.quotedMessageId || extra.quoteMessageId || ''),
+    imageBase64: extra.imageBase64 || '',
+    stickerId: extra.stickerId || '',
+    stickerImageBase64: extra.stickerImageBase64 || '',
+    stickerDescription: extra.stickerDescription || '',
+    transferAmount: extra.transferAmount || 0,
+    amount: extra.amount || extra.transferAmount || 0,
+    price: extra.price || extra.itemPrice || 0,
+    note: extra.note || '',
+    title: extra.title || '',
+    description: extra.description || '',
+    itemId: extra.itemId || '',
+    itemName: extra.itemName || '',
+    itemDesc: extra.itemDesc || extra.itemDescription || '',
+    itemPrice: extra.itemPrice || 0,
+    itemImage: extra.itemImage || '',
+    direction: extra.direction || '',
+    card: extra.card || null,
+    item: extra.item || null,
+    shopItem: extra.shopItem || null,
+    characterId: extra.characterId || '',
+    characterName: extra.characterName || '',
+    characterAvatar: extra.characterAvatar || ''
+  });
+
+  await saveMessage(state, message);
+  clearQuote(state);
+
+  return message;
+}
+
 export async function sendThreadMessage(state, text, extra = {}) {
+  if (extra.skipSave) {
+    if (extra.triggerAI !== false) {
+      await requestAIReplySafely(state, extra);
+    }
+    return null;
+  }
+
   const content = String(text || '').trim();
   if (!content) return null;
 
@@ -1139,4 +1189,8 @@ function wait(ms) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
+// 改了什么：1) 新增 saveMessageOnly 导出函数（只存消息+刷新state，不触发AI）；2) sendThreadMessage 开头加 skipSave 判断（skipSave:true 时跳过存消息，直接请求AI）。
+// 原来效果：thread.js 的 handleSend 把存消息和请求AI绑在一起，用户气泡要等AI回复完才出现。
+// 现在效果：thread.js 可以先调 saveMessageOnly 存消息+渲染，再调 sendThreadMessage({skipSave:true,triggerAI:true}) 只请求AI。
+// 会不会影响其他文件：不会。saveMessageOnly 是新增导出，不影响原有函数。sendThreadMessage 的 skipSave 只在显式传 true 时生效，不传时行为完全不变。
 // 依赖：../../core/storage.js(generateId,getNow,setDB,getDB,deleteDB,getByIndexDB)；../../core/ui.js(showToast)；../../core/tts.js(playTTS,stopAll)；动态依赖 ./thread-ai.js(requestThreadAIReply,stopThreadAIReply)
