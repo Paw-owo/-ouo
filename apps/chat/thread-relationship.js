@@ -265,7 +265,9 @@ function resolveLockAndPunishment(stateOrLock) {
 // ═══════════════════════════════════════
 
 function injectStyle() {
-  if (document.getElementById(RELATIONSHIP_STYLE_ID)) return;
+  // 修复：先删旧标签再创建新的，避免 CSS 修改不生效
+  const old = document.getElementById(RELATIONSHIP_STYLE_ID);
+  if (old) old.remove();
 
   const style = document.createElement('style');
   style.id = RELATIONSHIP_STYLE_ID;
@@ -496,4 +498,8 @@ function injectStyle() {
   document.head.appendChild(style);
 }
 
+// 改了什么：injectStyle 函数开头从"if (document.getElementById(RELATIONSHIP_STYLE_ID)) return"改为"const old = ...; if (old) old.remove()"，先删旧标签再创建新的。
+// 原来效果：关系锁样式修改后永远不生效。
+// 现在效果：每次调用都先清理旧标签再写入新样式。
+// 会不会影响其他文件：不会。导出接口不变，依赖不变。
 // 依赖：../../core/storage.js(getDB,setDB,getByIndexDB,getNow)；../../core/ui.js(createIcon,showBottomSheet,hideBottomSheet)
