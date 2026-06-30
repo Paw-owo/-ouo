@@ -19,8 +19,7 @@ import {
   resendThreadMessage,
   playThreadTTS,
   stopThreadTTS,
-  retryThreadMessage,
-  switchThreadVersion
+  retryThreadMessage
 } from './thread-actions.js';
 
 const RENDER_STYLE_ID = 'chat-thread-render-style';
@@ -126,11 +125,6 @@ function restoreCodeBlockStates(container, states) {
     const toggle = codeWrap.querySelector('.chat-message-code-toggle');
     if (toggle) toggle.textContent = state.collapsed ? '展开全部' : '收起';
   });
-}
-
-function findMessageById(state, messageId) {
-  const list = state.mode === 'group' ? state.groupMessages : state.messages;
-  return list.find((item) => item.id === messageId) || null;
 }
 
 function createMessageRow(state, message, pageEl) {
@@ -534,8 +528,12 @@ function getMessageVersions(state, replyToMessageId) {
 
 function switchVersion(state, targetMessage, pageEl) {
   if (!targetMessage?.id) return;
-  switchThreadVersion(state, targetMessage.id).then(() => {
-    renderThreadMessages(state, pageEl);
+  import('./thread-actions.js').then((mod) => {
+    if (typeof mod.switchThreadVersion === 'function') {
+      mod.switchThreadVersion(state, targetMessage.id).then(() => {
+        renderThreadMessages(state, pageEl);
+      });
+    }
   });
 }
 
@@ -787,6 +785,7 @@ function getVisibleMessages(state) {
     ].some((item) => String(item || '').toLowerCase().includes(q));
   });
 }
+
 function findMessageById(state, messageId) {
   const list = state.mode === 'group' ? state.groupMessages : state.messages;
   return list.find((item) => item.id === messageId) || null;
@@ -1060,7 +1059,6 @@ function createLineIcon(name) {
   else if (name === 'rps-rock') { addPath('M7 11c0-2 1.3-3.5 3-3.5h3.5c2 0 3.5 1.5 3.5 3.5v2.5c0 2.8-2.2 5-5 5s-5-2.2-5-5V11Z'); addPath('M9 8V6.5'); addPath('M12 7.5V6'); addPath('M15 8V6.5'); }
   else if (name === 'rps-paper') { addPath('M6 12V7.5a1.5 1.5 0 0 1 3 0V12'); addPath('M9 12V5.5a1.5 1.5 0 0 1 3 0V12'); addPath('M12 12V6.5a1.5 1.5 0 0 1 3 0V12'); addPath('M15 12V8.5a1.5 1.5 0 0 1 3 0v5c0 3-2.3 5.5-6 5.5-3.2 0-6-2.2-6-5.5V12Z'); }
   else if (name === 'rps-scissors') { addPath('M6 6l12 12'); addPath('M18 6 6 18'); addCircle('6', '6', '2'); addCircle('6', '18', '2'); }
-  else if (name === 'scissors') { addPath('M6 6l12 12'); addPath('M18 6 6 18'); }
   else if (name === 'rps') { addRect('5', '5', '14', '14', '4'); addPath('M8 12h8'); }
   else { addCircle('12', '12', '8'); }
   return svg;
