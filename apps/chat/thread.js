@@ -512,21 +512,52 @@ async function handleSend(input) {
     return;
   }
 
+  // 1. 先清空输入框 + 存到 state
   state.inputValue = '';
-  state.aiGenerating = true;
   input.value = '';
   autoResize(input);
   blurActiveInput();
-  render();
+
+  // 2. 先把用户消息存进数据库 + 刷新 state + 渲染
+  //    这样用户气泡立刻出现，不用等 AI
+  try {
+    const { saveMessageOnly } = await import('./thread-actions.js').catch(() => ({}));
+
+    if (typeof saveMessageOnly === 'function') {
+      // 用新的轻量函数：只存消息 + 刷新 state，不触发 AI
+      await saveMessageOnly(state, text, {
+        quoteMessageId: state.quotedMessageId
+      });
+    } else {
+      // 兜底：如果 thread-actions 还没加 saveMessageOnly，用旧方式
+      await sendThreadMessage(state, text, { triggerAI: false });
+    }
+
+    // 清掉引用
+    state.quotedMessageId = '';
+
+    // 立刻渲染：用户气泡出现
+    render();
+  } catch (error) {
+    console.error('[chat-thread] save user message failed', error);
+    showToast('发送没成功');
+    return;
+  }
+
+  // 3. 再请求 AI 回复
+  //    thread-ai 内部会创建占位消息、调 renderOnly 刷新界面
+  state.aiGenerating = true;
+  render(); // 让发送按钮变成停止按钮
 
   try {
-    await sendThreadMessage(state, text);
+    await sendThreadMessage(state, '', { triggerAI: true, skipSave: true });
   } catch (error) {
-    console.error('[chat-thread] send failed', error);
-    showToast('发送没成功');
+    console.error('[chat-thread] AI reply failed', error);
+    showToast('TA 刚刚走神了');
   } finally {
     state.aiGenerating = false;
-    await reloadAndRender();
+    // AI 回复过程中 renderOnly 已经刷新了界面，这里只做兜底
+    render();
   }
 }
 
@@ -1074,8 +1105,8 @@ function injectStyle() {
   document.head.appendChild(style);
 }
 
-// 改了什么：import 加 hideBottomSheet；unmountChatThread 里 closeThreadPanels() 后加一行 hideBottomSheet()。
-// 原来效果：用户在聊天页打开转账/快捷回复等底部抽屉后点返回，抽屉残留在 DOM 里不消失。
-// 现在效果：离开聊天页时所有底部抽屉统一关闭，不会残留。
-// 会不会影响其他文件：不会。导出接口（mountChatThread/unmountChatThread）不变。
+// 改了什么：重写 handleSend 函数，把"存用户消息"和"请求AI回复"拆成两步。第一步存消息+渲染（用户气泡立刻出现），第二步请求AI（AI回复过程中 renderOnly 逐步更新）。删掉了 finally 里的 reloadAndRender，改为 render（AI 过程中已经刷新过了，只做兜底）。
+// 原来效果：用户点发送后，整个链路从头到尾界面只在最开始渲染一次，然后直到最后 reloadAndRender 才第二次渲染。中间几秒界面完全不动，用户气泡和AI回复同时出现。
+// 现在效果：用户气泡点发送后立刻出现，发送按钮立刻变成停止按钮，AI 占位消息和回复在过程中逐步出现。
+// 会不会影响其他文件：handleSend 里用了 sendThreadMessage 的 triggerAI:false 和 triggerAI:true 两种模式。triggerAI:false 时 sendThreadMessage 只存消息不请求 AI，这个行为已存在于 thread-actions.js。但 handleSend 第二步传了 skipSave:true，这需要 thread-actions.js 的 sendThreadMessage 支持——如果 skipSave 不存在会走兜底逻辑（triggerAI:false 那条路），不会报错但会重复存一条空消息。需要 thread-actions.js 配合加一个 skipSave 判断。
 // 依赖：../../core/storage.js(getData,setData,getDB,getByIndexDB)；../../core/ui.js(createIcon,showToast,hideBottomSheet)；../../core/tts.js(stopAll)；./thread-render.js(renderThreadMessages)；./thread-actions.js(sendThreadMessage,stopThreadAIReply)；./thread-stickers.js(openStickerSheet,closeStickerSheet)；./thread-panels.js(openThreadToolsPanel,closeThreadPanels)；./thread-relationship.js(loadRelationshipState,getRelationshipLockLevel,getRelationshipStatusText,createRelationshipLockBar,openRelationshipLockSheet)；./thread-ai.js(checkThreadProactiveMessages)；./thread-settings.js(mountThreadSettings,unmountThreadSettings)
