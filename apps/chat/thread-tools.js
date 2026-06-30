@@ -18,10 +18,6 @@ import {
 import { openRelationshipLockSheet } from './thread-relationship.js';
 import { sendDiceMessage, sendRpsMessage } from './thread-actions.js';
 
-// ═══════════════════════════════════════
-// 【工具列表】11个工具，每页8个，滑动翻页
-// ═══════════════════════════════════════
-
 const DEFAULT_TOOLS = [
   { id: 'quickReply', title: '快捷回复', icon: 'chat' },
   { id: 'task',       title: '小任务',   icon: 'task' },
@@ -38,11 +34,6 @@ const DEFAULT_TOOLS = [
 
 const TOOLS_PER_PAGE = 8;
 
-// ═══════════════════════════════════════
-// 【猫咪简笔画SVG图标】粗线条 stroke 2.5
-// viewBox 16×16 round caps，走 --accent
-// ═══════════════════════════════════════
-
 const TOOL_ICONS = {
   chat: `<rect x="1" y="2.5" width="9" height="6.5" rx="3.5" fill="none" stroke="currentColor" stroke-width="2.5"/><path d="M3.5 9L2 12V9" fill="none" stroke="currentColor" stroke-width="2.5"/><circle cx="4.5" cy="5.5" r="0.7" fill="currentColor"/><circle cx="7" cy="5.5" r="0.7" fill="currentColor"/><path d="M5 7.2C5.3 7.8 5.8 7.8 6 7.2C6.2 7.8 6.7 7.8 7 7.2" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="6" y="4.5" width="9" height="6.5" rx="3.5" fill="var(--bg-surface,#fff)" stroke="currentColor" stroke-width="2.5"/>`,
   task: `<path d="M4 4.5L2.5 1.5L6.5 3" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 4.5L13.5 1.5L9.5 3" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><rect x="3" y="4" width="10" height="10" rx="3" fill="none" stroke="currentColor" stroke-width="2.5"/><line x1="5.5" y1="7.5" x2="10.5" y2="7.5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><line x1="5.5" y1="10.5" x2="8.5" y2="10.5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>`,
@@ -57,10 +48,6 @@ const TOOL_ICONS = {
   mcp: `<rect x="1.5" y="3" width="13" height="10" rx="3" fill="none" stroke="currentColor" stroke-width="2.5"/><path d="M5 6.5L3.5 8L5 9.5" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><line x1="7" y1="9.5" x2="11" y2="9.5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>`,
 };
 
-// ═══════════════════════════════════════
-// 【创建图标DOM】
-// ═══════════════════════════════════════
-
 function createToolIcon(type) {
   const wrap = document.createElement('div');
   wrap.className = 'tool-icon-wrap';
@@ -68,15 +55,11 @@ function createToolIcon(type) {
   return wrap;
 }
 
-// ═══════════════════════════════════════
-// 【CSS注入】走全局变量，不硬编码颜色
-// ═══════════════════════════════════════
-
 function injectToolsCSS() {
-  var old = document.getElementById('thread-tools-style');
+  const old = document.getElementById('thread-tools-style');
   if (old) old.remove();
 
-  var style = document.createElement('style');
+  const style = document.createElement('style');
   style.id = 'thread-tools-style';
   style.textContent = `
     .thread-tools-panel{position:absolute;inset:0;z-index:100;display:flex;flex-direction:column;background:var(--bg-primary);opacity:0;transform:translateY(100%);transition:all 0.3s cubic-bezier(0.34,1.56,0.64,1);pointer-events:none}
@@ -102,19 +85,15 @@ function injectToolsCSS() {
   document.head.appendChild(style);
 }
 
-// ═══════════════════════════════════════
-// 【翻页触摸滑动】丝滑跟手+边界阻尼
-// ═══════════════════════════════════════
-
-var currentPage = 0;
-var totalPages = 1;
-var touchStartX = 0;
-var touchDeltaX = 0;
-var isSwiping = false;
-var toolsPanelEl = null;
+let currentPage = 0;
+let totalPages = 1;
+let touchStartX = 0;
+let touchDeltaX = 0;
+let isSwiping = false;
+let toolsPanelEl = null;
 
 function setupSwipe(carousel, dotsContainer) {
-  var wrap = carousel.parentElement;
+  const wrap = carousel.parentElement;
   wrap.addEventListener('touchstart', function(e) {
     touchStartX = e.touches[0].clientX;
     touchDeltaX = 0;
@@ -127,16 +106,16 @@ function setupSwipe(carousel, dotsContainer) {
     if (Math.abs(touchDeltaX) > 8 && e.cancelable) {
       e.preventDefault();
     }
-    var atStart = currentPage === 0 && touchDeltaX > 0;
-    var atEnd = currentPage === totalPages - 1 && touchDeltaX < 0;
-    var damped = (atStart || atEnd) ? touchDeltaX * 0.3 : touchDeltaX;
+    const atStart = currentPage === 0 && touchDeltaX > 0;
+    const atEnd = currentPage === totalPages - 1 && touchDeltaX < 0;
+    const damped = (atStart || atEnd) ? touchDeltaX * 0.3 : touchDeltaX;
     carousel.style.transform = 'translateX(calc(' + (-currentPage * 100) + '% + ' + damped + 'px))';
   }, { passive: false });
   wrap.addEventListener('touchend', function() {
     if (!isSwiping) return;
     isSwiping = false;
     carousel.style.transition = 'transform 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94)';
-    var threshold = wrap.clientWidth * 0.2;
+    const threshold = wrap.clientWidth * 0.2;
     if (touchDeltaX < -threshold && currentPage < totalPages - 1) currentPage++;
     else if (touchDeltaX > threshold && currentPage > 0) currentPage--;
     carousel.style.transform = 'translateX(' + (-currentPage * 100) + '%)';
@@ -151,41 +130,18 @@ function updateDots(container) {
   });
 }
 
-// ═══════════════════════════════════════
-// 【发送消息到聊天】通过回调
-// ═══════════════════════════════════════
-
 async function sendMessageToChat(text, options) {
+  hideBottomSheet();
   if (typeof options?.onSend === 'function') {
     await options.onSend(text);
   }
 }
 
-// ═══════════════════════════════════════
-// 【关掉工具箱】优先回调，兜底关抽屉
-// ═══════════════════════════════════════
-
-function closeToolsSheet(options) {
-  if (typeof options?.onClose === 'function') {
-    options.onClose();
-  } else {
-    hideBottomSheet();
-  }
-
-  if (toolsPanelEl && toolsPanelEl.classList.contains('is-open')) {
-    toolsPanelEl.classList.remove('is-open');
-  }
-}
-
-// ═══════════════════════════════════════
-// 【返回按钮头部】带返回到工具选择的按钮
-// ═══════════════════════════════════════
-
 function createBackHeader(title, options) {
-  var header = document.createElement('div');
+  const header = document.createElement('div');
   header.className = 'thread-tools-detail-header';
 
-  var back = document.createElement('button');
+  const back = document.createElement('button');
   back.type = 'button';
   back.className = 'thread-tools-back-btn';
   back.setAttribute('aria-label', '返回小工具箱');
@@ -198,30 +154,26 @@ function createBackHeader(title, options) {
     }
   });
 
-  var titleEl = document.createElement('div');
+  const titleEl = document.createElement('div');
   titleEl.className = 'thread-tools-detail-title';
   titleEl.textContent = title || '小工具';
 
-  var spacer = document.createElement('div');
+  const spacer = document.createElement('div');
   spacer.className = 'thread-tools-detail-spacer';
 
   header.append(back, titleEl, spacer);
   return header;
 }
 
-// ═══════════════════════════════════════
-// 【小任务详情】预设任务 + 自定义输入
-// ═══════════════════════════════════════
-
 function openTaskSheet(state, options) {
-  var content = document.createElement('div');
+  const content = document.createElement('div');
   content.style.cssText = 'display:flex;flex-direction:column;gap:14px;padding-top:4px;';
   content.appendChild(createBackHeader('小任务', options));
 
-  var grid = document.createElement('div');
+  const grid = document.createElement('div');
   grid.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:10px;';
 
-  var presets = [
+  const presets = [
     { text: '提醒我喝水', prompt: '提醒我要多喝水，关心一下我~' },
     { text: '帮我记件事', prompt: '帮我记一件重要的事，我接下来要跟你说~' },
     { text: '讲个小故事', prompt: '给我讲一个温馨可爱的小故事吧~' },
@@ -231,12 +183,11 @@ function openTaskSheet(state, options) {
   ];
 
   presets.forEach(function(p) {
-    var card = document.createElement('button');
+    const card = document.createElement('button');
     card.type = 'button';
     card.style.cssText = 'padding:16px 12px;border:none;outline:none;border-radius:var(--radius-lg);background:var(--bg-surface);box-shadow:var(--shadow-sm);cursor:pointer;transition:all 0.2s cubic-bezier(0.34,1.56,0.64,1);text-align:center;font-size:14px;color:var(--text-primary);font-weight:500;-webkit-tap-highlight-color:transparent;';
     card.textContent = p.text;
     card.addEventListener('click', async function() {
-      closeToolsSheet(options);
       await sendMessageToChat(p.prompt, options);
     });
     grid.appendChild(card);
@@ -244,21 +195,20 @@ function openTaskSheet(state, options) {
 
   content.appendChild(grid);
 
-  var inputWrap = document.createElement('div');
+  const inputWrap = document.createElement('div');
   inputWrap.style.cssText = 'display:flex;gap:8px;margin-top:4px;';
 
-  var input = document.createElement('textarea');
+  const input = document.createElement('textarea');
   input.placeholder = '或者自己输入任务...';
   input.style.cssText = 'flex:1;padding:12px;border-radius:var(--radius-md);background:var(--bg-surface);box-shadow:var(--shadow-sm);font-size:14px;color:var(--text-primary);resize:none;height:44px;outline:none;border:none;font-family:inherit;';
 
-  var sendBtn = document.createElement('button');
+  const sendBtn = document.createElement('button');
   sendBtn.type = 'button';
   sendBtn.textContent = '发送';
   sendBtn.style.cssText = 'padding:0 20px;height:44px;border-radius:var(--radius-md);background:var(--accent);color:var(--bubble-user-text);font-size:14px;font-weight:500;border:none;outline:none;cursor:pointer;white-space:nowrap;transition:all 0.2s ease;';
   sendBtn.addEventListener('click', async function() {
-    var t = input.value.trim();
+    const t = input.value.trim();
     if (!t) return;
-    closeToolsSheet(options);
     await sendMessageToChat(t, options);
   });
 
@@ -269,16 +219,12 @@ function openTaskSheet(state, options) {
   showBottomSheet(content);
 }
 
-// ═══════════════════════════════════════
-// 【默契问答详情】选范围后让AI出题
-// ═══════════════════════════════════════
-
 function openQuizSheet(state, options) {
-  var content = document.createElement('div');
+  const content = document.createElement('div');
   content.style.cssText = 'display:flex;flex-direction:column;gap:10px;padding-top:4px;';
   content.appendChild(createBackHeader('默契问答', options));
 
-  var categories = [
+  const categories = [
     { title: '你有多了解我', desc: 'AI出题考你，看它对你了解多少', prompt: '我们来玩默契问答吧~你来出题考考我，看你对我有多了解！问我一些关于我的喜好的问题，我来回答~' },
     { title: '我有多了解你', desc: '你来答题，看对AI了解多少', prompt: '我们来玩默契问答吧~我来出题考考你，看我对你有多了解！问我一些关于你的问题，看你记不记得~' },
     { title: '生活小测验', desc: '聊聊日常生活里的小事', prompt: '我们来玩默契问答吧~聊一聊日常生活的小事，你问我一些关于生活习惯、喜好的问题~' },
@@ -288,19 +234,18 @@ function openQuizSheet(state, options) {
   ];
 
   categories.forEach(function(cat) {
-    var card = document.createElement('button');
+    const card = document.createElement('button');
     card.type = 'button';
     card.style.cssText = 'width:100%;padding:16px;border:none;outline:none;border-radius:var(--radius-lg);background:var(--bg-surface);box-shadow:var(--shadow-sm);cursor:pointer;transition:all 0.2s cubic-bezier(0.34,1.56,0.64,1);-webkit-tap-highlight-color:transparent;text-align:left;';
-    var titleDiv = document.createElement('div');
+    const titleDiv = document.createElement('div');
     titleDiv.style.cssText = 'font-size:15px;color:var(--text-primary);font-weight:500;';
     titleDiv.textContent = cat.title;
-    var descDiv = document.createElement('div');
+    const descDiv = document.createElement('div');
     descDiv.style.cssText = 'font-size:12px;color:var(--text-secondary);margin-top:4px;';
     descDiv.textContent = cat.desc;
     card.appendChild(titleDiv);
     card.appendChild(descDiv);
     card.addEventListener('click', async function() {
-      closeToolsSheet(options);
       await sendMessageToChat(cat.prompt, options);
     });
     content.appendChild(card);
@@ -309,64 +254,60 @@ function openQuizSheet(state, options) {
   showBottomSheet(content);
 }
 
-// ═══════════════════════════════════════
-// 【工具点击处理】分发到各个sheet或回调
-// ═══════════════════════════════════════
-
 async function handleToolClick(toolId, state, options) {
   switch (toolId) {
     case 'quickReply':
-      closeToolsSheet(options);
-      openQuickReplySheet(state, options);
+      hideBottomSheet();
+      openQuickReplySheet(state, { ...options, onBackToTools: () => reopenTools(state, options) });
       break;
     case 'task':
-      openTaskSheet(state, options);
+      hideBottomSheet();
+      openTaskSheet(state, { ...options, onBackToTools: () => reopenTools(state, options) });
       break;
     case 'quiz':
-      openQuizSheet(state, options);
+      hideBottomSheet();
+      openQuizSheet(state, { ...options, onBackToTools: () => reopenTools(state, options) });
       break;
     case 'transfer':
-      closeToolsSheet(options);
-      openTransferSheet(state, options);
+      hideBottomSheet();
+      openTransferSheet(state, { ...options, onBackToTools: () => reopenTools(state, options) });
       break;
     case 'voiceText':
-      closeToolsSheet(options);
-      openVoiceTextSheet(state, options);
+      hideBottomSheet();
+      openVoiceTextSheet(state, { ...options, onBackToTools: () => reopenTools(state, options) });
       break;
     case 'clearCtx':
-      closeToolsSheet(options);
-      openClearContextSheet(state, options);
+      hideBottomSheet();
+      openClearContextSheet(state, { ...options, onBackToTools: () => reopenTools(state, options) });
       break;
     case 'relLock':
-      closeToolsSheet(options);
-      openRelationshipLockSheet(state, options);
+      hideBottomSheet();
+      openRelationshipLockSheet(state, { ...options, onBackToTools: () => reopenTools(state, options) });
       break;
     case 'phone':
-      closeToolsSheet(options);
+      hideBottomSheet();
       if (typeof options?.onPick === 'function') {
         options.onPick({ id: 'phone' });
       }
       break;
     case 'dice':
-      closeToolsSheet(options);
       await handleDiceClick(state);
       break;
     case 'rps':
-      closeToolsSheet(options);
       await handleRpsClick(state);
       break;
     case 'mcp':
-      closeToolsSheet(options);
-      openMcpSheet(state, options);
+      hideBottomSheet();
+      openMcpSheet(state, { ...options, onBackToTools: () => reopenTools(state, options) });
       break;
     default:
       break;
   }
 }
 
-// ═══════════════════════════════════════
-// 【骰子】真实写入聊天消息
-// ═══════════════════════════════════════
+function reopenTools(state, options) {
+  showToolsPanel(state, options);
+}
 
 async function handleDiceClick(state) {
   try {
@@ -375,13 +316,8 @@ async function handleDiceClick(state) {
       await state.reloadAndRender();
     }
   } catch (_) {
-    // 静默
   }
 }
-
-// ═══════════════════════════════════════
-// 【猜拳】真实写入聊天消息
-// ═══════════════════════════════════════
 
 async function handleRpsClick(state) {
   try {
@@ -390,50 +326,45 @@ async function handleRpsClick(state) {
       await state.reloadAndRender();
     }
   } catch (_) {
-    // 静默
   }
 }
-
-// ═══════════════════════════════════════
-// 【给thread-panels用的宫格入口】返回DOM节点
-// ═══════════════════════════════════════
 
 export function createThreadToolsGrid(state, options = {}) {
   injectToolsCSS();
   currentPage = 0;
 
-  var pages = [];
-  for (var i = 0; i < DEFAULT_TOOLS.length; i += TOOLS_PER_PAGE) {
+  const pages = [];
+  for (let i = 0; i < DEFAULT_TOOLS.length; i += TOOLS_PER_PAGE) {
     pages.push(DEFAULT_TOOLS.slice(i, i + TOOLS_PER_PAGE));
   }
   totalPages = pages.length;
 
-  var wrap = document.createElement('div');
+  const wrap = document.createElement('div');
   wrap.style.cssText = 'display:flex;flex-direction:column;flex:1;min-height:0;';
 
-  var carouselWrap = document.createElement('div');
+  const carouselWrap = document.createElement('div');
   carouselWrap.className = 'tools-carousel-wrap';
-  var carousel = document.createElement('div');
+  const carousel = document.createElement('div');
   carousel.className = 'tools-carousel';
 
   pages.forEach(function(pageTools) {
-    var pageEl = document.createElement('div');
+    const pageEl = document.createElement('div');
     pageEl.className = 'tools-page';
     pageTools.forEach(function(tool) {
-      var cell = document.createElement('button');
+      const cell = document.createElement('button');
       cell.type = 'button';
       cell.className = 'tool-cell';
       cell.appendChild(createToolIcon(tool.icon));
-      var nameEl = document.createElement('div');
+      const nameEl = document.createElement('div');
       nameEl.className = 'tool-name';
       nameEl.textContent = tool.title;
       cell.appendChild(nameEl);
       cell.addEventListener('click', async function() { await handleToolClick(tool.id, state, options); });
       pageEl.appendChild(cell);
     });
-    var remaining = TOOLS_PER_PAGE - pageTools.length;
-    for (var j = 0; j < remaining; j++) {
-      var empty = document.createElement('div');
+    const remaining = TOOLS_PER_PAGE - pageTools.length;
+    for (let j = 0; j < remaining; j++) {
+      const empty = document.createElement('div');
       empty.className = 'tool-cell';
       empty.style.visibility = 'hidden';
       pageEl.appendChild(empty);
@@ -445,10 +376,10 @@ export function createThreadToolsGrid(state, options = {}) {
   wrap.appendChild(carouselWrap);
 
   if (totalPages > 1) {
-    var dotsEl = document.createElement('div');
+    const dotsEl = document.createElement('div');
     dotsEl.className = 'tools-dots';
-    for (var k = 0; k < totalPages; k++) {
-      var dot = document.createElement('div');
+    for (let k = 0; k < totalPages; k++) {
+      const dot = document.createElement('div');
       dot.className = 'tools-dot' + (k === 0 ? ' is-active' : '');
       dotsEl.appendChild(dot);
     }
@@ -459,50 +390,44 @@ export function createThreadToolsGrid(state, options = {}) {
   return wrap;
 }
 
-// ═══════════════════════════════════════
-// 【独立面板】抽屉模式打开工具箱
-// ═══════════════════════════════════════
-
 export function showToolsPanel(state, options = {}) {
-  var sheet = document.createElement('div');
+  const sheet = document.createElement('div');
   sheet.style.cssText = 'display:flex;flex-direction:column;gap:0;padding:6px 20px 20px;';
 
-  var head = document.createElement('div');
+  const head = document.createElement('div');
   head.style.cssText = 'margin-bottom:14px;';
-  head.appendChild(createBackHeader('小工具箱', { onBackToTools: function() {
-    if (typeof options.onBackToTools === 'function') {
-      options.onBackToTools();
-    } else {
-      hideBottomSheet();
+  head.appendChild(createBackHeader('小工具箱', {
+    onBackToTools: function() {
+      if (typeof options.onBackToTools === 'function') {
+        options.onBackToTools();
+      } else {
+        hideBottomSheet();
+      }
     }
-  }}));
+  }));
   sheet.appendChild(head);
 
-  var grid = createThreadToolsGrid(state, options);
+  const grid = createThreadToolsGrid(state, options);
   sheet.appendChild(grid);
 
   showBottomSheet(sheet);
 }
 
-// ═══════════════════════════════════════
-// 【工具详情页】抽屉模式
-// ═══════════════════════════════════════
-
 export function showToolDetail(contentEl, title) {
-  var content = document.createElement('div');
+  const content = document.createElement('div');
   content.style.cssText = 'display:flex;flex-direction:column;gap:12px;padding-top:4px;';
 
-  var header = document.createElement('div');
+  const header = document.createElement('div');
   header.className = 'thread-tools-detail-header';
 
-  var spacerLeft = document.createElement('div');
+  const spacerLeft = document.createElement('div');
   spacerLeft.className = 'thread-tools-detail-spacer';
 
-  var titleEl = document.createElement('div');
+  const titleEl = document.createElement('div');
   titleEl.className = 'thread-tools-detail-title';
   titleEl.textContent = title || '工具';
 
-  var spacerRight = document.createElement('div');
+  const spacerRight = document.createElement('div');
   spacerRight.className = 'thread-tools-detail-spacer';
 
   header.append(spacerLeft, titleEl, spacerRight);
@@ -514,8 +439,11 @@ export function showToolDetail(contentEl, title) {
   return content;
 }
 
-// ═══════════════════════════════════════
-// 【导出】
-// ═══════════════════════════════════════
-
 export { showToolsPanel as default };
+
+// 改了什么：
+// 1. sendMessageToChat 开头加 hideBottomSheet()，小任务/默契问答发送后关掉详情抽屉
+// 2. handleToolClick 里所有需要打开详情页的工具（快捷回复/转账/语音文字/清上下文/MCP/关系锁/小任务/默契问答）先 hideBottomSheet 关工具宫格，再打开详情，详情的 onBackToTools 改为调 reopenTools 重新打开工具宫格
+// 3. phone 点击时先 hideBottomSheet 再调 onPick，避免电话全屏和工具箱抽屉同时存在
+// 4. 骰子/猜拳不变，直接发消息不关抽屉
+// 会不会影响其他文件：不会。thread-sheets.js 的 renderSheet 在没有 containerEl 时走 showBottomSheet，现在 thread.js 不传 containerEl 了，所以正常。
