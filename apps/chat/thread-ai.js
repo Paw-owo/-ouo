@@ -242,6 +242,115 @@ export async function requestProactiveThreadMessage(state, reason = 'manual') {
 }
 
 // ═══════════════════════════════════════
+// 【AI 任务管理】启动、停止、创建占位
+// ═══════════════════════════════════════
+
+function getAIJobKey(state) {
+  if (!state) return 'ai-job:empty';
+  if (state.mode === 'group') {
+    return `ai-job:group:${state.groupId || state.group?.id || 'none'}`;
+  }
+  return `ai-job:private:${state.characterId || state.character?.id || 'none'}`;
+}
+
+function startAIJob(state, options = {}) {
+  const key = getAIJobKey(state);
+
+  const existing = activeAIJobs.get(key);
+  if (existing) {
+    try {
+      existing.controller?.abort?.();
+    } catch (_) {}
+    activeAIJobs.delete(key);
+  }
+
+  const controller = new AbortController();
+
+  const job = {
+    id: generateId('ai-job'),
+    key,
+    store: options.store || '',
+    characterId: options.characterId || '',
+    groupId: options.groupId || '',
+    controller,
+    placeholderIds: [],
+    stopped: false,
+    stoppedAt: null,
+    startedAt: getNow()
+  };
+
+  activeAIJobs.set(key, job);
+  return job;
+}
+
+function finishAIJob(state, job) {
+  if (!job) return;
+
+  if (activeAIJobs.get(job.key) === job) {
+    activeAIJobs.delete(job.key);
+  }
+
+  state.aiGenerating = false;
+  state.isSending = false;
+}
+
+function createAssistantPlaceholder({
+  characterId,
+  groupId,
+  character,
+  content,
+  thinking,
+  thinkingSummary,
+  toolCalls,
+  isPending,
+  status
+}) {
+  return cleanForDB({
+    id: generateId('msg'),
+    role: 'assistant',
+    type: 'text',
+    characterId: characterId || character?.id || '',
+    groupId: groupId || '',
+    characterName: character?.name || character?.characterName || 'TA',
+    characterAvatar: character?.avatar || '',
+    content: String(content || ''),
+    thinking: String(thinking || ''),
+    thinkingSummary: String(thinkingSummary || ''),
+    toolCalls: normalizeToolCalls(toolCalls),
+    memoryWrites: [],
+    grudgeWrites: [],
+    quoteText: '',
+    isPending: Boolean(isPending),
+    isStopped: false,
+    isError: false,
+    status: String(status || 'pending'),
+    timestamp: getNow(),
+    updatedAt: getNow()
+  });
+}
+
+function isJobStopped(job) {
+  return Boolean(job?.stopped);
+}
+
+function isAbortError(error) {
+  if (!error) return false;
+  if (error.name === 'AbortError') return true;
+  if (error.message && /abort/i.test(error.message)) return true;
+  return false;
+}
+
+async function markJobPlaceholdersStopped(job, content = '我先停在这里了。') {
+  if (!job || !Array.isArray(job.placeholderIds)) return;
+
+  const message = String(content || '我先停在这里了。');
+
+  await Promise.all(job.placeholderIds.map(async (id) => {
+    await markMessageStopped(job.store, id, message).catch(() => {});
+  }));
+}
+
+// ═══════════════════════════════════════
 // 【私聊回复】生成单人聊天回复并触发统一记忆系统
 // ═══════════════════════════════════════
 
@@ -609,6 +718,7 @@ async function requestGroupReply(state, options = {}) {
     finishAIJob(state, job);
   }
 }
+
 // ═══════════════════════════════════════
 // 【内心独白】后台生成角色思考过程
 // ═══════════════════════════════════════
@@ -1394,59 +1504,6 @@ async function runMemoryTasks(characterId, messages, options = {}) {
       callName
     });
 
-    if (Array.isArray(infoResult)) {
-      infoResult.forEach((item) => {
-        memoryWrites.push({
-          title: item.title || '记下一件事',
-          content: item.content || item.text || item.summary || '',
-          action: item.action || 'add',
-          timestamp: getNow()
-        });
-      });
-    }
-  } catch (error) {
-    console.warn('[chat-thread-ai] checkImportantInfo failed:', error);
-  }
-
-  try {
-    await checkAndSummarize(characterId, {
-      character,
-      userProfile,
-      callName
-    });
-  } catch (error) {
-    console.warn('[chat-thread-ai] checkAndSummarize failed:', error);
-  }
-
-  return { memoryWrites };
-}
-
-function buildMemoryQueryText(messages, userName) {
-  return normalizeList(messages)
-    .slice(-8)
-    .map((message) => formatMessageForPrompt(message, 'private', userName))
-    .join('\n');
-}
-// ═══════════════════════════════════════
-// 【记忆任务】实时检查和自动总结
-// ═══════════════════════════════════════
-
-async function runMemoryTasks(characterId, messages, options = {}) {
-  if (!characterId) return { memoryWrites: [] };
-
-  const character = options.character || await getDB('characters', characterId).catch(() => null);
-  const userProfile = options.userProfile || loadUserProfileForCharacter(character);
-  const callName = options.callName || getUserDisplayName(userProfile);
-
-  const memoryWrites = [];
-
-  try {
-    const infoResult = await checkImportantInfo(characterId, messages, {
-      character,
-      userProfile,
-      callName
-    });
-
     const items = Array.isArray(infoResult) ? infoResult : [];
 
     items.forEach((item) => {
@@ -1482,6 +1539,7 @@ function buildMemoryQueryText(messages, userName) {
     .map((message) => formatMessageForPrompt(message, 'private', userName))
     .join('\n');
 }
+
 async function markMessageStopped(store, id, content) {
   if (!store || !id) return null;
 
@@ -1779,6 +1837,7 @@ async function loadInventory() {
 function loadAnniversary() {
   return getData('anniversary_items') || getData('app_anniversary') || getData('anniversaries') || null;
 }
+
 // ═══════════════════════════════════════
 // 【用户档案】读取和规范化用户人设
 // ═══════════════════════════════════════
@@ -2089,12 +2148,11 @@ function clampNumber(value, min, max) {
 }
 
 // 改了什么：
-// 1) runMemoryTasks 返回 { memoryWrites }
-// 2) requestPrivateReply / requestGroupReply 在 finalMessage 上挂 memoryWrites 和 grudgeWrites
-// 3) requestGroupReply 里查每个角色的 activeLock 并传给 maybeWriteGrudge
-// 4) createAssistantPlaceholder / safeSetMessage 降级时初始化/清空 memoryWrites 和 grudgeWrites
-// 5) maybeWriteGrudge 返回新建的 grudge 对象
-// 原来效果：群聊记仇不判断锁定期；记忆/记仇写入不显示在 thinking 工具时间线
-// 现在效果：群聊记仇和私聊一致；记忆/记仇写入会作为工具块出现在 thinking 展开区
-// 会不会影响其他文件：不会。消息对象新增两个字段，旧数据兼容。
+// 1) 补回 startAIJob / finishAIJob / createAssistantPlaceholder / getAIJobKey / isJobStopped / isAbortError / markJobPlaceholdersStopped
+// 2) runMemoryTasks 合并为一个版本，删除重复定义
+// 3) 保持原有私聊/群聊/主动消息/内心独白/记仇/关系锁逻辑不变
+// 原来效果：文件缺少核心函数，导致 AI 回复无法启动，发送消息报错
+// 现在效果：AI 任务能正常启动、停止、创建占位消息，消息 APP 能发能收
+// 会不会影响其他文件：不影响，只对 thread-ai.js 内部补充函数
 // depends: ../../core/storage.js(getData,setData,generateId,getNow,setDB,deleteDB,getByIndexDB,getAllDB,getDB)；../../core/api.js(silentRequest)；../../core/memory.js(buildMemoryPrompt,checkImportantInfo,checkAndSummarize)；./identity-core.js(getIdentityCore)；./thread-ai-local.js(tryLocalOrSiliconFlowReply)
+
