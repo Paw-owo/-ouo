@@ -13,6 +13,7 @@ const THINKING_TOOL_BODY_CLASS = 'chat-thinking-tool-body';
 
 const FIXED_SUMMARY_TEXT = '让我想想这话何意味…';
 const FIXED_SUMMARY_TEXT_RUNNING = '让我再想想…';
+const MAX_CACHE_ENTRIES = 200;
 
 // 全局状态缓存：按消息 id + 内容指纹保存展开状态和打字进度
 const stateCache = new Map();
@@ -24,6 +25,7 @@ const activeTypewriters = new WeakMap();
 
 export function hasThinkingChain(message) {
   if (!message) return false;
+  if (message.role === 'user') return false;
   if (String(message.thinking || '').trim()) return true;
   if (normalizeToolCalls(message.toolCalls).length > 0) return true;
   if (normalizeToolCalls(message.memoryWrites).length > 0) return true;
@@ -113,8 +115,20 @@ function getSavedCardState(key) {
 function saveCardState(key, patch) {
   if (!key) return;
 
+  pruneCacheIfNeeded();
+
   const current = stateCache.get(key) || {};
   stateCache.set(key, { ...current, ...patch });
+}
+
+function pruneCacheIfNeeded() {
+  if (stateCache.size < MAX_CACHE_ENTRIES) return;
+
+  const keys = Array.from(stateCache.keys());
+  const removeCount = Math.max(1, Math.floor(keys.length * 0.25));
+  for (let index = 0; index < removeCount; index += 1) {
+    stateCache.delete(keys[index]);
+  }
 }
 
 // ═══════════════════════════════════════
@@ -434,3 +448,4 @@ function normalizeMultiline(value) {
   }
   return String(value || '').trim();
 }
+
