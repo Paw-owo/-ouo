@@ -744,7 +744,10 @@ function el(tag, className = '', text = '') {
 // ═══════════════════════════════════════
 
 function injectStyle() {
-  if (document.getElementById(SHEET_STYLE_ID)) return;
+  // 修复：先删旧标签再创建新的，避免 CSS 修改不生效
+  const old = document.getElementById(SHEET_STYLE_ID);
+  if (old) old.remove();
+
   const style = document.createElement('style');
   style.id = SHEET_STYLE_ID;
   style.textContent = `
@@ -797,4 +800,8 @@ function injectStyle() {
   document.head.appendChild(style);
 }
 
+// 改了什么：injectStyle 函数开头从"if (document.getElementById(SHEET_STYLE_ID)) return"改为"const old = ...; if (old) old.remove()"，先删旧标签再创建新的。
+// 原来效果：工具详情页 CSS 修改后永远不生效。
+// 现在效果：每次调用都先清理旧标签再写入新样式。
+// 会不会影响其他文件：不会。导出接口不变，依赖不变。
 // 依赖：../../core/storage.js(getData,setData,getNow)；../../core/ui.js(createIcon,showBottomSheet,hideBottomSheet,showToast)；./thread-actions.js(sendThreadMessage,sendTransferMessage)；./thread-relationship.js(openRelationshipLockSheet)
