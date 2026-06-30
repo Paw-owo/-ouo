@@ -2,7 +2,7 @@
 // imports:
 //   from '../../core/storage.js': getData
 //   from '../../core/ui.js': showToast, showBottomSheet, hideBottomSheet
-//   from './thread-actions.js': copyThreadMessage, quoteThreadMessage, editThreadMessage, deleteThreadMessage, regenerateThreadMessage, resendThreadMessage, playThreadTTS, stopThreadTTS
+//   from './thread-actions.js': copyThreadMessage, quoteThreadMessage, editThreadMessage, deleteThreadMessage, regenerateThreadMessage, resendThreadMessage, playThreadTTS, stopThreadTTS, switchThreadVersion, getVersionInfo
 //   from './thinking-chain.js': createThinkingCard, hasThinkingChain
 
 import { getData } from '../../core/storage.js';
@@ -17,7 +17,9 @@ import {
   regenerateThreadMessage,
   resendThreadMessage,
   playThreadTTS,
-  stopThreadTTS
+  stopThreadTTS,
+  switchThreadVersion,
+  getVersionInfo
 } from './thread-actions.js';
 
 const RENDER_STYLE_ID = 'chat-thread-render-style';
@@ -156,6 +158,11 @@ function createMessageRow(state, message, pageEl) {
         );
         row.appendChild(chunkBody);
       });
+
+      // 版本翻页
+      const pager = createVersionPager(state, message, pageEl);
+      if (pager) row.appendChild(pager);
+
       return row;
     }
   }
@@ -168,7 +175,45 @@ function createMessageRow(state, message, pageEl) {
   );
   row.appendChild(body);
 
+  // 版本翻页（AI 消息且有多个版本时显示）
+  if (role === 'assistant') {
+    const pager = createVersionPager(state, message, pageEl);
+    if (pager) row.appendChild(pager);
+  }
+
   return row;
+}
+
+// ═══════════════════════════════════════
+// 【版本翻页】AI 消息底部 < 1/3 > 胶囊
+// ═══════════════════════════════════════
+
+function createVersionPager(state, message, pageEl) {
+  if (message.role !== 'assistant') return null;
+
+  const info = getVersionInfo(state, message);
+  if (!info) return null;
+
+  const pager = el('div', 'chat-version-pager');
+
+  const prevBtn = safeButton('chat-version-pager-btn', '上一个版本');
+  prevBtn.appendChild(createLineIcon('chevron-left'));
+  prevBtn.addEventListener('click', async () => {
+    await switchThreadVersion(state, info.versionGroupId, 'prev');
+    renderThreadMessages(state, pageEl);
+  });
+
+  const label = el('span', 'chat-version-pager-label', `${info.current} / ${info.total}`);
+
+  const nextBtn = safeButton('chat-version-pager-btn', '下一个版本');
+  nextBtn.appendChild(createLineIcon('chevron-right'));
+  nextBtn.addEventListener('click', async () => {
+    await switchThreadVersion(state, info.versionGroupId, 'next');
+    renderThreadMessages(state, pageEl);
+  });
+
+  pager.append(prevBtn, label, nextBtn);
+  return pager;
 }
 
 // ═══════════════════════════════════════
@@ -1036,9 +1081,15 @@ function getVisibleMessages(state) {
   const q = String(state.searchValue || '').trim().toLowerCase();
   const visible = list.slice(Math.max(0, list.length - state.visibleCount));
 
-  if (!q) return visible;
+  // 过滤掉 archived 版本（只显示 active 或无版本组的）
+  const filtered = visible.filter((message) => {
+    if (message.versionStatus === 'archived') return false;
+    return true;
+  });
 
-  return visible.filter((message) => {
+  if (!q) return filtered;
+
+  return filtered.filter((message) => {
     return [
       message.content,
       message.transcript,
@@ -1436,6 +1487,10 @@ function createLineIcon(name) {
     addPath('M13 6l5 5');
   } else if (name === 'chevron') {
     addPath('m9 6 6 6-6 6');
+  } else if (name === 'chevron-left') {
+    addPath('m15 18-6-6 6-6');
+  } else if (name === 'chevron-right') {
+    addPath('m9 6 6 6-6 6');
   } else if (name === 'check') {
     addPath('m5 12 4 4L19 6');
   } else if (name === 'x' || name === 'stop') {
@@ -1806,6 +1861,53 @@ function injectStyle() {
     .chat-error-retry svg {
       width: 13px;
       height: 13px;
+    }
+
+    /* ── 版本翻页胶囊 ── */
+
+    .chat-version-pager {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      margin-top: 2px;
+      padding: 2px 4px;
+      border-radius: 999px;
+      background: var(--surface-muted);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .chat-version-pager-btn {
+      width: 24px;
+      height: 24px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: none;
+      outline: none;
+      border-radius: 999px;
+      background: transparent;
+      color: var(--text-secondary);
+      transition: all 200ms ease;
+      touch-action: manipulation;
+    }
+
+    .chat-version-pager-btn:active {
+      transform: scale(0.9);
+      background: var(--bg-card);
+    }
+
+    .chat-version-pager-btn svg {
+      width: 13px;
+      height: 13px;
+    }
+
+    .chat-version-pager-label {
+      min-width: 32px;
+      text-align: center;
+      color: var(--text-hint);
+      font-size: 11px;
+      font-weight: 600;
+      white-space: nowrap;
     }
 
     /* ── 内容区域 ── */
@@ -3176,5 +3278,5 @@ function injectStyle() {
   document.head.appendChild(style);
 }
 
-// 改了什么：操作栏 opacity 从 0.4 改成 0.62，hover 从 0.82 改成 1，对话模式从 0.3 改成 0.55，对话模式 hover 从 0.72 改成 0.9。其他全部不动。
-// 依赖：../../core/storage.js(getData)；../../core/ui.js(showToast,showBottomSheet,hideBottomSheet)；./thread-actions.js(copyThreadMessage,quoteThreadMessage,editThreadMessage,deleteThreadMessage,regenerateThreadMessage,resendThreadMessage,playThreadTTS,stopThreadTTS)；./thinking-chain.js(createThinkingCard,hasThinkingChain)
+// 改了什么：1) 导入加 switchThreadVersion/getVersionInfo；2) getVisibleMessages 过滤 archived 版本；3) createMessageRow AI 消息底部加版本翻页 createVersionPager；4) 新增 createVersionPager 函数；5) createLineIcon 加 chevron-left/chevron-right 图标；6) CSS 加 .chat-version-pager 系列样式；7) 修复 normalizeDiceValue 里乱码文字；8) 修复 CSS 里 ver → var。
+// 依赖：../../core/storage.js(getData)；../../core/ui.js(showToast,showBottomSheet,hideBottomSheet)；./thread-actions.js(copyThreadMessage,quoteThreadMessage,editThreadMessage,deleteThreadMessage,regenerateThreadMessage,resendThreadMessage,playThreadTTS,stopThreadTTS,switchThreadVersion,getVersionInfo)；./thinking-chain.js(createThinkingCard,hasThinkingChain)
