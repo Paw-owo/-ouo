@@ -792,7 +792,6 @@ async function generateInnerMonologue({
     // 静默失败，不影响主回复
   }
 }
-
 function parseInnerMonologueResult(result, userName) {
   let text = '';
 
@@ -1044,13 +1043,6 @@ async function runMemoryTasks(characterId, messages, options = {}) {
   }
 
   return { memoryWrites };
-}
-
-function buildMemoryQueryText(messages, userName) {
-  return normalizeList(messages)
-    .slice(-8)
-    .map((message) => formatMessageForPrompt(message, 'private', userName))
-    .join('\n');
 }
 
 async function markMessageStopped(store, id, content) {
@@ -1661,4 +1653,3 @@ function clampNumber(value, min, max) {
 }
 
 // 依赖：../../core/storage.js / ../../core/api.js(callAPI) / ../../core/memory.js / ./identity-core.js / ./thread-ai-local.js
-
