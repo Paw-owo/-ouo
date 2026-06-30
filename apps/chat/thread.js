@@ -3,7 +3,7 @@
 //   from '../../core/storage.js': getData, setData, getDB, getByIndexDB
 //   from '../../core/ui.js': createIcon, showToast, hideBottomSheet
 //   from '../../core/tts.js': stopAll
-//   from './thread-render.js': renderThreadMessages
+//   from './thread-render.js': renderThreadMessages, updateMessageContent
 //   from './thread-actions.js': sendThreadMessage, stopThreadAIReply
 //   from './thread-stickers.js': openStickerSheet, closeStickerSheet
 //   from './thread-panels.js': openThreadToolsPanel, closeThreadPanels
@@ -15,7 +15,7 @@ import { getData, setData, getDB, getByIndexDB } from '../../core/storage.js';
 import { createIcon, showToast, hideBottomSheet } from '../../core/ui.js';
 import { stopAll } from '../../core/tts.js';
 
-import { renderThreadMessages } from './thread-render.js';
+import { renderThreadMessages, updateMessageContent } from './thread-render.js';
 import { sendThreadMessage, stopThreadAIReply } from './thread-actions.js';
 import { openStickerSheet, closeStickerSheet } from './thread-stickers.js';
 import { openThreadToolsPanel, closeThreadPanels } from './thread-panels.js';
@@ -63,6 +63,7 @@ const state = {
   displayMode: 'bubble',
   reloadAndRender: null,
   renderOnly: null,
+  updateMessageContent: null,
   wallpaperImage: '',
   wallpaperOpacity: 1
 };
@@ -91,6 +92,12 @@ export async function mountChatThread(containerEl, options = {}) {
   state.displayMode = resolveDisplayMode();
   state.reloadAndRender = reloadAndRender;
   state.renderOnly = () => { if (state.rootEl && state.mounted) render(); };
+  state.updateMessageContent = (messageId, content, thinking) => {
+    if (!state.rootEl || !state.mounted) return;
+    const page = state.rootEl.querySelector('.chat-thread-page');
+    if (!page) return;
+    updateMessageContent(state, page, messageId, content, thinking);
+  };
   state.wallpaperImage = '';
   state.wallpaperOpacity = 1;
 
@@ -138,6 +145,7 @@ export function unmountChatThread() {
   state.relationshipPunishment = null;
   state.reloadAndRender = null;
   state.renderOnly = null;
+  state.updateMessageContent = null;
   state.wallpaperImage = '';
   state.wallpaperOpacity = 1;
 }
@@ -714,11 +722,11 @@ function getAllCurrentMessages() {
 }
 
 function getTargetName() {
-  return state.mode === 'group' ? state.group?.name || '群聊' : state.character?.name || '聊天';
+  return state.mode === 'group' ? (state.group?.name || '群聊') : (state.character?.name || '聊天');
 }
 
 function getTargetAvatar() {
-  return state.mode === 'group' ? state.group?.avatar || '' : state.character?.avatar || '';
+  return state.mode === 'group' ? (state.group?.avatar || '') : (state.character?.avatar || '');
 }
 
 function createAvatar(src, name) {
@@ -1041,6 +1049,8 @@ function injectStyle() {
   document.head.appendChild(style);
 }
 
-// 改了什么：createInputBar 里工具按钮点击从 openThreadToolsPanel(state, { containerEl: document.body }) 改为 openThreadToolsPanel(state, {})，去掉 containerEl。
-// 其余完全不动。
-// 依赖：../../core/storage.js(getData,setData,getDB,getByIndexDB)；../../core/ui.js(createIcon,showToast,hideBottomSheet)；../../core/tts.js(stopAll)；./thread-render.js(renderThreadMessages)；./thread-actions.js(sendThreadMessage,stopThreadAIReply)；./thread-stickers.js(openStickerSheet,closeStickerSheet)；./thread-panels.js(openThreadToolsPanel,closeThreadPanels)；./thread-relationship.js(loadRelationshipState,getRelationshipLockLevel,getRelationshipStatusText,createRelationshipLockBar,openRelationshipLockSheet)；./thread-ai.js(checkThreadProactiveMessages)；./thread-settings.js(mountThreadSettings,unmountThreadSettings)
+// 改了什么：1) 从 thread-render.js 导入 updateMessageContent；2) state 增加 updateMessageContent 方法，供 thread-ai.js 流式回调局部更新气泡；3) getTargetName/getTargetAvatar 加了括号兜底防 undefined。
+// 原来效果：AI 回复非流式，整段内容一次性出现。
+// 现在效果：AI 回复走流式，内容逐段更新到当前气泡，不重建整个列表。
+// 会不会影响其他文件：不会。只改了导入和 state 方法。
+// 依赖：../../core/storage.js(getData,setData,getDB,getByIndexDB)；../../core/ui.js(createIcon,showToast,hideBottomSheet)；../../core/tts.js(stopAll)；./thread-render.js(renderThreadMessages,updateMessageContent)；./thread-actions.js(sendThreadMessage,stopThreadAIReply)；./thread-stickers.js(openStickerSheet,closeStickerSheet)；./thread-panels.js(openThreadToolsPanel,closeThreadPanels)；./thread-relationship.js(loadRelationshipState,getRelationshipLockLevel,getRelationshipStatusText,createRelationshipLockBar,openRelationshipLockSheet)；./thread-ai.js(checkThreadProactiveMessages)；./thread-settings.js(mountThreadSettings,unmountThreadSettings)
