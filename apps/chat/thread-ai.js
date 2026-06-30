@@ -330,7 +330,9 @@ async function requestPrivateReply(state, options = {}) {
     thinkingSummary: options.proactive ? '想主动开口' : '正在整理思路',
     toolCalls: [],
     isPending: true,
-    status: 'pending'
+    status: 'pending',
+    versionGroupId: options.versionGroupId || '',
+    versionStatus: 'active'
   });
 
   job.placeholderIds.push(placeholder.id);
@@ -550,7 +552,9 @@ async function requestGroupReply(state, options = {}) {
         thinkingSummary: '正在接话',
         toolCalls: [],
         isPending: true,
-        status: 'pending'
+        status: 'pending',
+        versionGroupId: options.versionGroupId || '',
+        versionStatus: 'active'
       });
 
       job.placeholderIds.push(placeholder.id);
@@ -1127,7 +1131,7 @@ function buildModePrompt(mode, group, character, options, userName, userProfile 
     `- 我不会称呼对方为"用户"，我会叫"${callName}"或按关系自然称呼。`,
     genderHint ? `- 我用第三人称提到对方时，会优先按小档案写成"${genderHint}"，也可以直接用名字或关系称呼。` : '- 我用第三人称提到对方时，会优先用名字或关系称呼，拿不准就不硬写性别。',
     '- 我会根据自己的人设、世界书、长期记忆、当前时间和最近上下文来回应。',
-    '- 每次正式回复前，我会先在<think>和</think>之间写出内心想法，然后再输出正文。',
+    '- 每次正式回复前，我会先在之间写出内心想法，然后再输出正文。',
     '- <think>里的内容只写一句简短回应思路，不写长篇推理，不写分析报告。',
     '- 正文优先像手机聊天，不机械总结，不官方，不教育腔。'
   ];
@@ -1175,6 +1179,7 @@ function buildMessageContext(messages, mode, userName) {
   return normalizeList(messages)
     .slice(-AI_CONTEXT_LIMIT)
     .filter((message) => !message.isPending)
+    .filter((message) => message.versionStatus !== 'archived')
     .map((message) => {
       if (message.role === 'assistant') {
         return {
@@ -1464,7 +1469,9 @@ function createAssistantPlaceholder({
   thinkingSummary,
   toolCalls,
   isPending = false,
-  status = ''
+  status = '',
+  versionGroupId = '',
+  versionStatus = 'active'
 }) {
   const now = getNow();
 
@@ -1484,6 +1491,8 @@ function createAssistantPlaceholder({
     isStopped: false,
     isError: false,
     status: status || (isPending ? 'pending' : ''),
+    versionGroupId: versionGroupId || '',
+    versionStatus: versionStatus || 'active',
     timestamp: now,
     createdAt: now,
     updatedAt: now
