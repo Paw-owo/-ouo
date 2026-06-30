@@ -67,10 +67,6 @@ const state = {
   wallpaperOpacity: 1
 };
 
-// ═══════════════════════════════════════
-// 【公开接口】挂载和卸载聊天详情页
-// ═══════════════════════════════════════
-
 export async function mountChatThread(containerEl, options = {}) {
   state.rootEl = containerEl;
   state.appState = options.appState || null;
@@ -146,10 +142,6 @@ export function unmountChatThread() {
   state.wallpaperOpacity = 1;
 }
 
-// ═══════════════════════════════════════
-// 【设置页切换】从聊天切到设置，设置返回时恢复聊天
-// ═══════════════════════════════════════
-
 function openSettingsPage() {
   const containerEl = state.rootEl;
   const savedAppState = state.appState;
@@ -174,10 +166,6 @@ function openSettingsPage() {
     }
   });
 }
-
-// ═══════════════════════════════════════
-// 【数据加载】读取角色、群聊和消息
-// ═══════════════════════════════════════
 
 async function loadThreadData() {
   state.displayMode = resolveDisplayMode();
@@ -209,10 +197,6 @@ function saveVisibleCount(count) {
   setData(getVisibleCountKey(), state.visibleCount);
 }
 
-// ═══════════════════════════════════════
-// 【壁纸缓存】启动时读一次，同步渲染不闪烁
-// ═══════════════════════════════════════
-
 async function loadWallpaperCache() {
   state.wallpaperImage = '';
   state.wallpaperOpacity = 1;
@@ -230,13 +214,8 @@ async function loadWallpaperCache() {
     state.wallpaperImage = image;
     state.wallpaperOpacity = Math.max(0, Math.min(100, raw)) / 100;
   } catch {
-    // 壁纸读取失败静默跳过
   }
 }
-
-// ═══════════════════════════════════════
-// 【主渲染】绘制聊天页壳
-// ═══════════════════════════════════════
 
 function render() {
   if (!state.rootEl || !state.mounted) return;
@@ -277,10 +256,6 @@ async function reloadAndRender() {
 
   render();
 }
-
-// ═══════════════════════════════════════
-// 【顶部栏】返回、标题、记忆和设置
-// ═══════════════════════════════════════
 
 function createHeader() {
   const header = el('header', 'chat-thread-header');
@@ -335,10 +310,6 @@ function createTitleText() {
   );
   return wrap;
 }
-
-// ═══════════════════════════════════════
-// 【搜索栏】搜索消息并只刷新消息区
-// ═══════════════════════════════════════
 
 function createSearchCard() {
   const wrap = el('section', 'chat-thread-search-card');
@@ -396,10 +367,6 @@ function refreshMessageAreaOnly() {
   renderLoadMoreButton(page);
 }
 
-// ═══════════════════════════════════════
-// 【消息区】列表容器
-// ═══════════════════════════════════════
-
 function createMessageArea() {
   const area = el('main', 'chat-thread-area');
   const list = el('div', 'chat-thread-list');
@@ -432,10 +399,6 @@ function renderLoadMoreButton(page) {
   list.prepend(wrap);
 }
 
-// ═══════════════════════════════════════
-// 【输入栏】工具、输入、表情包、发送和停止
-// ═══════════════════════════════════════
-
 function createInputBar() {
   const bar = el('footer', 'chat-thread-input-bar');
 
@@ -446,7 +409,7 @@ function createInputBar() {
   }
 
   const tools = iconButton('add', '工具');
-  tools.addEventListener('click', () => openThreadToolsPanel(state, { containerEl: document.body }));
+  tools.addEventListener('click', () => openThreadToolsPanel(state, {}));
 
   const input = document.createElement('textarea');
   input.className = 'chat-thread-input';
@@ -512,31 +475,23 @@ async function handleSend(input) {
     return;
   }
 
-  // 1. 先清空输入框 + 存到 state
   state.inputValue = '';
   input.value = '';
   autoResize(input);
   blurActiveInput();
 
-  // 2. 先把用户消息存进数据库 + 刷新 state + 渲染
-  //    这样用户气泡立刻出现，不用等 AI
   try {
     const { saveMessageOnly } = await import('./thread-actions.js').catch(() => ({}));
 
     if (typeof saveMessageOnly === 'function') {
-      // 用新的轻量函数：只存消息 + 刷新 state，不触发 AI
       await saveMessageOnly(state, text, {
         quoteMessageId: state.quotedMessageId
       });
     } else {
-      // 兜底：如果 thread-actions 还没加 saveMessageOnly，用旧方式
       await sendThreadMessage(state, text, { triggerAI: false });
     }
 
-    // 清掉引用
     state.quotedMessageId = '';
-
-    // 立刻渲染：用户气泡出现
     render();
   } catch (error) {
     console.error('[chat-thread] save user message failed', error);
@@ -544,10 +499,8 @@ async function handleSend(input) {
     return;
   }
 
-  // 3. 再请求 AI 回复
-  //    thread-ai 内部会创建占位消息、调 renderOnly 刷新界面
   state.aiGenerating = true;
-  render(); // 让发送按钮变成停止按钮
+  render();
 
   try {
     await sendThreadMessage(state, '', { triggerAI: true, skipSave: true });
@@ -556,7 +509,6 @@ async function handleSend(input) {
     showToast('TA 刚刚走神了');
   } finally {
     state.aiGenerating = false;
-    // AI 回复过程中 renderOnly 已经刷新了界面，这里只做兜底
     render();
   }
 }
@@ -582,10 +534,6 @@ function isAIWorking() {
   if (state.aiGenerating || state.stoppingAI) return true;
   return getAllCurrentMessages().some((item) => item?.role === 'assistant' && item?.isPending);
 }
-
-// ═══════════════════════════════════════
-// 【主动消息】页面打开时定时检查，间隔10分钟
-// ═══════════════════════════════════════
 
 function startProactiveChecks() {
   stopProactiveChecks();
@@ -632,10 +580,6 @@ async function runProactiveCheck() {
     state.proactiveChecking = false;
   }
 }
-
-// ═══════════════════════════════════════
-// 【键盘处理】避免页面整体晃动
-// ═══════════════════════════════════════
 
 function setupKeyboardViewport() {
   cleanupKeyboardViewport();
@@ -700,10 +644,6 @@ function handleComposerBlur() {
     updateKeyboardViewport();
   }, 80);
 }
-
-// ═══════════════════════════════════════
-// 【辅助函数】状态、头像、DOM和键盘
-// ═══════════════════════════════════════
 
 function getStatusText() {
   if (isAIWorking()) return '正在输入';
@@ -838,10 +778,6 @@ function el(tag, className = '', text = '') {
   if (text !== '') node.textContent = text;
   return node;
 }
-
-// ═══════════════════════════════════════
-// 【样式】聊天页布局、输入栏、消息和按钮
-// ═══════════════════════════════════════
 
 function injectStyle() {
   if (document.getElementById(STYLE_ID)) return;
@@ -1105,8 +1041,6 @@ function injectStyle() {
   document.head.appendChild(style);
 }
 
-// 改了什么：重写 handleSend 函数，把"存用户消息"和"请求AI回复"拆成两步。第一步存消息+渲染（用户气泡立刻出现），第二步请求AI（AI回复过程中 renderOnly 逐步更新）。删掉了 finally 里的 reloadAndRender，改为 render（AI 过程中已经刷新过了，只做兜底）。
-// 原来效果：用户点发送后，整个链路从头到尾界面只在最开始渲染一次，然后直到最后 reloadAndRender 才第二次渲染。中间几秒界面完全不动，用户气泡和AI回复同时出现。
-// 现在效果：用户气泡点发送后立刻出现，发送按钮立刻变成停止按钮，AI 占位消息和回复在过程中逐步出现。
-// 会不会影响其他文件：handleSend 里用了 sendThreadMessage 的 triggerAI:false 和 triggerAI:true 两种模式。triggerAI:false 时 sendThreadMessage 只存消息不请求 AI，这个行为已存在于 thread-actions.js。但 handleSend 第二步传了 skipSave:true，这需要 thread-actions.js 的 sendThreadMessage 支持——如果 skipSave 不存在会走兜底逻辑（triggerAI:false 那条路），不会报错但会重复存一条空消息。需要 thread-actions.js 配合加一个 skipSave 判断。
+// 改了什么：createInputBar 里工具按钮点击从 openThreadToolsPanel(state, { containerEl: document.body }) 改为 openThreadToolsPanel(state, {})，去掉 containerEl。
+// 其余完全不动。
 // 依赖：../../core/storage.js(getData,setData,getDB,getByIndexDB)；../../core/ui.js(createIcon,showToast,hideBottomSheet)；../../core/tts.js(stopAll)；./thread-render.js(renderThreadMessages)；./thread-actions.js(sendThreadMessage,stopThreadAIReply)；./thread-stickers.js(openStickerSheet,closeStickerSheet)；./thread-panels.js(openThreadToolsPanel,closeThreadPanels)；./thread-relationship.js(loadRelationshipState,getRelationshipLockLevel,getRelationshipStatusText,createRelationshipLockBar,openRelationshipLockSheet)；./thread-ai.js(checkThreadProactiveMessages)；./thread-settings.js(mountThreadSettings,unmountThreadSettings)
