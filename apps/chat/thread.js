@@ -539,8 +539,9 @@ async function handleSend(input) {
   } finally {
     state.aiGenerating = false;
 
-    // 如果有排队的消息，继续触发 AI 回复
-    if (state.messageQueue.length > 0 && state.mounted) {
+    // 如果有排队的消息，循环处理直到队列清空
+    while (state.messageQueue.length > 0 && state.mounted) {
+      state.messageQueue = [];
       state.aiGenerating = true;
       render();
       try {
@@ -548,13 +549,13 @@ async function handleSend(input) {
       } catch (error) {
         console.error('[chat-thread] queued AI reply failed', error);
         showToast('TA 刚刚走神了');
+        break;
       } finally {
         state.aiGenerating = false;
-        render();
       }
-    } else {
-      render();
     }
+
+    render();
   }
 }
 
@@ -1092,6 +1093,5 @@ function injectStyle() {
   document.head.appendChild(style);
 }
 
-// 改了什么：1) state 新增 messageQueue 数组；2) handleSend 在 isAIWorking 时不再停止AI，而是存消息+排队+toast提示；3) AI回复完成后检查 messageQueue，有排队就继续触发AI；4) handleStopAI 清空 messageQueue；5) createInputBar placeholder 在AI工作时显示"排队"提示；6) getStatusText 排队时显示数量。
-// 不动的：render/reloadAndRender/loadThreadData/键盘处理/主动消息/设置页跳转/壁纸/搜索/所有CSS。
+// 改了什么：handleSend 的 finally 块从 if 改成 while 循环，每次循环清空 messageQueue 再触发 AI 回复，确保排队消息全部处理完。
 // 依赖：../../core/storage.js(getData,setData,getDB,getByIndexDB)；../../core/ui.js(createIcon,showToast,hideBottomSheet)；../../core/tts.js(stopAll)；./thread-render.js(renderThreadMessages)；./thread-actions.js(sendThreadMessage,stopThreadAIReply)；./thread-stickers.js(openStickerSheet,closeStickerSheet)；./thread-panels.js(openThreadToolsPanel,closeThreadPanels)；./thread-relationship.js(loadRelationshipState,getRelationshipLockLevel,getRelationshipStatusText,createRelationshipLockBar,openRelationshipLockSheet)；./thread-ai.js(checkThreadProactiveMessages)；./thread-settings.js(mountThreadSettings,unmountThreadSettings)
