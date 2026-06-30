@@ -1,10 +1,11 @@
 // apps/chat/thread-actions.js
-// imports:
-//   from '../../core/storage.js': generateId, getNow, setDB, getDB, deleteDB, getByIndexDB
-//   from '../../core/ui.js': showToast
-//   from '../../core/tts.js': playTTS, stopAll
-// dynamic imports:
-//   from './thread-ai.js': requestThreadAIReply, stopThreadAIReply
+// 职责：消息发送、编辑、删除、引用、复制、重新生成、版本切换、朗读
+// 导入：
+//   ../../core/storage.js: generateId, getNow, setDB, getDB, deleteDB, getByIndexDB
+//   ../../core/ui.js: showToast
+//   ../../core/tts.js: playTTS, stopAll
+// 动态导入：
+//   ./thread-ai.js: requestThreadAIReply, stopThreadAIReply
 
 import {
   generateId,
@@ -22,20 +23,18 @@ let requestThreadAIReplyFn = null;
 let stopThreadAIReplyFn = null;
 
 // ═══════════════════════════════════════
-// 【公开接口】消息发送、编辑、删除、引用、复制、重来、续写、停止
+// 公开 API
 // ═══════════════════════════════════════
 
 export async function saveMessageOnly(state, text, extra = {}) {
   const content = String(text || '').trim();
   if (!content) return null;
 
-  const type = normalizeMessageType(extra.type || 'text');
-
   const message = buildBaseMessage(state, {
     ...extra,
     role: normalizeRole(extra.role || 'user'),
     content,
-    type,
+    type: normalizeMessageType(extra.type || 'text'),
     quoteMessageId: state.quotedMessageId || extra.quoteMessageId || '',
     quoteText: await resolveQuoteText(state, state.quotedMessageId || extra.quoteMessageId || ''),
     imageBase64: extra.imageBase64 || '',
@@ -64,7 +63,6 @@ export async function saveMessageOnly(state, text, extra = {}) {
 
   await saveMessage(state, message);
   clearQuote(state);
-
   return message;
 }
 
@@ -79,13 +77,11 @@ export async function sendThreadMessage(state, text, extra = {}) {
   const content = String(text || '').trim();
   if (!content) return null;
 
-  const type = normalizeMessageType(extra.type || 'text');
-
   const message = buildBaseMessage(state, {
     ...extra,
     role: normalizeRole(extra.role || 'user'),
     content,
-    type,
+    type: normalizeMessageType(extra.type || 'text'),
     quoteMessageId: state.quotedMessageId || extra.quoteMessageId || '',
     quoteText: await resolveQuoteText(state, state.quotedMessageId || extra.quoteMessageId || ''),
     imageBase64: extra.imageBase64 || '',
@@ -124,7 +120,7 @@ export async function sendThreadMessage(state, text, extra = {}) {
 
 export async function sendCardMessage(state, card = {}, extra = {}) {
   const normalized = normalizeCardPayload(card, extra);
-  const type = normalizeMessageType(extra.type || normalized.type || card.type || 'shop_item');
+  const type = normalizeMessageType(extra.type || normalized.type || 'shop_item');
 
   const message = buildBaseMessage(state, {
     ...extra,
@@ -155,9 +151,7 @@ export async function editThreadMessage(state, messageId, nextContent) {
     return null;
   }
 
-  const store = getStoreName(state);
-  const message = await getDB(store, id).catch(() => null);
-
+  const message = await getDB(getStoreName(state), id).catch(() => null);
   if (!message) {
     showToast('这条消息找不到了');
     return null;
@@ -176,16 +170,14 @@ export async function editThreadMessage(state, messageId, nextContent) {
     updatedAt: now
   });
 
-  await setDB(store, next);
+  await setDB(getStoreName(state), next);
   await refreshStateMessages(state);
-
   showToast('改好啦');
   return next;
 }
 
 export async function deleteThreadMessage(state, messageId) {
   const id = String(messageId || '').trim();
-
   if (!id) return false;
 
   await deleteDB(getStoreName(state), id);
@@ -201,25 +193,21 @@ export async function deleteThreadMessage(state, messageId) {
 
 export function quoteThreadMessage(state, messageId) {
   const id = String(messageId || '').trim();
-
   if (!id) {
     clearQuote(state);
     showToast('已取消引用');
     return;
   }
-
   state.quotedMessageId = id;
   showToast('已引用这句');
 }
 
 export async function copyThreadMessage(message) {
   const text = getCopyText(message);
-
   if (!text) {
     showToast('没有可复制的内容');
     return false;
   }
-
   try {
     await navigator.clipboard.writeText(text);
     showToast('复制好啦');
@@ -230,6 +218,7 @@ export async function copyThreadMessage(message) {
   }
 }
 
+// 重新生成：不删旧消息，生成新版本
 export async function regenerateThreadMessage(state, messageId) {
   const id = String(messageId || '').trim();
   const list = getStateList(state);
@@ -245,11 +234,70 @@ export async function regenerateThreadMessage(state, messageId) {
     return null;
   }
 
-  await deleteDB(getStoreName(state), id);
-  await refreshStateMessages(state);
-  await requestAIReplySafely(state, { regenerate: true });
+  const userMessage = findUserMessageForVersion(state, target);
+  if (!userMessage) {
+    showToast('找不到这条回复对应的问题');
+    return null;
+  }
+
+  await archiveAllVersions(state, target.replyToMessageId || userMessage.id);
+
+  await requestAIReplySafely(state, {
+    regenerate: true,
+    replyToMessageId: userMessage.id
+  });
 
   return true;
+}
+
+// 错误重试：删掉错误 AI 消息，重新请求
+export async function retryThreadMessage(state, message) {
+  if (!message?.id || message.role !== 'assistant') return false;
+
+  await deleteDB(getStoreName(state), message.id);
+  await refreshStateMessages(state);
+
+  const userMessage = findUserMessageForVersion(state, message);
+  if (!userMessage) {
+    showToast('找不到对应的问题');
+    return false;
+  }
+
+  await requestAIReplySafely(state, {
+    regenerate: true,
+    replyToMessageId: userMessage.id
+  });
+
+  return true;
+}
+
+// 版本切换：把目标版本标 active，其他标 archived
+export async function switchThreadVersion(state, messageId) {
+  const id = String(messageId || '').trim();
+  const list = getStateList(state);
+  const target = list.find((item) => item.id === id);
+
+  if (!target || target.role !== 'assistant') return null;
+
+  const replyToId = target.replyToMessageId;
+  if (!replyToId) return null;
+
+  const versions = list.filter((item) => item.role === 'assistant' && item.replyToMessageId === replyToId);
+
+  for (const version of versions) {
+    const nextStatus = version.id === id ? 'active' : 'archived';
+    if (version.versionStatus === nextStatus) continue;
+
+    const next = cleanForDB({
+      ...version,
+      versionStatus: nextStatus,
+      updatedAt: getNow()
+    });
+    await setDB(getStoreName(state), next);
+  }
+
+  await refreshStateMessages(state);
+  return target;
 }
 
 export async function continueThreadMessage(state) {
@@ -285,7 +333,6 @@ export async function resendThreadMessage(state, messageId) {
 
 export async function stopThreadAIReply(state, options = {}) {
   const fn = await getAIStopFunction();
-
   if (typeof fn !== 'function') {
     state.aiGenerating = false;
     state.isSending = false;
@@ -297,12 +344,10 @@ export async function stopThreadAIReply(state, options = {}) {
     const stopped = await fn(state, options);
     state.aiGenerating = false;
     state.isSending = false;
-
     if (stopped) {
       await refreshStateMessages(state);
       showToast('停住啦');
     }
-
     return Boolean(stopped);
   } catch (error) {
     console.error(error);
@@ -314,12 +359,11 @@ export async function stopThreadAIReply(state, options = {}) {
 }
 
 // ═══════════════════════════════════════
-// 【卡片和媒体消息】转账、图片、表情包、骰子、猜拳
+// 卡片和媒体消息
 // ═══════════════════════════════════════
 
 export async function sendTransferMessage(state, amount, note = '', extra = {}) {
   const value = Number(amount || 0);
-
   if (!Number.isFinite(value) || value <= 0) {
     showToast('金额要大于 0');
     return null;
@@ -328,22 +372,6 @@ export async function sendTransferMessage(state, amount, note = '', extra = {}) 
   const cleanNote = String(note || extra.note || '').trim();
   const title = String(extra.title || '转账小心意').trim();
   const description = String(extra.description || cleanNote || `转账 ¥${formatAmount(value)}`).trim();
-
-  const card = {
-    type: 'transfer',
-    title,
-    description,
-    desc: description,
-    note: cleanNote,
-    amount: value,
-    price: value,
-    transferAmount: value,
-    direction: extra.direction || 'user_to_ai',
-    characterId: extra.characterId || state.characterId || '',
-    characterName: extra.characterName || state.character?.name || '',
-    image: extra.image || extra.itemImage || '',
-    itemImage: extra.itemImage || extra.image || ''
-  };
 
   const message = buildBaseMessage(state, {
     ...extra,
@@ -356,10 +384,7 @@ export async function sendTransferMessage(state, amount, note = '', extra = {}) 
     note: cleanNote,
     title,
     description,
-    direction: card.direction,
-    card,
-    item: extra.item || null,
-    shopItem: extra.shopItem || null,
+    direction: extra.direction || 'user_to_ai',
     quoteMessageId: state.quotedMessageId || extra.quoteMessageId || '',
     quoteText: await resolveQuoteText(state, state.quotedMessageId || extra.quoteMessageId || '')
   });
@@ -376,7 +401,6 @@ export async function sendTransferMessage(state, amount, note = '', extra = {}) 
 
 export async function sendImageMessage(state, imageBase64, caption = '', extra = {}) {
   const image = String(imageBase64 || '').trim();
-
   if (!image) {
     showToast('图片不见了');
     return null;
@@ -466,10 +490,7 @@ export async function sendDiceMessage(state, options = {}) {
     });
   }
 
-  return {
-    ...message,
-    rolling: false
-  };
+  return { ...message, rolling: false };
 }
 
 export async function sendRpsMessage(state, options = {}) {
@@ -505,28 +526,22 @@ export async function sendRpsMessage(state, options = {}) {
     });
   }
 
-  return {
-    ...message,
-    rolling: false
-  };
+  return { ...message, rolling: false };
 }
 
 // ═══════════════════════════════════════
-// 【TTS】语音朗读
+// TTS
 // ═══════════════════════════════════════
 
 export async function playThreadTTS(state, message) {
   const text = getTtsText(message);
-
   if (!text) {
     showToast('没有可以朗读的内容');
     return false;
   }
-
   stopAll();
   state.activeTtsMessageId = message.id || '';
   state.activeTts = true;
-
   try {
     await playTTS(text);
     return true;
@@ -544,7 +559,41 @@ export function stopThreadTTS() {
 }
 
 // ═══════════════════════════════════════
-// 【内部函数】消息构建、卡片规范化、数据库写入
+// 版本管理工具
+// ═══════════════════════════════════════
+
+function findUserMessageForVersion(state, assistantMessage) {
+  const list = getStateList(state);
+  const replyToId = assistantMessage.replyToMessageId;
+
+  if (replyToId) {
+    const direct = list.find((item) => item.id === replyToId && item.role === 'user');
+    if (direct) return direct;
+  }
+
+  const index = list.findIndex((item) => item.id === assistantMessage.id);
+  if (index <= 0) return null;
+  return [...list.slice(0, index)].reverse().find((item) => item.role === 'user') || null;
+}
+
+async function archiveAllVersions(state, replyToMessageId) {
+  if (!replyToMessageId) return;
+  const list = getStateList(state);
+  const versions = list.filter((item) => item.role === 'assistant' && (item.replyToMessageId === replyToMessageId || (!item.replyToMessageId && findUserMessageForVersion(state, item)?.id === replyToMessageId)));
+
+  for (const version of versions) {
+    if (version.versionStatus === 'archived') continue;
+    await setDB(getStoreName(state), cleanForDB({
+      ...version,
+      versionStatus: 'archived',
+      updatedAt: getNow()
+    }));
+  }
+
+  await refreshStateMessages(state);
+}
+// ═══════════════════════════════════════
+// 消息构建
 // ═══════════════════════════════════════
 
 function buildBaseMessage(state, data = {}) {
@@ -593,7 +642,9 @@ function buildBaseMessage(state, data = {}) {
     rpsOutcome: String(data.rpsOutcome || ''),
     rolling: Boolean(data.rolling),
     characterName: String(data.characterName || ''),
-    characterAvatar: String(data.characterAvatar || '')
+    characterAvatar: String(data.characterAvatar || ''),
+    versionStatus: role === 'assistant' ? (data.versionStatus || 'active') : '',
+    replyToMessageId: String(data.replyToMessageId || '')
   };
 
   if (state.mode === 'group') {
@@ -608,6 +659,11 @@ function buildBaseMessage(state, data = {}) {
   if (data.duration) message.duration = Number(data.duration) || 0;
   if (data.proactive) message.proactive = Boolean(data.proactive);
   if (data.proactiveReason) message.proactiveReason = String(data.proactiveReason);
+  if (data.thinking) message.thinking = String(data.thinking);
+  if (data.thinkingSummary) message.thinkingSummary = String(data.thinkingSummary);
+  if (Array.isArray(data.toolCalls)) message.toolCalls = data.toolCalls;
+  if (Array.isArray(data.memoryWrites)) message.memoryWrites = data.memoryWrites;
+  if (Array.isArray(data.grudgeWrites)) message.grudgeWrites = data.grudgeWrites;
 
   return cleanForDB(message);
 }
@@ -617,13 +673,7 @@ function normalizeCardPayload(card = {}, extra = {}) {
   const nestedCard = source.card && typeof source.card === 'object' ? source.card : {};
   const item = source.item && typeof source.item === 'object' ? source.item : {};
   const shopItem = source.shopItem && typeof source.shopItem === 'object' ? source.shopItem : {};
-  const merged = {
-    ...shopItem,
-    ...item,
-    ...nestedCard,
-    ...source,
-    ...extra
-  };
+  const merged = { ...shopItem, ...item, ...nestedCard, ...source, ...extra };
 
   const type = normalizeMessageType(merged.type || merged.cardType || 'shop_item');
   const amount = Number(
@@ -663,13 +713,7 @@ function normalizeCardPayload(card = {}, extra = {}) {
     ''
   ).trim();
 
-  const note = String(
-    merged.note ||
-    merged.remark ||
-    merged.giftNote ||
-    merged.message ||
-    ''
-  ).trim();
+  const note = String(merged.note || merged.remark || merged.giftNote || merged.message || '').trim();
 
   const normalizedItem = {
     id: String(merged.itemId || merged.id || ''),
@@ -734,7 +778,6 @@ function normalizeCardPayload(card = {}, extra = {}) {
 
 function normalizeNestedCard(value) {
   if (!value || typeof value !== 'object') return null;
-
   return cleanForDB({
     ...value,
     title: String(value.title || value.itemName || value.name || ''),
@@ -755,17 +798,14 @@ function normalizeNestedCard(value) {
 }
 
 async function saveMessage(state, message) {
-  const store = getStoreName(state);
   const cleanMessage = cleanForDB(message);
-
   try {
-    await setDB(store, cleanMessage);
+    await setDB(getStoreName(state), cleanMessage);
   } catch (error) {
     console.error('save message failed', error);
-
     const fallback = buildFallbackMessage(state, cleanMessage);
     try {
-      await setDB(store, fallback);
+      await setDB(getStoreName(state), fallback);
       showToast('内容有点大，先保存了精简版');
     } catch (fallbackError) {
       console.error('save fallback message failed', fallbackError);
@@ -773,7 +813,6 @@ async function saveMessage(state, message) {
       throw fallbackError;
     }
   }
-
   await refreshStateMessages(state);
   return cleanMessage;
 }
@@ -821,7 +860,9 @@ function buildFallbackMessage(state, message) {
     rpsOutcome: String(message.rpsOutcome || ''),
     rolling: Boolean(message.rolling),
     characterName: String(message.characterName || ''),
-    characterAvatar: String(message.characterAvatar || '')
+    characterAvatar: String(message.characterAvatar || ''),
+    versionStatus: message.role === 'assistant' ? (message.versionStatus || 'active') : '',
+    replyToMessageId: String(message.replyToMessageId || '')
   };
 
   if (state.mode === 'group') {
@@ -837,7 +878,6 @@ function buildFallbackMessage(state, message) {
 
 function stripLargeImageFromCard(value) {
   if (!value || typeof value !== 'object') return null;
-
   return cleanForDB({
     ...value,
     image: '',
@@ -851,9 +891,7 @@ function stripLargeImageFromCard(value) {
 
 async function settleRollingMessage(state, messageId) {
   await wait(680);
-
-  const store = getStoreName(state);
-  const message = await getDB(store, messageId).catch(() => null);
+  const message = await getDB(getStoreName(state), messageId).catch(() => null);
   if (!message) return null;
 
   const next = cleanForDB({
@@ -862,19 +900,17 @@ async function settleRollingMessage(state, messageId) {
     updatedAt: getNow()
   });
 
-  await setDB(store, next);
+  await setDB(getStoreName(state), next);
   await refreshStateMessages(state);
-
   return next;
 }
 
 // ═══════════════════════════════════════
-// 【AI调用】安全请求AI回复，动态加载
+// AI 调用
 // ═══════════════════════════════════════
 
 async function requestAIReplySafely(state, options = {}) {
   const fn = await getAIReplyFunction();
-
   if (typeof fn !== 'function') {
     state.aiGenerating = false;
     showToast('AI 回复模块还没接上');
@@ -882,7 +918,6 @@ async function requestAIReplySafely(state, options = {}) {
   }
 
   state.aiGenerating = true;
-
   try {
     return await fn(state, options);
   } catch (error) {
@@ -896,26 +931,22 @@ async function requestAIReplySafely(state, options = {}) {
 
 async function getAIReplyFunction() {
   if (requestThreadAIReplyFn) return requestThreadAIReplyFn;
-
   const mod = await import('./thread-ai.js').catch(() => null);
   requestThreadAIReplyFn = mod?.requestThreadAIReply || null;
   stopThreadAIReplyFn = mod?.stopThreadAIReply || stopThreadAIReplyFn;
-
   return requestThreadAIReplyFn;
 }
 
 async function getAIStopFunction() {
   if (stopThreadAIReplyFn) return stopThreadAIReplyFn;
-
   const mod = await import('./thread-ai.js').catch(() => null);
   requestThreadAIReplyFn = mod?.requestThreadAIReply || requestThreadAIReplyFn;
   stopThreadAIReplyFn = mod?.stopThreadAIReply || null;
-
   return stopThreadAIReplyFn;
 }
 
 // ═══════════════════════════════════════
-// 【文本处理】引用、预览、复制、TTS文本
+// 文本处理
 // ═══════════════════════════════════════
 
 async function resolveQuoteText(state, messageId) {
@@ -927,28 +958,6 @@ async function resolveQuoteText(state, messageId) {
 
   const dbMessage = await getDB(getStoreName(state), id).catch(() => null);
   return dbMessage ? getPreviewText(dbMessage) : '';
-}
-
-function getPreviewText(message) {
-  if (!message) return '';
-  const type = normalizeMessageType(message.type || 'text');
-
-  if (type === 'image') return String(message.content || '[图片]');
-  if (type === 'sticker') return String(message.stickerDescription || message.content || '[表情包]');
-  if (type === 'transfer') {
-    const card = getCardSummary(message);
-    return `[转账 ${formatAmount(card.amount || message.transferAmount)}]${card.note ? ` ${card.note}` : ''}`;
-  }
-  if (isLinkedCardType(type)) {
-    const card = getCardSummary(message);
-    return `[小卡片] ${card.title || message.content || '小物'}`;
-  }
-  if (type === 'voice') return `[语音] ${trimText(message.content || '', 40)}`;
-  if (type === 'dice') return `[骰子 ${message.diceValue || ''}]`;
-  if (type === 'rps') return `[石头剪刀布 ${getRpsLabel(message.rpsChoice)}]`;
-
-  const text = String(message.content || '').trim();
-  return trimText(text, 80);
 }
 
 function getCopyText(message) {
@@ -965,7 +974,7 @@ function getCopyText(message) {
     const card = getCardSummary(message);
     return `${card.label}：${card.title}${card.amount ? `，金额：${formatAmount(card.amount)}` : ''}${card.note ? `，备注：${card.note}` : ''}${card.description ? `，说明：${card.description}` : ''}`;
   }
-  if (type === 'voice') return `语音文字：${message.content || ''}`;
+  if (type === 'voice' || type === 'tts') return `语音文字：${message.content || ''}`;
   if (type === 'dice') return `骰子：${message.diceValue || ''}`;
   if (type === 'rps') return `石头剪刀布：${getRpsLabel(message.rpsChoice)}${message.rpsOutcome ? `，结果：${message.rpsOutcome}` : ''}`;
 
@@ -1007,7 +1016,7 @@ function getCardSummary(message) {
 }
 
 // ═══════════════════════════════════════
-// 【数据同步】刷新state里的消息列表
+// 数据同步
 // ═══════════════════════════════════════
 
 async function refreshStateMessages(state) {
@@ -1015,17 +1024,17 @@ async function refreshStateMessages(state) {
 
   if (state.mode === 'group') {
     const list = await getByIndexDB(store, 'groupId', state.groupId).catch(() => []);
-    state.groupMessages = normalizeList(list).map(cleanForDB).sort(sortByTimestamp);
+    state.groupMessages = normalizeList(list).sort(sortByTimestamp);
     return state.groupMessages;
   }
 
   const list = await getByIndexDB(store, 'characterId', state.characterId).catch(() => []);
-  state.messages = normalizeList(list).map(cleanForDB).sort(sortByTimestamp);
+  state.messages = normalizeList(list).sort(sortByTimestamp);
   return state.messages;
 }
 
 // ═══════════════════════════════════════
-// 【通用工具】清理、规范化、格式化
+// 通用工具
 // ═══════════════════════════════════════
 
 function cleanForDB(value) {
@@ -1040,28 +1049,21 @@ function cleanForDB(value) {
     return value;
   }
 
-  if (value instanceof Date) {
-    return value.toISOString();
-  }
+  if (value instanceof Date) return value.toISOString();
 
   const result = {};
 
   Object.entries(value).forEach(([key, item]) => {
-    if (typeof item === 'undefined') return;
-    if (typeof item === 'function') return;
-    if (typeof item === 'symbol') return;
-
+    if (typeof item === 'undefined' || typeof item === 'function' || typeof item === 'symbol') return;
     if (item instanceof Date) {
       result[key] = item.toISOString();
       return;
     }
-
     if (item && typeof item === 'object') {
       const clean = cleanForDB(item);
       if (clean !== undefined) result[key] = clean;
       return;
     }
-
     result[key] = item;
   });
 
@@ -1081,30 +1083,19 @@ function getStateList(state) {
 }
 
 function canEditMessage(message) {
-  return ['text', 'voice', 'sticker'].includes(normalizeMessageType(message?.type || 'text'));
+  return ['text', 'voice', 'tts', 'sticker'].includes(normalizeMessageType(message?.type || 'text'));
 }
 
 function normalizeMessageType(type) {
   const value = String(type || 'text').trim().toLowerCase();
-
   if (value === 'shop-item') return 'shop_item';
-
   if ([
-    'text',
-    'voice',
-    'sticker',
-    'image',
-    'transfer',
-    'gift',
-    'shop_item',
-    'purchase',
-    'item',
-    'dice',
-    'rps'
+    'text', 'voice', 'tts', 'sticker', 'image',
+    'transfer', 'gift', 'shop_item', 'purchase', 'item',
+    'dice', 'rps'
   ].includes(value)) {
     return value;
   }
-
   return 'text';
 }
 
@@ -1117,7 +1108,7 @@ function normalizeList(value) {
 }
 
 function sortByTimestamp(a, b) {
-  return String(a?.timestamp || '').localeCompare(String(b?.timestamp || ''));
+  return String(a?.timestamp || a?.createdAt || '').localeCompare(String(b?.timestamp || b?.createdAt || ''));
 }
 
 function normalizeRole(role) {
@@ -1150,7 +1141,6 @@ function normalizeRpsChoice(value) {
 function getRpsOutcome(choice, opponentChoice) {
   if (!choice || !opponentChoice) return '';
   if (choice === opponentChoice) return 'draw';
-
   if (
     (choice === 'rock' && opponentChoice === 'scissors') ||
     (choice === 'scissors' && opponentChoice === 'paper') ||
@@ -1158,7 +1148,6 @@ function getRpsOutcome(choice, opponentChoice) {
   ) {
     return 'win';
   }
-
   return 'lose';
 }
 
@@ -1179,6 +1168,28 @@ function formatAmount(amount) {
   return number.toFixed(2);
 }
 
+function getPreviewText(message) {
+  if (!message) return '';
+  const type = normalizeMessageType(message.type || 'text');
+
+  if (type === 'image') return String(message.content || '[图片]');
+  if (type === 'sticker') return String(message.stickerDescription || message.content || '[表情包]');
+  if (type === 'transfer') {
+    const card = getCardSummary(message);
+    return `[转账 ${formatAmount(card.amount || message.transferAmount)}]${card.note ? ` ${card.note}` : ''}`;
+  }
+  if (isLinkedCardType(type)) {
+    const card = getCardSummary(message);
+    return `[小卡片] ${card.title || message.content || '小物'}`;
+  }
+  if (type === 'voice' || type === 'tts') return `[语音] ${trimText(message.content || '', 40)}`;
+  if (type === 'dice') return `[骰子 ${message.diceValue || ''}]`;
+  if (type === 'rps') return `[石头剪刀布 ${getRpsLabel(message.rpsChoice)}]`;
+
+  const text = String(message.content || '').trim();
+  return trimText(text, 80);
+}
+
 function trimText(text, max) {
   const value = String(text || '').trim();
   if (!value) return '';
@@ -1189,8 +1200,4 @@ function wait(ms) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
-// 改了什么：1) 新增 saveMessageOnly 导出函数（只存消息+刷新state，不触发AI）；2) sendThreadMessage 开头加 skipSave 判断（skipSave:true 时跳过存消息，直接请求AI）。
-// 原来效果：thread.js 的 handleSend 把存消息和请求AI绑在一起，用户气泡要等AI回复完才出现。
-// 现在效果：thread.js 可以先调 saveMessageOnly 存消息+渲染，再调 sendThreadMessage({skipSave:true,triggerAI:true}) 只请求AI。
-// 会不会影响其他文件：不会。saveMessageOnly 是新增导出，不影响原有函数。sendThreadMessage 的 skipSave 只在显式传 true 时生效，不传时行为完全不变。
 // 依赖：../../core/storage.js(generateId,getNow,setDB,getDB,deleteDB,getByIndexDB)；../../core/ui.js(showToast)；../../core/tts.js(playTTS,stopAll)；动态依赖 ./thread-ai.js(requestThreadAIReply,stopThreadAIReply)
