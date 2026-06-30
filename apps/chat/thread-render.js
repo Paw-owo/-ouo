@@ -1197,8 +1197,10 @@ function normalizeText(value) {
 
   if (value && typeof value === 'object') {
     try {
-      return JSON.stringify(value).replace(/\s+/g, ' ').trim
-          }
+      return JSON.stringify(value).replace(/\s+/g, ' ').trim();
+    } catch (_) {
+      return '';
+    }
   }
 
   return String(value || '').replace(/\s+/g, ' ').trim();
@@ -1730,8 +1732,8 @@ function injectStyle() {
       align-items: center;
       justify-content: center;
       border-radius: 999px;
-      background: rgba(230, 120, 100, 0.12);
-      color: rgba(200, 80, 60, 0.8);
+      background: var(--surface-muted);
+      color: var(--accent);
     }
 
     .chat-error-icon svg {
@@ -3116,3 +3118,4 @@ function injectStyle() {
 }
 
 // 依赖：../../core/storage.js(getData)；../../core/ui.js(showToast,showBottomSheet,hideBottomSheet)；./thread-actions.js(copyThreadMessage,quoteThreadMessage,editThreadMessage,deleteThreadMessage,regenerateThreadMessage,resendThreadMessage,playThreadTTS,stopThreadTTS)；./thinking-chain.js(createThinkingCard,hasThinkingChain)
+
