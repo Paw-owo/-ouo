@@ -19,7 +19,8 @@ import {
   resendThreadMessage,
   playThreadTTS,
   stopThreadTTS,
-  retryThreadMessage
+  retryThreadMessage,
+  switchThreadVersion
 } from './thread-actions.js';
 
 const RENDER_STYLE_ID = 'chat-thread-render-style';
@@ -533,12 +534,8 @@ function getMessageVersions(state, replyToMessageId) {
 
 function switchVersion(state, targetMessage, pageEl) {
   if (!targetMessage?.id) return;
-  import('./thread-actions.js').then((mod) => {
-    if (typeof mod.switchThreadVersion === 'function') {
-      mod.switchThreadVersion(state, targetMessage.id).then(() => {
-        renderThreadMessages(state, pageEl);
-      });
-    }
+  switchThreadVersion(state, targetMessage.id).then(() => {
+    renderThreadMessages(state, pageEl);
   });
 }
 
