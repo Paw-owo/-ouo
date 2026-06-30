@@ -163,7 +163,7 @@ function createMessageRow(state, message, pageEl) {
   const body = el('div', `chat-message-body role-${role}`);
   body.append(
     createMessageAuthor(state, message),
-    createBubbleContent(state, message),
+    createBubbleContent(state, message, pageEl),
     createMessageActions(state, message, pageEl)
   );
   row.appendChild(body);
@@ -320,7 +320,7 @@ function createMessageAvatar(target, role) {
 // 【气泡内容】消息气泡和内容类型
 // ═══════════════════════════════════════
 
-function createBubbleContent(state, message) {
+function createBubbleContent(state, message, pageEl) {
   const role = message.role === 'user' ? 'user' : 'ai';
   const bubble = el('div', `chat-message-bubble role-${role}`);
   if (message.type === 'sticker') bubble.classList.add('sticker-bubble');
@@ -332,7 +332,7 @@ function createBubbleContent(state, message) {
     bubble.append(createQuoteBlock(message.quoteText));
   }
 
-  bubble.append(createMessageContent(state, message));
+  bubble.append(createMessageContent(state, message, pageEl));
 
   if (message.editedAt) {
     bubble.append(el('div', 'chat-message-edited', '已编辑'));
@@ -345,12 +345,12 @@ function createBubbleContent(state, message) {
 // 消息内容分发
 // ───────────────────
 
-function createMessageContent(state, message) {
+function createMessageContent(state, message, pageEl) {
   const content = el('div', `chat-message-content ${message.type === 'sticker' ? 'sticker-content' : ''}`);
 
   // 错误消息优先处理
   if (message.isError) {
-    content.appendChild(createErrorBubble(message));
+    content.appendChild(createErrorBubble(state, message, pageEl));
     return content;
   }
 
@@ -432,10 +432,10 @@ function createPendingLoadingCard() {
 }
 
 // ───────────────────
-// 错误气泡卡片
+// 错误气泡卡片（含重试按钮）
 // ───────────────────
 
-function createErrorBubble(message) {
+function createErrorBubble(state, message, pageEl) {
   const card = el('div', 'chat-error-card');
 
   const icon = el('div', 'chat-error-icon');
@@ -443,10 +443,16 @@ function createErrorBubble(message) {
 
   const text = el('div', 'chat-error-text', String(message.content || '出了点小状况'));
 
-  card.append(icon, text);
+  const retryBtn = safeButton('chat-error-retry', '再试一次');
+  retryBtn.append(createLineIcon('refresh'), el('span', '', '再试一次'));
+  retryBtn.addEventListener('click', async () => {
+    await regenerateThreadMessage(state, message.id);
+    renderThreadMessages(state, pageEl);
+  });
+
+  card.append(icon, text, retryBtn);
   return card;
 }
-
 // ───────────────────
 // 语音消息卡片（猫爪图标 + 全局播放管理 + 暂停/继续）
 // ───────────────────
@@ -480,7 +486,6 @@ function createVoiceMessageCard(state, message) {
 
   bar.addEventListener('click', () => {
     if (isPlaying) {
-      // 当前正在播放 → 暂停
       isPlaying = false;
       card.dataset.playing = 'false';
       voicePlayer.pause();
@@ -488,19 +493,13 @@ function createVoiceMessageCard(state, message) {
       return;
     }
 
-    // 开始播放：先停掉全局其他语音
     stopThreadTTS();
-
-    // 如果之前有播放中的卡片，标记为停止
     voicePlayer.stop();
 
-    // 标记当前卡片为播放中
     isPlaying = true;
     voicePlayer.play(card);
 
-    // fire-and-forget：不 await，播放状态完全由点击控制
     playThreadTTS(state, message).catch(() => {
-      // 只有失败时才恢复状态
       if (voicePlayer.currentCard === card) {
         isPlaying = false;
         card.dataset.playing = 'false';
@@ -537,6 +536,7 @@ function getVoiceDurationText(message) {
   const guessed = Math.max(1, Math.ceil(text.length / 5));
   return `${Math.min(60, guessed)}"`;
 }
+
 // ───────────────────
 // 转账和商店小卡片
 // ───────────────────
@@ -1527,7 +1527,6 @@ function el(tag, className = '', text = '') {
 // ═══════════════════════════════════════
 
 function injectStyle() {
-  // 修复：样式已存在则先删除旧标签再创建新的，避免 CSS 修改不生效
   const oldStyle = document.getElementById(RENDER_STYLE_ID);
   if (oldStyle) oldStyle.remove();
 
@@ -1753,6 +1752,7 @@ function injectStyle() {
       align-items: center;
       gap: 8px;
       padding: 2px 0;
+      flex-wrap: wrap;
     }
 
     .chat-error-icon {
@@ -1778,6 +1778,34 @@ function injectStyle() {
       font-size: var(--font-size-small);
       line-height: 1.5;
       color: var(--text-secondary);
+    }
+
+    .chat-error-retry {
+      min-height: 30px;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 0 12px;
+      border: none;
+      outline: none;
+      border-radius: 999px;
+      background: var(--accent);
+      color: var(--bubble-user-text);
+      box-shadow: var(--shadow-sm);
+      font: inherit;
+      font-size: 12px;
+      font-weight: 600;
+      transition: all 200ms ease;
+      touch-action: manipulation;
+    }
+
+    .chat-error-retry:active {
+      transform: scale(0.95);
+    }
+
+    .chat-error-retry svg {
+      width: 13px;
+      height: 13px;
     }
 
     /* ── 内容区域 ── */
@@ -3148,4 +3176,6 @@ function injectStyle() {
   document.head.appendChild(style);
 }
 
+// 改了什么：1) createBubbleContent/createMessageContent/createErrorBubble 新增 pageEl 参数透传；2) createErrorBubble 加"再试一次"按钮，点击调 regenerateThreadMessage；3) CSS 加 .chat-error-retry 按钮样式。
+// 不动的：renderThreadMessages 主入口、所有渲染逻辑、气泡/对话模式、语音卡片、骰子、商店卡片、代码块、思维链渲染、所有导入导出。
 // 依赖：../../core/storage.js(getData)；../../core/ui.js(showToast,showBottomSheet,hideBottomSheet)；./thread-actions.js(copyThreadMessage,quoteThreadMessage,editThreadMessage,deleteThreadMessage,regenerateThreadMessage,resendThreadMessage,playThreadTTS,stopThreadTTS)；./thinking-chain.js(createThinkingCard,hasThinkingChain)
