@@ -3,7 +3,7 @@
 //   from '../../core/storage.js': getData, setData, getDB, getByIndexDB
 //   from '../../core/ui.js': createIcon, showToast, hideBottomSheet
 //   from '../../core/tts.js': stopAll
-//   from './thread-render.js': renderThreadMessages, updateMessageContent
+//   from './thread-render.js': renderThreadMessages
 //   from './thread-actions.js': sendThreadMessage, stopThreadAIReply
 //   from './thread-stickers.js': openStickerSheet, closeStickerSheet
 //   from './thread-panels.js': openThreadToolsPanel, closeThreadPanels
@@ -15,7 +15,7 @@ import { getData, setData, getDB, getByIndexDB } from '../../core/storage.js';
 import { createIcon, showToast, hideBottomSheet } from '../../core/ui.js';
 import { stopAll } from '../../core/tts.js';
 
-import { renderThreadMessages, updateMessageContent } from './thread-render.js';
+import { renderThreadMessages } from './thread-render.js';
 import { sendThreadMessage, stopThreadAIReply } from './thread-actions.js';
 import { openStickerSheet, closeStickerSheet } from './thread-stickers.js';
 import { openThreadToolsPanel, closeThreadPanels } from './thread-panels.js';
@@ -51,6 +51,7 @@ const state = {
   searchValue: '',
   aiGenerating: false,
   stoppingAI: false,
+  messageQueue: [],
   proactiveTimer: null,
   proactiveChecking: false,
   keyboardOpen: false,
@@ -63,7 +64,6 @@ const state = {
   displayMode: 'bubble',
   reloadAndRender: null,
   renderOnly: null,
-  updateMessageContent: null,
   wallpaperImage: '',
   wallpaperOpacity: 1
 };
@@ -82,6 +82,7 @@ export async function mountChatThread(containerEl, options = {}) {
   state.searchValue = '';
   state.aiGenerating = false;
   state.stoppingAI = false;
+  state.messageQueue = [];
   state.proactiveChecking = false;
   state.keyboardOpen = false;
   state.keyboardOffset = 0;
@@ -92,12 +93,6 @@ export async function mountChatThread(containerEl, options = {}) {
   state.displayMode = resolveDisplayMode();
   state.reloadAndRender = reloadAndRender;
   state.renderOnly = () => { if (state.rootEl && state.mounted) render(); };
-  state.updateMessageContent = (messageId, content, thinking) => {
-    if (!state.rootEl || !state.mounted) return;
-    const page = state.rootEl.querySelector('.chat-thread-page');
-    if (!page) return;
-    updateMessageContent(state, page, messageId, content, thinking);
-  };
   state.wallpaperImage = '';
   state.wallpaperOpacity = 1;
 
@@ -119,6 +114,7 @@ export function unmountChatThread() {
   state.mounted = false;
   state.aiGenerating = false;
   state.stoppingAI = false;
+  state.messageQueue = [];
 
   stopAll();
   stopProactiveChecks();
@@ -145,7 +141,6 @@ export function unmountChatThread() {
   state.relationshipPunishment = null;
   state.reloadAndRender = null;
   state.renderOnly = null;
-  state.updateMessageContent = null;
   state.wallpaperImage = '';
   state.wallpaperOpacity = 1;
 }
@@ -423,7 +418,9 @@ function createInputBar() {
   input.className = 'chat-thread-input';
   input.rows = 1;
   input.value = state.inputValue || '';
-  input.placeholder = isAIWorking() ? 'TA 正在输入，可以点右边停下' : '慢慢说';
+  input.placeholder = isAIWorking()
+    ? 'TA 正在回复，发的话会排队等 TA'
+    : '慢慢说';
   input.disabled = state.stoppingAI;
   input.autocomplete = 'off';
   input.autocapitalize = 'off';
@@ -470,11 +467,6 @@ function createInputBar() {
 }
 
 async function handleSend(input) {
-  if (isAIWorking()) {
-    await handleStopAI();
-    return;
-  }
-
   const text = String(input.value || '').trim();
   if (!text) return;
 
@@ -483,6 +475,35 @@ async function handleSend(input) {
     return;
   }
 
+  // AI 正在回复：消息排队，不打断
+  if (isAIWorking()) {
+    state.inputValue = '';
+    input.value = '';
+    autoResize(input);
+
+    try {
+      const { saveMessageOnly } = await import('./thread-actions.js').catch(() => ({}));
+
+      if (typeof saveMessageOnly === 'function') {
+        await saveMessageOnly(state, text, {
+          quoteMessageId: state.quotedMessageId
+        });
+      } else {
+        await sendThreadMessage(state, text, { triggerAI: false });
+      }
+
+      state.quotedMessageId = '';
+      state.messageQueue.push(text);
+      render();
+      showToast('排队中，等 TA 回完就接着');
+    } catch (error) {
+      console.error('[chat-thread] queue message failed', error);
+      showToast('发送没成功');
+    }
+    return;
+  }
+
+  // 正常发送
   state.inputValue = '';
   input.value = '';
   autoResize(input);
@@ -517,7 +538,23 @@ async function handleSend(input) {
     showToast('TA 刚刚走神了');
   } finally {
     state.aiGenerating = false;
-    render();
+
+    // 如果有排队的消息，继续触发 AI 回复
+    if (state.messageQueue.length > 0 && state.mounted) {
+      state.aiGenerating = true;
+      render();
+      try {
+        await sendThreadMessage(state, '', { triggerAI: true, skipSave: true });
+      } catch (error) {
+        console.error('[chat-thread] queued AI reply failed', error);
+        showToast('TA 刚刚走神了');
+      } finally {
+        state.aiGenerating = false;
+        render();
+      }
+    } else {
+      render();
+    }
   }
 }
 
@@ -525,6 +562,7 @@ async function handleStopAI() {
   if (state.stoppingAI) return;
 
   state.stoppingAI = true;
+  state.messageQueue = [];
   render();
 
   try {
@@ -654,7 +692,12 @@ function handleComposerBlur() {
 }
 
 function getStatusText() {
-  if (isAIWorking()) return '正在输入';
+  if (isAIWorking()) {
+    if (state.messageQueue.length > 0) {
+      return `正在回复（还有 ${state.messageQueue.length} 条排队）`;
+    }
+    return '正在输入';
+  }
 
   if (state.mode === 'group') {
     return `${normalizeList(state.group?.memberIds).length} 个成员`;
@@ -722,11 +765,11 @@ function getAllCurrentMessages() {
 }
 
 function getTargetName() {
-  return state.mode === 'group' ? (state.group?.name || '群聊') : (state.character?.name || '聊天');
+  return state.mode === 'group' ? state.group?.name || '群聊' : state.character?.name || '聊天';
 }
 
 function getTargetAvatar() {
-  return state.mode === 'group' ? (state.group?.avatar || '') : (state.character?.avatar || '');
+  return state.mode === 'group' ? state.group?.avatar || '' : state.character?.avatar || '';
 }
 
 function createAvatar(src, name) {
@@ -1049,8 +1092,6 @@ function injectStyle() {
   document.head.appendChild(style);
 }
 
-// 改了什么：1) 从 thread-render.js 导入 updateMessageContent；2) state 增加 updateMessageContent 方法，供 thread-ai.js 流式回调局部更新气泡；3) getTargetName/getTargetAvatar 加了括号兜底防 undefined。
-// 原来效果：AI 回复非流式，整段内容一次性出现。
-// 现在效果：AI 回复走流式，内容逐段更新到当前气泡，不重建整个列表。
-// 会不会影响其他文件：不会。只改了导入和 state 方法。
-// 依赖：../../core/storage.js(getData,setData,getDB,getByIndexDB)；../../core/ui.js(createIcon,showToast,hideBottomSheet)；../../core/tts.js(stopAll)；./thread-render.js(renderThreadMessages,updateMessageContent)；./thread-actions.js(sendThreadMessage,stopThreadAIReply)；./thread-stickers.js(openStickerSheet,closeStickerSheet)；./thread-panels.js(openThreadToolsPanel,closeThreadPanels)；./thread-relationship.js(loadRelationshipState,getRelationshipLockLevel,getRelationshipStatusText,createRelationshipLockBar,openRelationshipLockSheet)；./thread-ai.js(checkThreadProactiveMessages)；./thread-settings.js(mountThreadSettings,unmountThreadSettings)
+// 改了什么：1) state 新增 messageQueue 数组；2) handleSend 在 isAIWorking 时不再停止AI，而是存消息+排队+toast提示；3) AI回复完成后检查 messageQueue，有排队就继续触发AI；4) handleStopAI 清空 messageQueue；5) createInputBar placeholder 在AI工作时显示"排队"提示；6) getStatusText 排队时显示数量。
+// 不动的：render/reloadAndRender/loadThreadData/键盘处理/主动消息/设置页跳转/壁纸/搜索/所有CSS。
+// 依赖：../../core/storage.js(getData,setData,getDB,getByIndexDB)；../../core/ui.js(createIcon,showToast,hideBottomSheet)；../../core/tts.js(stopAll)；./thread-render.js(renderThreadMessages)；./thread-actions.js(sendThreadMessage,stopThreadAIReply)；./thread-stickers.js(openStickerSheet,closeStickerSheet)；./thread-panels.js(openThreadToolsPanel,closeThreadPanels)；./thread-relationship.js(loadRelationshipState,getRelationshipLockLevel,getRelationshipStatusText,createRelationshipLockBar,openRelationshipLockSheet)；./thread-ai.js(checkThreadProactiveMessages)；./thread-settings.js(mountThreadSettings,unmountThreadSettings)
