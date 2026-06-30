@@ -397,6 +397,18 @@ async function requestPrivateReply(state, options = {}) {
   await syncPrivateState(state, characterId);
   state.renderOnly?.();
 
+  let streamTimer = null;
+  let streamedContent = '';
+  let streamedThinking = '';
+
+  const flushStreamUpdate = async () => {
+    if (streamTimer) {
+      window.clearTimeout(streamTimer);
+      streamTimer = null;
+    }
+    await updatePlaceholderStream(PRIVATE_STORE, placeholder.id, streamedContent, streamedThinking, state);
+  };
+
   try {
     const promptMessages = await buildPrompt({
       mode: 'private',
@@ -419,9 +431,19 @@ async function requestPrivateReply(state, options = {}) {
         fallbackToLocal: true,
         state,
         messages,
-        userName
+        userName,
+        onChunk: (chunk) => {
+          streamedContent += chunk.content || '';
+          streamedThinking = appendValue(streamedThinking, chunk.thinking);
+          state.updateMessageContent?.(placeholder.id, streamedContent, streamedThinking);
+
+          if (streamTimer) window.clearTimeout(streamTimer);
+          streamTimer = window.setTimeout(flushStreamUpdate, 120);
+        }
       });
     } catch (apiError) {
+      await flushStreamUpdate();
+
       if (isAbortError(apiError) || isJobStopped(job)) {
         await markMessageStopped(PRIVATE_STORE, placeholder.id, '我先停在这里了。');
         await syncPrivateState(state, characterId);
@@ -440,6 +462,8 @@ async function requestPrivateReply(state, options = {}) {
         await syncPrivateState(state, characterId);
         return null;
       }
+    } finally {
+      await flushStreamUpdate();
     }
 
     const parsed = normalizeAIResult(result, userName);
@@ -498,6 +522,7 @@ async function requestPrivateReply(state, options = {}) {
     }
 
     await syncPrivateState(state, characterId);
+    state.renderOnly?.();
 
     if (options.proactive) {
       markProactiveSent(characterId);
@@ -509,6 +534,8 @@ async function requestPrivateReply(state, options = {}) {
 
     return finalMessage;
   } catch (error) {
+    await flushStreamUpdate();
+
     if (isAbortError(error) || isJobStopped(job)) {
       await markMessageStopped(PRIVATE_STORE, placeholder.id, '我先停在这里了。');
       await syncPrivateState(state, characterId);
@@ -519,6 +546,10 @@ async function requestPrivateReply(state, options = {}) {
     await syncPrivateState(state, characterId);
     throw error;
   } finally {
+    if (streamTimer) {
+      window.clearTimeout(streamTimer);
+      streamTimer = null;
+    }
     finishAIJob(state, job);
   }
 }
@@ -586,6 +617,18 @@ async function requestGroupReply(state, options = {}) {
       await syncGroupState(state, groupId);
       state.renderOnly?.();
 
+      let streamTimer = null;
+      let streamedContent = '';
+      let streamedThinking = '';
+
+      const flushStreamUpdate = async () => {
+        if (streamTimer) {
+          window.clearTimeout(streamTimer);
+          streamTimer = null;
+        }
+        await updatePlaceholderStream(GROUP_STORE, placeholder.id, streamedContent, streamedThinking, state);
+      };
+
       try {
         const promptMessages = await buildPrompt({
           mode: 'group',
@@ -605,9 +648,19 @@ async function requestGroupReply(state, options = {}) {
             fallbackToLocal: true,
             state,
             messages: groupMessages,
-            userName
+            userName,
+            onChunk: (chunk) => {
+              streamedContent += chunk.content || '';
+              streamedThinking = appendValue(streamedThinking, chunk.thinking);
+              state.updateMessageContent?.(placeholder.id, streamedContent, streamedThinking);
+
+              if (streamTimer) window.clearTimeout(streamTimer);
+              streamTimer = window.setTimeout(flushStreamUpdate, 120);
+            }
           });
         } catch (apiError) {
+          await flushStreamUpdate();
+
           if (isAbortError(apiError) || isJobStopped(job)) {
             await markMessageStopped(GROUP_STORE, placeholder.id, '我先停在这里了。');
             await syncGroupState(state, groupId);
@@ -626,6 +679,8 @@ async function requestGroupReply(state, options = {}) {
             await syncGroupState(state, groupId);
             continue;
           }
+        } finally {
+          await flushStreamUpdate();
         }
 
         const parsed = normalizeAIResult(result, userName);
@@ -686,6 +741,8 @@ async function requestGroupReply(state, options = {}) {
 
         replies.push(finalMessage);
       } catch (error) {
+        await flushStreamUpdate();
+
         if (isAbortError(error) || isJobStopped(job)) {
           await markMessageStopped(GROUP_STORE, placeholder.id, '我先停在这里了。');
           await syncGroupState(state, groupId);
@@ -695,10 +752,16 @@ async function requestGroupReply(state, options = {}) {
         await deleteDB(GROUP_STORE, placeholder.id).catch(() => {});
         await syncGroupState(state, groupId);
         continue;
+      } finally {
+        if (streamTimer) {
+          window.clearTimeout(streamTimer);
+          streamTimer = null;
+        }
       }
     }
 
     await syncGroupState(state, groupId);
+    state.renderOnly?.();
     return replies;
   } finally {
     finishAIJob(state, job);
@@ -844,6 +907,7 @@ async function requestAIText(messages, options = {}) {
   const timeout = options.timeout || 60000;
   const temperature = options.temperature ?? Number(character?.apiConfig?.temperature ?? 0.85);
   const maxTokens = options.maxTokens ?? Math.round(Number(character?.apiConfig?.maxTokens || 1200));
+  const onChunk = typeof options.onChunk === 'function' ? options.onChunk : null;
 
   const groupTypes = resolveGroupTypes(character);
 
@@ -858,12 +922,18 @@ async function requestAIText(messages, options = {}) {
       messages,
       systemPrompt: '',
       model: character?.apiConfig?.model || '',
-      stream: false,
+      stream: true,
       groupTypes,
       timeout,
       temperature,
       maxTokens,
-      signal
+      signal,
+      onChunk,
+      onDone: options.onDone,
+      onError: (error) => {
+        lastApiError = error;
+        options.onError?.(error);
+      }
     });
 
     if (result && (result.content || result.thinking)) {
@@ -995,6 +1065,39 @@ function normalizeToolCalls(value) {
       result: tool.result || tool.output || ''
     });
   });
+}
+
+// ═══════════════════════════════════════
+// 【流式占位更新】节流写数据库，实时刷 UI
+// ═══════════════════════════════════════
+
+async function updatePlaceholderStream(store, id, content, thinking, state) {
+  if (!store || !id) return;
+
+  const message = await getMessageByIdFromStore(store, id).catch(() => null);
+  if (!message) return;
+
+  const next = cleanForDB({
+    ...message,
+    content: String(content || ''),
+    thinking: String(thinking || ''),
+    isPending: true,
+    status: 'streaming',
+    updatedAt: getNow()
+  });
+
+  await safeSetMessage(store, next);
+
+  if (store === PRIVATE_STORE && state?.characterId) {
+    await syncPrivateState(state, state.characterId);
+  } else if (store === GROUP_STORE && state?.groupId) {
+    await syncGroupState(state, state.groupId);
+  }
+}
+
+function appendValue(base, value) {
+  if (!value) return base;
+  return base ? `${base}\n${value}` : value;
 }
 
 // ═══════════════════════════════════════
@@ -1632,3 +1735,4 @@ function clampNumber(value, min, max) {
 }
 
 // 依赖：../../core/storage.js / ../../core/api.js(callAPI) / ../../core/memory.js / ./identity-core.js / ./thread-ai-local.js
+
