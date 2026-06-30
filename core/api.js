@@ -329,10 +329,14 @@ function normalizePoolItem(item) {
   };
 }
 
-function buildPoolCandidateSources(items, model = '', groupType = 'paid') {
+function buildPoolCandidateSources(items, options = {}) {
+  const { model = '', groupTypes = [] } = options;
   const lastSuccess = getPoolLastSuccess();
-  const preferredId = lastSuccess[groupType] || '';
-  const normalized = items
+  const preferredId = lastSuccess[groupTypes[0]] || '';
+
+  const sourceItems = normalizeGroupItems(items, groupTypes);
+
+  const normalized = sourceItems
     .map(normalizePoolItem)
     .filter((item) => item.endpoint && item.status !== 'disabled')
     .flatMap((item) => {
@@ -354,7 +358,22 @@ function buildPoolCandidateSources(items, model = '', groupType = 'paid') {
         isUser: item.groupType === 'paid'
       }));
     });
+
   return normalized.sort((a, b) => b.sortBoost - a.sortBoost);
+}
+
+function normalizeGroupItems(items, groupTypes) {
+  const list = Array.isArray(items) ? items : [];
+  if (!Array.isArray(groupTypes) || !groupTypes.length) return list;
+
+  const groups = getPoolGroups();
+  const enabledTypes = ['paid', 'free'].filter((type) => groups[type]?.enabled !== false);
+
+  return list.filter((item) => {
+    if (groupTypes.includes(item?.groupType)) return true;
+    if (groupTypes.includes('all')) return enabledTypes.includes(item?.groupType);
+    return false;
+  });
 }
 
 function normalizeModelAlias(modelName) {
@@ -945,7 +964,7 @@ async function readTextResponse(response, provider) {
 }
 
 // ═══════════════════════════════════════
-// 【统一调用入口】轮换池 callAPI
+// 【统一调用入口】轮换池 callAPI（支持 groupTypes 过滤）
 // ═══════════════════════════════════════
 
 async function requestOnce({ source, messages = [], systemPrompt = '', model = '', stream = false, timeout = DEFAULT_TIMEOUT, temperature, maxTokens, onChunk, signal }) {
@@ -989,21 +1008,33 @@ async function requestOnce({ source, messages = [], systemPrompt = '', model = '
 
 export async function callAPI({
   messages = [], systemPrompt = '', model = '', stream = false, timeout,
-  temperature, maxTokens, onChunk, onDone, onError, signal
+  temperature, maxTokens, onChunk, onDone, onError, signal,
+  groupTypes = []
 } = {}) {
   await ensureApiPoolMigrated();
   const poolItems = await getApiPoolItems();
   const groups = getPoolGroups();
+
+  const effectiveGroupTypes = Array.isArray(groupTypes) && groupTypes.length
+    ? groupTypes
+    : ['paid', 'free'];
+
   const paidEnabled = groups.paid?.enabled !== false;
   const freeEnabled = groups.free?.enabled !== false;
 
-  const paidItems = paidEnabled ? poolItems.filter((item) => item.groupType !== 'free') : [];
-  const freeItems = freeEnabled ? poolItems.filter((item) => item.groupType === 'free') : [];
-  const paidSources = buildPoolCandidateSources(paidItems, model, 'paid');
-  const freeSources = buildPoolCandidateSources(freeItems, model, 'free');
+  const paidWanted = effectiveGroupTypes.includes('paid') || effectiveGroupTypes.includes('all');
+  const freeWanted = effectiveGroupTypes.includes('free') || effectiveGroupTypes.includes('all');
+
+  const paidItems = paidWanted && paidEnabled ? poolItems.filter((item) => item.groupType !== 'free') : [];
+  const freeItems = freeWanted && freeEnabled ? poolItems.filter((item) => item.groupType === 'free') : [];
+
+  const paidSources = buildPoolCandidateSources(paidItems, { model, groupTypes: ['paid'] });
+  const freeSources = buildPoolCandidateSources(freeItems, { model, groupTypes: ['free'] });
 
   if (!paidSources.length && !freeSources.length) {
-    return await callLegacyFallback({ messages, systemPrompt, model, stream, timeout, temperature, maxTokens, onChunk, onDone, onError, signal });
+    return await callLegacyFallback({
+      messages, systemPrompt, model, stream, timeout, temperature, maxTokens, onChunk, onDone, onError, signal
+    });
   }
 
   const callStartedAt = Date.now();
