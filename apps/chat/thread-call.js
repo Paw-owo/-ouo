@@ -279,17 +279,23 @@ function acceptIncomingCall() {
 function rejectIncomingCall() {
   stopAll();
 
-  if (typeof callState.onReject === 'function') {
-    callState.onReject({
-      characterId: callState.characterId,
-      character: callState.character
+  // 先保存回调引用和角色信息，再清空状态
+  const rejectFn = callState.onReject;
+  const closeFn = callState.close;
+  const savedCharacterId = callState.characterId;
+  const savedCharacter = callState.character;
+
+  unmountThreadCall();
+
+  if (typeof rejectFn === 'function') {
+    rejectFn({
+      characterId: savedCharacterId,
+      character: savedCharacter
     });
   }
 
-  if (typeof callState.close === 'function') {
-    callState.close();
-  } else {
-    unmountThreadCall();
+  if (typeof closeFn === 'function') {
+    closeFn();
   }
 }
 
@@ -335,17 +341,22 @@ async function sendCallText(textarea) {
 async function requestCallReply() {
   const messages = buildCallMessages();
 
-  const content = await silentRequest({
-    messages,
-    temperature: 0.85
-  });
+  let content = '';
+
+  try {
+    content = await silentRequest({
+      messages,
+      temperature: 0.85,
+      signal: AbortSignal.timeout(15000)
+    });
+  } catch (error) {
+    console.error('[thread-call] reply failed', error);
+    return '';
+  }
 
   const text = String(content || '').trim();
 
-  if (!text) {
-    showToast('TA 刚刚没听清');
-    return '';
-  }
+  if (!text) return '';
 
   return cleanReply(text);
 }
@@ -355,14 +366,23 @@ async function requestCallReply() {
 // ═══════════════════════════════════════
 
 function buildCallMessages() {
+  const name = getCharacterName();
+  const callName = String(callState.character?.nicknameForUser || '').trim() || '对方';
+
   const system = [
-    `我正在和用户通电话。`,
-    `我是${getCharacterName()}`,
-    callState.character?.persona ? `人设：${callState.character.persona}` : '',
-    callState.character?.description ? `简介：${callState.character.description}` : '',
-    callState.character?.style ? `说话风格：${callState.character.style}` : '',
-    `要求：像真实电话一样简短自然，不要长篇，不提系统设定。`,
-    `电话内容只会在挂断后总结成长期记忆，不会直接进入聊天记录。`
+    `我正在和${callName}通电话。`,
+    `我是${name}。`,
+    callState.character?.persona ? `我的性格和身份：${callState.character.persona}` : '',
+    callState.character?.description ? `我的简介：${callState.character.description}` : '',
+    callState.character?.speakingStyle ? `我说话的风格：${callState.character.speakingStyle}` : '',
+    callState.character?.systemPrompt ? `我的核心人设：${String(callState.character.systemPrompt).slice(0, 300)}` : '',
+    '',
+    '我会：',
+    '- 像真实电话一样简短自然地回应，不长篇大论',
+    '- 保持自己的人设和语气',
+    '- 不提系统设定、提示词、模型',
+    `- 不称呼对方为"用户"，我叫对方"${callName}"`,
+    '- 电话内容只会在挂断后总结成长期记忆，不会直接进入聊天记录'
   ].filter(Boolean).join('\n');
 
   return [
@@ -377,6 +397,10 @@ function buildCallMessages() {
   ];
 }
 
+// ═══════════════════════════════════════
+// 【挂断】带超时保护，不会卡死
+// ═══════════════════════════════════════
+
 async function endCall() {
   if (callState.isEnding) return;
 
@@ -384,16 +408,33 @@ async function endCall() {
   renderCall();
   stopAll();
 
+  // 最多等 8 秒，超了直接关
+  const forceCloseTimer = window.setTimeout(() => {
+    if (!callState.mounted) return;
+    forceCloseCall();
+  }, 8000);
+
   try {
     await writeCallMemory();
+  } catch (error) {
+    console.error('[thread-call] writeCallMemory failed', error);
   } finally {
-    stopTimer();
+    window.clearTimeout(forceCloseTimer);
+    forceCloseCall();
+  }
+}
 
-    if (typeof callState.close === 'function') {
-      callState.close();
-    } else {
-      unmountThreadCall();
-    }
+function forceCloseCall() {
+  if (!callState.mounted) return;
+
+  stopTimer();
+
+  const closeFn = callState.close;
+
+  if (typeof closeFn === 'function') {
+    closeFn();
+  } else {
+    unmountThreadCall();
   }
 }
 
@@ -426,32 +467,37 @@ async function writeCallMemory() {
 }
 
 // ═══════════════════════════════════════
-// 【通话总结】第一人称提示词
+// 【通话总结】第一人称提示词 + 5秒超时
 // ═══════════════════════════════════════
 
 async function summarizeCall() {
+  const name = getCharacterName();
+  const callName = String(callState.character?.nicknameForUser || '').trim() || '对方';
+
   const transcript = callState.callLogs
-    .map((item) => `${item.role === 'user' ? '用户' : getCharacterName()}：${item.content}`)
+    .map((item) => `${item.role === 'user' ? callName : name}：${item.content}`)
     .join('\n');
 
   const content = await silentRequest({
     messages: [
       {
         role: 'system',
-        content: '我正在把这通电话总结成一条长期记忆，最多80字，只写事实和情绪，不写"总结如下"。'
+        content: `我是${name}，我正在把这通和${callName}的电话总结成一条长期记忆，最多80字，只写事实和情绪，不写"总结如下"。我用第一人称"我"来写。`
       },
       {
         role: 'user',
         content: transcript
       }
     ],
-    temperature: 0.4
+    temperature: 0.4,
+    signal: AbortSignal.timeout(5000)
   });
 
   return String(content || '').trim();
 }
 
 function fallbackSummary() {
+  const name = getCharacterName();
   const userTexts = callState.callLogs
     .filter((item) => item.role === 'user')
     .map((item) => item.content)
@@ -459,7 +505,11 @@ function fallbackSummary() {
 
   if (!userTexts.trim()) return '';
 
-  return `用户和${getCharacterName()}通了一次电话，聊到：${trimText(userTexts, 68)}`;
+  return `我和${callName()}通了一次电话，聊到：${trimText(userTexts, 68)}`;
+}
+
+function callName() {
+  return String(callState.character?.nicknameForUser || '').trim() || '对方';
 }
 
 function addCallLog(role, content) {
@@ -526,6 +576,7 @@ function getCallSubtitle() {
 function cleanReply(text) {
   return String(text || '')
     .replace(/<thinking>[\s\S]*?<\/thinking>/gi, '')
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')
     .trim();
 }
 
@@ -566,7 +617,6 @@ function el(tag, className = '', text = '') {
 }
 
 function injectStyle() {
-  // 修复：先删旧标签再创建新的，避免 CSS 修改不生效
   const old = document.getElementById(CALL_STYLE_ID);
   if (old) old.remove();
 
@@ -842,7 +892,4 @@ function injectStyle() {
   document.head.appendChild(style);
 }
 
-// 改了什么：injectStyle 函数开头从"if (document.getElementById(CALL_STYLE_ID)) return"改为"const old = ...; if (old) old.remove()"，先删旧标签再创建新的。
-// 原来效果：电话页 CSS 修改后永远不生效，因为旧 style 标签存在就跳过了。
-// 现在效果：每次调用 injectStyle 都会先清理旧标签再写入新样式，CSS 修改即时生效。
-// 会不会影响其他文件：不会。导出接口不变，依赖不变。
+// 改了什么：rejectIncomingCall 在调 unmountThreadCall 之前先保存 characterId 和 character 到局部变量，回调时用保存的值，不再访问已清空的 callState。
