@@ -15,13 +15,8 @@ const FIXED_SUMMARY_TEXT = '让我想想这话何意味…';
 const FIXED_SUMMARY_TEXT_RUNNING = '让我再想想…';
 const MAX_CACHE_ENTRIES = 200;
 
-// 全局状态缓存：按消息 id + 内容指纹保存展开状态和打字进度
 const stateCache = new Map();
 const activeTypewriters = new WeakMap();
-
-// ═══════════════════════════════════════
-// 【对外导出】判断消息是否有 thinking 或工具内容
-// ═══════════════════════════════════════
 
 export function hasThinkingChain(message) {
   if (!message) return false;
@@ -33,12 +28,6 @@ export function hasThinkingChain(message) {
   return false;
 }
 
-// ═══════════════════════════════════════
-// 【对外导出】创建 thinking 折叠卡片
-// ═══════════════════════════════════════
-// options.roleName: 角色名，用于无障碍标签
-// options.messageId: 消息 id，用于状态恢复
-
 export function createThinkingCard(message, options = {}) {
   const roleName = String(options.roleName || options.characterName || options.name || 'TA').trim();
   const messageId = String(options.messageId || '').trim();
@@ -48,7 +37,7 @@ export function createThinkingCard(message, options = {}) {
   const card = el('section', THINKING_CARD_CLASS);
   card.dataset.running = isRunning ? 'true' : 'false';
 
-  const trigger = createTrigger(roleName, isRunning);
+  const trigger = createTrigger(roleName, message, isRunning);
   const body = createBody(message, roleName, messageId, fingerprint, isRunning);
 
   const stateKey = messageId ? `${messageId}:${fingerprint}` : null;
@@ -88,15 +77,12 @@ export function createThinkingCard(message, options = {}) {
   return card;
 }
 
-// ═══════════════════════════════════════
-// 【状态持久化】用消息 id + 内容指纹做 key
-// ═══════════════════════════════════════
-
 function buildFingerprint(message) {
   const thinking = String(message?.thinking || '').trim();
+  const summary = String(message?.thinkingSummary || '').trim();
   const tools = collectTools(message);
   const toolHash = tools.map((t) => `${t.name}:${t.status}:${String(t.result || '').slice(0, 40)}`).join('|');
-  return hashString(`${thinking}|${toolHash}`).slice(0, 12);
+  return hashString(`${summary}|${thinking}|${toolHash}`).slice(0, 12);
 }
 
 function hashString(text) {
@@ -131,11 +117,7 @@ function pruneCacheIfNeeded() {
   }
 }
 
-// ═══════════════════════════════════════
-// 【触发区】固定文案 + 小图标
-// ═══════════════════════════════════════
-
-function createTrigger(roleName, isRunning) {
+function createTrigger(roleName, message, isRunning) {
   const trigger = el('button', THINKING_TRIGGER_CLASS);
   trigger.type = 'button';
   trigger.setAttribute('aria-label', `${roleName}的思考过程`);
@@ -143,7 +125,8 @@ function createTrigger(roleName, isRunning) {
   const icon = createLineIcon('thought');
   icon.classList.add('chat-thinking-trigger-icon');
 
-  const text = el('span', 'chat-thinking-trigger-text', isRunning ? FIXED_SUMMARY_TEXT_RUNNING : FIXED_SUMMARY_TEXT);
+  const summary = resolveThinkingSummary(message, isRunning);
+  const text = el('span', 'chat-thinking-trigger-text', summary);
 
   const arrow = createLineIcon('chevron');
   arrow.classList.add('chat-thinking-trigger-arrow');
@@ -152,9 +135,19 @@ function createTrigger(roleName, isRunning) {
   return trigger;
 }
 
-// ═══════════════════════════════════════
-// 【展开内容区】thinking 文本 + 工具时间线
-// ═══════════════════════════════════════
+function resolveThinkingSummary(message, isRunning) {
+  const summary = String(message?.thinkingSummary || '').trim();
+  if (summary) {
+    return summary.length > 15 ? `${summary.slice(0, 15).trim()}…` : summary;
+  }
+
+  const thinking = String(message?.thinking || '').replace(/\s+/g, ' ').trim();
+  if (thinking) {
+    return thinking.length > 15 ? `${thinking.slice(0, 15).trim()}…` : thinking;
+  }
+
+  return isRunning ? FIXED_SUMMARY_TEXT_RUNNING : FIXED_SUMMARY_TEXT;
+}
 
 function createBody(message, roleName, messageId, fingerprint, isRunning) {
   const body = el('div', THINKING_BODY_CLASS);
@@ -191,15 +184,11 @@ function createBody(message, roleName, messageId, fingerprint, isRunning) {
   return body;
 }
 
-// ═══════════════════════════════════════
-// 【工具时间线】单个工具折叠块
-// ═══════════════════════════════════════
-
 function createToolItem(tool, index, roleName, messageId, fingerprint) {
   const item = el('div', THINKING_TOOL_ITEM_CLASS);
 
   const status = getToolStatus(tool);
-  const title = getToolTitle(tool, index);
+  const title = resolveToolDisplayName(tool, index);
 
   const head = el('button', THINKING_TOOL_HEAD_CLASS);
   head.type = 'button';
@@ -239,10 +228,6 @@ function createToolItem(tool, index, roleName, messageId, fingerprint) {
   return item;
 }
 
-// ═══════════════════════════════════════
-// 【打字机效果】逐字显示 thinking 文本
-// ═══════════════════════════════════════
-
 function typeWrite(container, text, onDone) {
   container.textContent = '';
   container.dataset.typing = 'true';
@@ -278,10 +263,6 @@ function typeWrite(container, text, onDone) {
   };
 }
 
-// ═══════════════════════════════════════
-// 【工具收集】合并 model toolCalls + memoryWrites + grudgeWrites
-// ═══════════════════════════════════════
-
 function collectTools(message) {
   const tools = [];
 
@@ -291,18 +272,22 @@ function collectTools(message) {
 
   normalizeToolCalls(message?.memoryWrites).forEach((memory) => {
     tools.push({
-      name: '悄悄记下一笔',
-      status: 'done',
+      ...memory,
+      name: resolveMemoryToolName(memory),
+      status: memory.status || memory.state || 'done',
       result: memory.content || memory.summary || memory.text || '',
+      detailSummary: memory.detailSummary || memory.summary || '',
       _source: 'memory'
     });
   });
 
   normalizeToolCalls(message?.grudgeWrites).forEach((grudge) => {
     tools.push({
-      name: '在小本本上画圈圈',
-      status: 'done',
+      ...grudge,
+      name: resolveGrudgeToolName(grudge),
+      status: grudge.status || grudge.state || 'done',
       result: grudge.reason || grudge.content || grudge.text || '',
+      detailSummary: grudge.detailSummary || grudge.summary || '',
       _source: 'grudge'
     });
   });
@@ -310,9 +295,38 @@ function collectTools(message) {
   return tools;
 }
 
-// ═══════════════════════════════════════
-// 【工具数据处理】
-// ═══════════════════════════════════════
+function resolveMemoryToolName(memory) {
+  const raw = normalizeText(memory?.name || memory?.action || memory?.type || '').toLowerCase();
+  if (/(删|删除|移除)/.test(raw)) return '轻轻删掉一条记忆';
+  if (/(改|编辑|更新|修正)/.test(raw)) return '顺手改了改记忆';
+  return '悄悄记下一笔';
+}
+
+function resolveGrudgeToolName(grudge) {
+  const raw = normalizeText(grudge?.name || grudge?.action || grudge?.type || '').toLowerCase();
+  if (/(删|删除|移除)/.test(raw)) return '把小本本翻掉一页';
+  if (/(改|编辑|更新|修正)/.test(raw)) return '把小本本改了改';
+  return '在小本本上画圈圈';
+}
+
+function resolveToolDisplayName(tool, index) {
+  const source = String(tool?._source || 'tool').toLowerCase();
+  const rawName = normalizeText(tool?.name || tool?.toolName || tool?.title || tool?.action).toLowerCase();
+
+  if (source === 'memory') return resolveMemoryToolName(tool);
+  if (source === 'grudge') return resolveGrudgeToolName(tool);
+
+  if (/(mcp|外部工具|server|web.*tool)/.test(rawName)) return '叫了外部小工具';
+  if (/(搜|搜索|search|上网|网页|web|资料)/.test(rawName)) return '去查了查';
+  if (/(转账|付款|pay|红包)/.test(rawName)) return '递了一张小票据';
+  if (/(礼物|gift)/.test(rawName)) return '递了一份小礼物';
+  if (/(商店|购买|下单|buy|shop|小物)/.test(rawName)) return '去小物商店逛了逛';
+  if (/(电话|通话|call|summary|总结)/.test(rawName)) return '把电话收成一小段记忆';
+  if (/(主动消息|proactive)/.test(rawName)) return '想主动和你说句话';
+
+  const name = normalizeText(tool?.name || tool?.toolName || tool?.title || tool?.action);
+  return name || `第 ${index + 1} 步`;
+}
 
 function normalizeToolCalls(value) {
   if (Array.isArray(value)) return value.filter(Boolean);
@@ -329,14 +343,16 @@ function getToolStatus(tool) {
 }
 
 function getToolTitle(tool, index) {
-  const name = normalizeText(tool?.name || tool?.toolName || tool?.title || tool?.action);
-  return name || `工具调用 ${index + 1}`;
+  return resolveToolDisplayName(tool, index);
 }
 
 function buildToolDetail(tool) {
   const parts = [];
   const status = getToolStatus(tool);
   const source = tool?._source || 'tool';
+  const summary = normalizeMultiline(tool?.detailSummary || tool?.summary);
+
+  if (summary) parts.push(summary);
 
   if (status === 'running') parts.push('状态：正在处理中…');
   if (status === 'error') parts.push('状态：调用失败');
@@ -364,10 +380,6 @@ function isMessageRunning(message) {
   const status = normalizeText(message?.status || message?.streamStatus).toLowerCase();
   return ['streaming', 'thinking', 'running', 'loading', 'pending'].includes(status);
 }
-
-// ═══════════════════════════════════════
-// 【图标】线条 SVG
-// ═══════════════════════════════════════
 
 function createLineIcon(name) {
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -414,10 +426,6 @@ function createLineIcon(name) {
   return svg;
 }
 
-// ═══════════════════════════════════════
-// 【基础 DOM 工具】
-// ═══════════════════════════════════════
-
 function el(tag, className = '', text = '') {
   const node = document.createElement(tag);
   if (className) node.className = className;
@@ -448,4 +456,3 @@ function normalizeMultiline(value) {
   }
   return String(value || '').trim();
 }
-
