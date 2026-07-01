@@ -810,19 +810,13 @@ export async function getAllUnreadMailboxCount() {
 export async function refreshAIPhoneBadges() {
   try {
     const badges = normalizeObject(getData(APP_BADGES_KEY));
+    const mailboxUnread = await getAllUnreadMailboxCount();
     const next = {
-      ...badges
+      ...badges,
+      mailbox: mailboxUnread
     };
-
-    if (typeof next.chat === 'undefined') {
-      next.chat = next.chat;
-    }
-
     const ok = setData(APP_BADGES_KEY, next);
-    if (!ok) {
-      return null;
-    }
-
+    if (!ok) return null;
     emitBadgesRefresh();
     return next;
   } catch (error) {
@@ -1029,6 +1023,6 @@ export async function deleteAIPhoneDataByCharacter(characterId) {
     return ok;
   } catch (error) {
     safeWarn('清理角色AI手机数据失败', error);
-    return false;
+    return null;
   }
 }
