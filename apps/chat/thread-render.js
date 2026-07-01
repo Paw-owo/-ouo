@@ -1787,11 +1787,11 @@ function injectStyle() {
     }
 
     .chat-message-row.mode-dialog.role-user .chat-message-bubble {
-      margin-right: 54px;
+      margin-right: 0;
     }
 
     .chat-message-row.mode-dialog.role-assistant .chat-message-bubble {
-      margin-left: 54px;
+      margin-left: 0;
     }
 
     .chat-message-row.mode-dialog .chat-message-bubble.sticker-bubble,
@@ -2175,16 +2175,22 @@ function injectStyle() {
 
     .chat-reasoning-stack.role-user {
       align-self: flex-end;
-      margin-right: 54px;
     }
 
     .chat-reasoning-stack.role-assistant {
       align-self: flex-start;
-      margin-left: 54px;
     }
 
     .chat-reasoning-stack.mode-dialog {
       max-width: 220px;
+    }
+
+    .chat-message-row.mode-dialog.role-assistant .chat-reasoning-stack {
+      margin-left: 0;
+    }
+
+    .chat-message-row.mode-dialog.role-user .chat-reasoning-stack {
+      margin-right: 0;
     }
 
     /* ── 代码块卡片 ── */
@@ -2507,11 +2513,11 @@ function injectStyle() {
     }
 
     .chat-message-row.mode-dialog.role-user .chat-message-actions {
-      margin-right: 54px;
+      margin-right: 0;
     }
 
     .chat-message-row.mode-dialog.role-assistant .chat-message-actions {
-      margin-left: 54px;
+      margin-left: 0;
     }
 
     .chat-message-row.mode-dialog .chat-message-body:hover .chat-message-actions {
@@ -2874,20 +2880,20 @@ function injectStyle() {
 
       .chat-message-row.mode-dialog.role-user .chat-message-bubble,
       .chat-message-row.mode-dialog.role-user .chat-message-actions {
-        margin-right: 48px;
+        margin-right: 0;
       }
 
       .chat-message-row.mode-dialog.role-assistant .chat-message-bubble,
       .chat-message-row.mode-dialog.role-assistant .chat-message-actions {
-        margin-left: 48px;
+        margin-left: 0;
       }
 
       .chat-reasoning-stack.role-user {
-        margin-right: 48px;
+        margin-right: 0;
       }
 
       .chat-reasoning-stack.role-assistant {
-        margin-left: 48px;
+        margin-left: 0;
       }
 
       .chat-message-image-frame {
@@ -2964,26 +2970,26 @@ function injectStyle() {
     .chat-message-row.mode-dialog.role-user .chat-voice-card,
     .chat-message-row.mode-dialog.role-user .chat-dice-card,
     .chat-message-row.mode-dialog.role-user .chat-rps-card {
-      margin-right: 54px;
+      margin-right: 0;
     }
 
     .chat-message-row.mode-dialog.role-assistant .chat-voice-card,
     .chat-message-row.mode-dialog.role-assistant .chat-dice-card,
     .chat-message-row.mode-dialog.role-assistant .chat-rps-card {
-      margin-left: 54px;
+      margin-left: 0;
     }
 
     @media (max-width: 520px) {
       .chat-message-row.mode-dialog.role-user .chat-voice-card,
       .chat-message-row.mode-dialog.role-user .chat-dice-card,
       .chat-message-row.mode-dialog.role-user .chat-rps-card {
-        margin-right: 48px;
+        margin-right: 0;
       }
 
       .chat-message-row.mode-dialog.role-assistant .chat-voice-card,
       .chat-message-row.mode-dialog.role-assistant .chat-dice-card,
       .chat-message-row.mode-dialog.role-assistant .chat-rps-card {
-        margin-left: 48px;
+        margin-left: 0;
       }
     }
 
