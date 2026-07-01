@@ -4,6 +4,7 @@
   from './core/theme.js': loadTheme
   from './core/ui.js': createIcon, showToast
   from './apps/chat/thread-ai-local.js': seedDefaultCharacter
+  from './core/ai-phone-hub.js': getActiveAppLock
 -->
 <!doctype html>
 <html lang="zh-CN">
@@ -905,7 +906,6 @@
       50% { transform: scale(1); opacity: 1; }
       100% { transform: scale(.92); opacity: .55; }
     }
-
     /* ═══════════════════════════════════════
        【黑胶唱片小组件】桌面音乐播放器
     ═══════════════════════════════════════ */
@@ -1159,12 +1159,12 @@
       <div class="loading-text">小手机正在醒来</div>
     </div>
   </div>
-
   <script type="module">
     import { initDB, getData, setData, removeData, getDB, setDB, deleteDB, getAllDB, generateId, getNow } from './core/storage.js';
     import { loadTheme } from './core/theme.js';
     import { createIcon, showToast } from './core/ui.js';
     import { seedDefaultCharacter } from './apps/chat/thread-ai-local.js';
+    import { getActiveAppLock } from './core/ai-phone-hub.js';
 
     const LOCK_PASSWORD = '0326';
     const CUSTOM_FONT_KEY = 'app_custom_font';
@@ -1187,7 +1187,8 @@
       { id: 'anniversary', name: '纪念日', module: './apps/anniversary.js', icon: 'check', dock: false, page: 0, ready: true },
       { id: 'games', name: '游戏', module: './apps/games.js', icon: 'play', dock: false, page: 0, ready: true },
       { id: 'music', name: '音乐', module: './apps/music.js', icon: 'music', dock: false, page: 0, ready: true },
-      { id: 'dream', name: '梦境', module: './apps/dream.js', icon: 'dream', dock: false, page: 0, ready: true }
+      { id: 'dream', name: '梦境', module: './apps/dream.js', icon: 'dream', dock: false, page: 0, ready: true },
+      { id: 'ai-phone', name: 'AI手机', module: './apps/ai-phone.js', icon: 'smile', dock: false, page: 0, ready: true }
     ];
 
     const WIDGETS = [
@@ -1296,7 +1297,6 @@
         }, 260);
       }
     }
-
     async function refreshDesktop() {
       await renderDesktop();
       await applyAllImages();
@@ -1755,7 +1755,6 @@
       widgetEl.addEventListener('pointerdown', (event) => handleDesktopItemPointerDown(event, widgetEl));
       return widgetEl;
     }
-
     async function createCustomWidget(widget) {
       const widgetEl = document.createElement('section');
       widgetEl.className = `desktop-item desktop-widget desktop-custom-widget ${widget.shape}`;
@@ -2139,6 +2138,14 @@
     async function openApp(appId) {
       const app = APPS.find((item) => item.id === appId);
       if (!app) return;
+      const lock = await getActiveAppLock(appId);
+      if (lock && lock.id) {
+        const message = lock.message || '去找TA，TA会告诉你怎么打开';
+        showToast(message);
+        editing = false;
+        updateEditingClass();
+        return;
+      }
       editing = false;
       updateEditingClass();
       if (!app.ready || !app.module) { openPlaceholderApp(app); return; }
@@ -2253,9 +2260,13 @@
       if (Number(chatUnread) > 0) map.chat = Number(chatUnread);
       const momentsUnread = getData('moments_unread_count');
       if (Number(momentsUnread) > 0) map.moments = Number(momentsUnread);
+      const mailboxUnread = getData('app_ai_phone_mailbox_unread');
+      if (Number(mailboxUnread) > 0) {
+        map.chat = (map.chat || 0) + Number(mailboxUnread);
+      }
       return map;
     }
   </script>
 </body>
 </html>
-<!-- depends: ./core/storage.js:initDB,getData,setData,removeData,getDB,setDB,deleteDB,getAllDB,generateId,getNow; ./core/theme.js:loadTheme; ./core/ui.js:createIcon,showToast; ./apps/chat/thread-ai-local.js:seedDefaultCharacter; app modules optional exports: mount/render/open/default/unmount -->
+<!-- depends: ./core/storage.js:initDB,getData,setData,removeData,getDB,setDB,deleteDB,getAllDB,generateId,getNow; ./core/theme.js:loadTheme; ./core/ui.js:createIcon,showToast; ./core/ai-phone-hub.js:getActiveAppLock; ./apps/chat/thread-ai-local.js:seedDefaultCharacter; app modules optional exports: mount/render/open/default/unmount -->
