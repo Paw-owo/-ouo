@@ -140,11 +140,17 @@ function createStreamAccumulator() {
   return {
     content: '',
     thinking: '',
+    thinkingSummary: '',
     lastRender: 0,
 
-    append({ content, thinking }) {
+    append({ content, thinking, thinkingSummary }) {
       if (content) this.content += content;
       if (thinking) this.thinking = this.thinking ? this.thinking + '\n' + thinking : thinking;
+      if (thinkingSummary) {
+        this.thinkingSummary = this.thinkingSummary
+          ? this.thinkingSummary + thinkingSummary
+          : thinkingSummary;
+      }
     },
 
     applyTo(message) {
@@ -152,6 +158,13 @@ function createStreamAccumulator() {
       message.content = this.content;
       message.thinking = this.thinking;
       message.isStreaming = true;
+      if (this.thinkingSummary) {
+        message.thinkingSummary = this.thinkingSummary.length > 15
+          ? this.thinkingSummary.slice(0, 15).trim()
+          : this.thinkingSummary;
+      } else if (this.thinking && !message.thinkingSummary) {
+        message.thinkingSummary = summarizeText(this.thinking, 15);
+      }
     },
 
     shouldRender() {
@@ -424,7 +437,7 @@ async function requestPrivateReply(state, options = {}) {
       ...placeholder,
       content: parsed.content || '我刚刚有点卡住了，可以再说一遍吗？',
       thinking: parsed.thinking || placeholder.thinking,
-      thinkingSummary: parsed.thinkingSummary || summarizeText(parsed.thinking || placeholder.thinking, 28),
+      thinkingSummary: parsed.thinkingSummary || summarizeText(parsed.thinking || placeholder.thinking, 15),
       toolCalls: parsed.toolCalls,
       proactive: Boolean(options.proactive),
       proactiveReason: options.proactiveReason || '',
@@ -456,7 +469,6 @@ async function requestPrivateReply(state, options = {}) {
       });
     }
 
-    // 后台生成内心独白（不阻塞主回复）
     if (!parsed.thinking) {
       generateInnerMonologue({
         character,
@@ -465,6 +477,16 @@ async function requestPrivateReply(state, options = {}) {
         recentMessages: memoryMessages.slice(-6),
         aiContent: finalMessage.content,
         userName,
+        state
+      });
+    }
+
+    if (parsed.toolCalls && parsed.toolCalls.length) {
+      enrichToolCallsBackground(parsed.toolCalls, {
+        character,
+        userName,
+        store: PRIVATE_STORE,
+        messageId: finalMessage.id,
         state
       });
     }
@@ -643,7 +665,7 @@ async function requestGroupReply(state, options = {}) {
           ...placeholder,
           content: parsed.content || '我先听你们说。',
           thinking: parsed.thinking || placeholder.thinking,
-          thinkingSummary: parsed.thinkingSummary || summarizeText(parsed.thinking || placeholder.thinking, 28),
+          thinkingSummary: parsed.thinkingSummary || summarizeText(parsed.thinking || placeholder.thinking, 15),
           toolCalls: parsed.toolCalls,
           characterName: character.name || 'TA',
           characterAvatar: character.avatar || '',
@@ -663,7 +685,6 @@ async function requestGroupReply(state, options = {}) {
           callName: userName
         });
 
-        // 后台生成内心独白（不阻塞群聊回复）
         if (!parsed.thinking) {
           generateInnerMonologue({
             character,
@@ -672,6 +693,16 @@ async function requestGroupReply(state, options = {}) {
             recentMessages: [...groupMessages, finalMessage].slice(-6),
             aiContent: finalMessage.content,
             userName,
+            state
+          });
+        }
+
+        if (parsed.toolCalls && parsed.toolCalls.length) {
+          enrichToolCallsBackground(parsed.toolCalls, {
+            character,
+            userName,
+            store: GROUP_STORE,
+            messageId: finalMessage.id,
             state
           });
         }
@@ -699,6 +730,7 @@ async function requestGroupReply(state, options = {}) {
     finishAIJob(state, job);
   }
 }
+
 // ═══════════════════════════════════════
 // 【内心独白】后台生成角色思考过程
 // ═══════════════════════════════════════
@@ -738,7 +770,9 @@ async function generateInnerMonologue({
       '- 我不写"用户"，不写分析报告，不写编号列表',
       '- 我像在自言自语，不是在写任务总结',
       '- 我可以提到自己的情绪、在意的事、对对方的感觉',
-      '- 我不会提到提示词、系统、AI、模型、数据库'
+      '- 我不会提到提示词、系统、AI、模型、数据库',
+      '- 我会额外给自己写一句15字以内的小摘要，像我给自己贴的小标签。',
+      '- 我返回JSON，格式固定为：{"summary":"15字内摘要","thinking":"完整内心独白"}'
     ].filter(Boolean).join('\n');
 
     const user = [
@@ -757,19 +791,20 @@ async function generateInnerMonologue({
       messages: promptMessages,
       model: '',
       temperature: 0.8,
-      signal: AbortSignal.timeout(12000)
+      signal: AbortSignal.timeout(12000),
+      json: true
     });
 
-    const monologue = parseInnerMonologueResult(result, userName);
-    if (!monologue) return;
+    const monologueData = parseInnerMonologueResult(result, userName);
+    if (!monologueData.thinking) return;
 
     const existing = await getDB(store, messageId).catch(() => null);
     if (!existing) return;
 
     const updated = cleanForDB({
       ...existing,
-      thinking: monologue,
-      thinkingSummary: summarizeText(monologue, 28),
+      thinking: monologueData.thinking,
+      thinkingSummary: monologueData.summary || summarizeText(monologueData.thinking, 15),
       updatedAt: getNow()
     });
 
@@ -789,12 +824,16 @@ async function generateInnerMonologue({
 }
 
 function parseInnerMonologueResult(result, userName) {
-  let text = '';
+  const data = parseStructuredThinking(result);
+  let thinking = String(data.thinking || '').trim();
+  let summary = String(data.summary || '').trim();
 
-  if (typeof result === 'string') {
-    text = result.trim();
-  } else if (result && typeof result === 'object') {
-    text = String(
+  if (!thinking && typeof result === 'string') {
+    thinking = result.trim();
+  }
+
+  if (!thinking && result && typeof result === 'object') {
+    thinking = String(
       result.content ||
       result.text ||
       result.message ||
@@ -804,21 +843,177 @@ function parseInnerMonologueResult(result, userName) {
     ).trim();
   }
 
-  if (!text) return '';
+  if (!thinking) {
+    return { summary: '', thinking: '' };
+  }
 
-  text = text.replace(/<think\b[^>]*>[\s\S]*?<\/think>/gi, '').trim();
-  text = text.replace(/<thinking\b[^>]*>[\s\S]*?<\/thinking>/gi, '').trim();
-  text = text.replace(/\*\*(.+?)\*\*/g, '$1').trim();
+  thinking = thinking.replace(/<think\b[^>]*>[\s\S]*?<\/think>/gi, '').trim();
+  thinking = thinking.replace(/<thinking\b[^>]*>[\s\S]*?<\/thinking>/gi, '').trim();
+  thinking = thinking.replace(/\*\*(.+?)\*\*/g, '$1').trim();
 
-  if (text.length > 400) text = text.slice(0, 400);
+  if (thinking.length > 400) thinking = thinking.slice(0, 400);
 
-  text = text.replace(/^内心独白[:：]?\s*/i, '').trim();
-  text = text.replace(/^独白[:：]?\s*/i, '').trim();
-  text = text.replace(/^想法[:：]?\s*/i, '').trim();
+  thinking = thinking.replace(/^内心独白[:：]?\s*/i, '').trim();
+  thinking = thinking.replace(/^独白[:：]?\s*/i, '').trim();
+  thinking = thinking.replace(/^想法[:：]?\s*/i, '').trim();
 
-  text = cleanPerspectiveText(text, userName);
+  thinking = cleanPerspectiveText(thinking, userName);
+  thinking = stripEmoji(thinking);
 
-  return stripEmoji(text);
+  summary = stripEmoji(cleanPerspectiveText(summary, userName));
+  summary = summary.replace(/^摘要[:：]?\s*/i, '').trim();
+  if (!summary) summary = summarizeText(thinking, 15);
+  if (summary.length > 15) summary = summary.slice(0, 15).trim();
+
+  return { summary, thinking };
+}
+
+// ═══════════════════════════════════════
+// 【工具详情AI生成】后台异步，不阻塞主回复
+// ═══════════════════════════════════════
+
+function enrichToolCallsBackground(toolCalls, options = {}) {
+  const character = options.character;
+  const userName = options.userName || '你';
+  const store = options.store;
+  const messageId = options.messageId;
+  const state = options.state;
+
+  if (!store || !messageId || !Array.isArray(toolCalls) || !toolCalls.length) return;
+
+  const name = character?.name || '我';
+  const callName = String(character?.nicknameForUser || '').trim() || userName;
+
+  const toolDescriptions = toolCalls.map((tool, index) => {
+    const rawName = String(tool.name || tool.toolName || `步骤${index + 1}`).trim();
+    const status = String(tool.status || 'done').toLowerCase();
+    const inputText = stringifyToolDetail(tool.arguments || tool.input || tool.params || tool.query);
+    const resultText = stringifyToolDetail(tool.result || tool.output || tool.content);
+
+    return [
+      `步骤${index + 1}：`,
+      `工具名：${rawName}`,
+      status === 'running' ? '状态：正在处理' : status === 'error' ? '状态：失败' : '状态：已完成',
+      inputText ? `输入内容：${inputText.slice(0, 200)}` : '',
+      resultText ? `返回结果：${resultText.slice(0, 200)}` : ''
+    ].filter(Boolean).join('\n');
+  }).join('\n\n');
+
+  if (!toolDescriptions) return;
+
+  const system = [
+    `我是${name}。`,
+    character?.speakingStyle ? `我说话的风格：${character.speakingStyle}` : '',
+    '',
+    '我刚刚在回复时用了一些工具/外部能力。现在我会用第一人称、按我自己的人设，给每个工具步骤写一句简短说明。',
+    '要求：',
+    '- 我用简体中文，用第一人称"我"',
+    `- 我不写"用户"，我叫对方"${callName}"`,
+    '- 每个步骤只写1到2句话，像我在心里默默记下自己刚才做了什么',
+    '- 我不写分析报告，不写编号，不写"工具调用成功"',
+    '- 我像在自言自语，可以带情绪和感受',
+    '- 我返回JSON数组，每个元素对应一个步骤',
+    '- 格式：[{"summary":"1到2句人设化说明"}, ...]',
+    '- 数量必须和步骤数量一致'
+  ].filter(Boolean).join('\n');
+
+  silentRequest({
+    messages: [
+      { role: 'system', content: system },
+      { role: 'user', content: toolDescriptions }
+    ],
+    model: '',
+    temperature: 0.75,
+    signal: AbortSignal.timeout(8000),
+    json: true
+  }).then(async (result) => {
+    const summaries = parseToolSummaries(result);
+
+    const enriched = toolCalls.map((tool, index) => {
+      const aiSummary = summaries && summaries[index]
+        ? cleanPerspectiveText(summaries[index], callName)
+        : buildFallbackToolSummary(tool, index);
+      return { ...tool, detailSummary: aiSummary };
+    });
+
+    const existing = await getDB(store, messageId).catch(() => null);
+    if (!existing) return;
+
+    const updated = cleanForDB({
+      ...existing,
+      toolCalls: enriched,
+      updatedAt: getNow()
+    });
+
+    await setDB(store, updated);
+
+    if (state) {
+      if (store === PRIVATE_STORE && state.characterId) {
+        await syncPrivateState(state, state.characterId);
+      } else if (store === GROUP_STORE && state.groupId) {
+        await syncGroupState(state, state.groupId);
+      }
+      state.renderOnly?.();
+    }
+  }).catch(() => {
+    // 静默失败，不影响主回复
+  });
+}
+
+function parseToolSummaries(result) {
+  if (!result) return null;
+
+  let data = result;
+
+  if (typeof result === 'string') {
+    try {
+      data = JSON.parse(result);
+    } catch (_) {
+      const fenced = result.match(/```json\s*([\s\S]*?)```/i) || result.match(/\[[\s\S]*\]/);
+      if (fenced) {
+        try {
+          data = JSON.parse(fenced[1] || fenced[0]);
+        } catch (__) {
+          return null;
+        }
+      } else {
+        return null;
+      }
+    }
+  }
+
+  if (Array.isArray(data)) {
+    return data.map((item) => {
+      if (typeof item === 'string') return item.trim();
+      if (item && typeof item === 'object') return String(item.summary || item.text || item.description || '').trim();
+      return '';
+    });
+  }
+
+  return null;
+}
+
+function buildFallbackToolSummary(tool, index) {
+  const name = String(tool?.name || tool?.toolName || `步骤${index + 1}`).trim();
+  const status = String(tool?.status || 'done').toLowerCase();
+  const hasResult = Boolean(tool?.result || tool?.output || tool?.content);
+
+  if (status === 'running') return `我正在用「${name}」处理这一步。`;
+  if (status === 'error') return `我刚刚想用「${name}」，但它有点卡住了。`;
+  if (hasResult) return `我用「${name}」处理好了这一步。`;
+  return `我顺手用了「${name}」。`;
+}
+
+function stringifyToolDetail(value) {
+  if (typeof value === 'string') return value.trim();
+  if (value && typeof value === 'object') {
+    try {
+      return JSON.stringify(value, null, 2);
+    } catch (_) {
+      return '';
+    }
+  }
+  return String(value || '').trim();
 }
 
 // ═══════════════════════════════════════
@@ -1131,8 +1326,11 @@ function buildModePrompt(mode, group, character, options, userName, userProfile 
     `- 我不会称呼对方为"用户"，我会叫"${callName}"或按关系自然称呼。`,
     genderHint ? `- 我用第三人称提到对方时，会优先按小档案写成"${genderHint}"，也可以直接用名字或关系称呼。` : '- 我用第三人称提到对方时，会优先用名字或关系称呼，拿不准就不硬写性别。',
     '- 我会根据自己的人设、世界书、长期记忆、当前时间和最近上下文来回应。',
-    '- 每次正式回复前，我会先在之间写出内心想法，然后再输出正文。',
-    '- <think>里的内容只写一句简短回应思路，不写长篇推理，不写分析报告。',
+    '- 每次正式回复前，我会先写一段真正属于我自己的内心想法，再输出正文。',
+    '- 我会把内心想法放在<think>标签里，内容必须是我自己真实会闪过的念头，不是固定模板。',
+    '- <think>里的内容用第一人称，像我自己心里在小声说话，可以有情绪、犹豫、在意、偏爱。',
+    '- <think>之后我会额外单独写一行<think_summary>，里面只有一句15字以内的小摘要，像我给自己贴的小标签，也必须按我的人设自己写。',
+    '- <think_summary>不重复正文，不写解释，不写固定词。',
     '- 正文优先像手机聊天，不机械总结，不官方，不教育腔。'
   ];
 
@@ -1372,10 +1570,12 @@ function normalizeAIResult(result, userName = '你') {
       ? cleanPerspectiveText(String(nativeThinking || ''), userName)
       : parsed.thinking;
 
+    const summary = parsed.thinkingSummary || summarizeText(thinking, 15);
+
     return {
       content: stripEmoji(parsed.content),
       thinking: stripEmoji(thinking),
-      thinkingSummary: summarizeText(thinking, 28),
+      thinkingSummary: summary,
       toolCalls: normalizeToolCalls(result.toolCalls || result.tools || result.choices?.[0]?.message?.tool_calls || [])
     };
   }
@@ -1389,18 +1589,30 @@ function parseAIText(text, userName = '你') {
     raw.match(/<think\b[^>]*>([\s\S]*?)<\/think>/i) ||
     raw.match(/<thinking\b[^>]*>([\s\S]*?)<\/thinking>/i);
 
+  const summaryMatch =
+    raw.match(/<think_summary\b[^>]*>([\s\S]*?)<\/think_summary>/i) ||
+    raw.match(/<thinking_summary\b[^>]*>([\s\S]*?)<\/thinking_summary>/i);
+
   const thinking = thinkingMatch
     ? cleanPerspectiveText(thinkingMatch[1].trim(), userName)
     : '';
 
-  const content = thinkingMatch
-    ? raw.replace(thinkingMatch[0], '').trim()
-    : raw;
+  let content = raw;
+  if (thinkingMatch) content = content.replace(thinkingMatch[0], '').trim();
+  if (summaryMatch) content = content.replace(summaryMatch[0], '').trim();
+
+  let thinkingSummary = summaryMatch
+    ? cleanPerspectiveText(summaryMatch[1].trim(), userName)
+    : '';
+
+  thinkingSummary = stripEmoji(thinkingSummary).replace(/^摘要[:：]?\s*/i, '').trim();
+  if (!thinkingSummary && thinking) thinkingSummary = summarizeText(thinking, 15);
+  if (thinkingSummary.length > 15) thinkingSummary = thinkingSummary.slice(0, 15).trim();
 
   return {
     content: stripEmoji(content),
     thinking: stripEmoji(thinking),
-    thinkingSummary: summarizeText(thinking, 28),
+    thinkingSummary,
     toolCalls: []
   };
 }
@@ -1410,13 +1622,17 @@ function normalizeToolCalls(value) {
 
   return value.map((tool, index) => {
     const fn = tool.function || {};
+    const normalizedName = tool.name || fn.name || tool.toolName || `工具 ${index + 1}`;
+    const normalizedArgs = tool.arguments || fn.arguments || tool.input || '';
+    const normalizedResult = tool.result || tool.output || '';
 
     return cleanForDB({
       id: tool.id || generateId('tool'),
-      name: tool.name || fn.name || tool.toolName || `工具 ${index + 1}`,
+      name: normalizedName,
       status: tool.status || 'done',
-      arguments: tool.arguments || fn.arguments || tool.input || '',
-      result: tool.result || tool.output || ''
+      arguments: normalizedArgs,
+      result: normalizedResult,
+      detailSummary: tool.detailSummary || buildFallbackToolSummary({ name: normalizedName, status: tool.status || 'done', result: normalizedResult }, index)
     });
   });
 }
@@ -1579,7 +1795,7 @@ async function markMessageStopped(store, id, content) {
     isError: false,
     status: 'stopped',
     thinking: message.thinking || '我刚刚被打断了，先把话停住。',
-    thinkingSummary: message.thinkingSummary || '已停止',
+    thinkingSummary: message.thinkingSummary || '先停一下',
     updatedAt: getNow()
   });
 
@@ -2126,6 +2342,49 @@ function similarText(a, b) {
   if (left === right) return true;
   if (left.includes(right) || right.includes(left)) return true;
   return left.slice(0, 24) === right.slice(0, 24);
+}
+
+function parseStructuredThinking(result) {
+  if (!result) return { summary: '', thinking: '' };
+
+  if (typeof result === 'object') {
+    const directSummary = String(result.summary || result.thinkingSummary || '').trim();
+    const directThinking = String(result.thinking || result.content || result.text || result.message || result.reply || '').trim();
+
+    if (directSummary || directThinking) {
+      return {
+        summary: directSummary,
+        thinking: directThinking
+      };
+    }
+
+    const nested = result.choices?.[0]?.message?.content || '';
+    return parseStructuredThinking(nested);
+  }
+
+  const text = String(result || '').trim();
+  if (!text) return { summary: '', thinking: '' };
+
+  try {
+    const parsed = JSON.parse(text);
+    return {
+      summary: String(parsed.summary || parsed.thinkingSummary || '').trim(),
+      thinking: String(parsed.thinking || parsed.content || '').trim()
+    };
+  } catch (_) {}
+
+  const fenced = text.match(/```json\s*([\s\S]*?)```/i) || text.match(/```\s*([\s\S]*?)```/i);
+  if (fenced) {
+    try {
+      const parsed = JSON.parse(fenced[1].trim());
+      return {
+        summary: String(parsed.summary || parsed.thinkingSummary || '').trim(),
+        thinking: String(parsed.thinking || parsed.content || '').trim()
+      };
+    } catch (_) {}
+  }
+
+  return { summary: '', thinking: text };
 }
 
 function isPageActive() {
