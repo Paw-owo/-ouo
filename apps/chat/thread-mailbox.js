@@ -1,35 +1,59 @@
 // apps/chat/thread-mailbox.js
 // imports:
-//   from '../../core/ai-phone-hub.js': getMailboxItems, markMailboxItemRead, getUnreadMailboxCount
-//   from '../../core/ui.js': showToast
+//   from '../../core/ai-phone-hub.js': getMailboxItems, markMailboxItemRead
 
-import { getMailboxItems, markMailboxItemRead, getUnreadMailboxCount } from '../../core/ai-phone-hub.js';
-import { showToast } from '../../core/ui.js';
+import { getMailboxItems, markMailboxItemRead } from '../../core/ai-phone-hub.js';
 
-// ═══════════════════════════════════════
-// 【信箱详情页】导出给 thread-tools.js
-// ═══════════════════════════════════════
+var MAILBOX_STYLE_ID = 'chat-mailbox-style';
+
+function injectMailboxStyle() {
+  var old = document.getElementById(MAILBOX_STYLE_ID);
+  if (old) old.remove();
+
+  var style = document.createElement('style');
+  style.id = MAILBOX_STYLE_ID;
+  style.textContent = [
+    '.tools-mailbox-wrap{display:flex;flex-direction:column;gap:12px;min-height:0;max-height:52vh;overflow:hidden}',
+    '.tools-mailbox-list{flex:1;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;display:flex;flex-direction:column;gap:10px;padding-bottom:8px}',
+    '.tools-mailbox-card{padding:12px 14px;border-radius:var(--radius-lg);background:var(--bg-card);box-shadow:var(--shadow-sm);cursor:pointer;transition:all 0.2s ease}',
+    '.tools-mailbox-card:active{transform:scale(0.98)}',
+    '.tools-mailbox-card.is-read{opacity:0.75}',
+    '.tools-mailbox-card.is-open{background:var(--surface-muted)}',
+    '.tools-mailbox-top{display:flex;align-items:center;gap:8px}',
+    '.tools-mailbox-dot{width:8px;height:8px;flex:0 0 auto;border-radius:50%;background:transparent}',
+    '.tools-mailbox-dot.unread{background:var(--accent)}',
+    '.tools-mailbox-title{flex:1;min-width:0;font-size:14px;font-weight:600;color:var(--text-primary);overflow:hidden;white-space:nowrap;text-overflow:ellipsis}',
+    '.tools-mailbox-time{font-size:11px;color:var(--text-hint);white-space:nowrap}',
+    '.tools-mailbox-preview{margin-top:6px;font-size:13px;color:var(--text-secondary);line-height:1.4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+    '.tools-mailbox-detail{display:none;margin-top:10px;padding-top:10px;border-top:1px solid var(--surface-muted);font-size:14px;color:var(--text-primary);line-height:1.7;white-space:pre-wrap;word-break:break-word}',
+    '.tools-mailbox-card.is-open .tools-mailbox-detail{display:block}',
+    '.tools-empty{padding:16px 12px;border-radius:var(--radius-lg);background:var(--surface-muted);color:var(--text-hint);font-size:13px;line-height:1.6;text-align:center}',
+  ].join('');
+  document.head.appendChild(style);
+}
 
 export function buildMailboxDetail(state, options) {
+  injectMailboxStyle();
+
   var wrap = document.createElement('div');
   wrap.className = 'tools-mailbox-wrap';
 
-  var characterId = state?.characterId || '';
-
-  // 列表容器
+  var characterId = state && state.characterId ? state.characterId : '';
   var listWrap = document.createElement('div');
   listWrap.className = 'tools-mailbox-list';
 
-  function renderList() {
+  function render() {
     listWrap.innerHTML = '';
+
     if (!characterId) {
-      listWrap.appendChild(createEmptyTip('还没有绑定角色'));
+      listWrap.appendChild(el('div', 'tools-empty', '还没有绑定角色'));
+      wrap.appendChild(listWrap);
       return;
     }
 
     getMailboxItems(characterId).then(function(items) {
       if (!items || !items.length) {
-        listWrap.appendChild(createEmptyTip('信箱空空的，还没有新消息~'));
+        listWrap.appendChild(el('div', 'tools-empty', '信箱空空的，还没有新消息~'));
         return;
       }
 
@@ -37,8 +61,8 @@ export function buildMailboxDetail(state, options) {
         var card = document.createElement('div');
         card.className = 'tools-mailbox-card' + (mail.readAt ? ' is-read' : '');
 
-        var topRow = document.createElement('div');
-        topRow.className = 'tools-mailbox-top';
+        var top = document.createElement('div');
+        top.className = 'tools-mailbox-top';
 
         var dot = document.createElement('span');
         dot.className = 'tools-mailbox-dot';
@@ -50,84 +74,75 @@ export function buildMailboxDetail(state, options) {
 
         var time = document.createElement('div');
         time.className = 'tools-mailbox-time';
-        time.textContent = formatMailTime(mail.createdAt || '');
+        time.textContent = formatTime(mail.createdAt);
 
-        topRow.append(dot, title, time);
-        card.appendChild(topRow);
+        top.append(dot, title, time);
+        card.appendChild(top);
 
         var preview = document.createElement('div');
         preview.className = 'tools-mailbox-preview';
-        var contentText = mail.content || '';
-        preview.textContent = contentText.length > 15 ? contentText.slice(0, 15) + '...' : contentText;
+        var txt = mail.content || '';
+        preview.textContent = txt.length > 15 ? txt.slice(0, 15) + '...' : txt;
         card.appendChild(preview);
 
-        // 展开区
-        var detailEl = document.createElement('div');
-        detailEl.className = 'tools-mailbox-detail';
-        detailEl.textContent = contentText;
-        card.appendChild(detailEl);
+        var detail = document.createElement('div');
+        detail.className = 'tools-mailbox-detail';
+        detail.textContent = txt;
+        card.appendChild(detail);
 
-        card.addEventListener('click', async function() {
-          var isOpen = card.classList.contains('is-open');
-          if (isOpen) {
+        card.addEventListener('click', function() {
+          if (card.classList.contains('is-open')) {
             card.classList.remove('is-open');
             return;
           }
 
-          listWrap.querySelectorAll('.tools-mailbox-card.is-open').forEach(function(el) {
-            el.classList.remove('is-open');
-          });
+          var openCards = listWrap.querySelectorAll('.tools-mailbox-card.is-open');
+          for (var i = 0; i < openCards.length; i++) {
+            openCards[i].classList.remove('is-open');
+          }
 
           card.classList.add('is-open');
 
-          // 标记已读
           if (!mail.readAt && mail.id) {
-            try {
-              await markMailboxItemRead(mail.id);
+            markMailboxItemRead(mail.id).then(function() {
               mail.readAt = new Date().toISOString();
               dot.classList.remove('unread');
               card.classList.add('is-read');
-            } catch (e) {
-              // 标记失败不影响展示
-            }
+            }).catch(function() {});
           }
         });
 
         listWrap.appendChild(card);
       });
     }).catch(function() {
-      listWrap.appendChild(createEmptyTip('加载失败，试试重新打开~'));
+      listWrap.appendChild(el('div', 'tools-empty', '加载失败了，再试试吧'));
     });
   }
 
-  renderList();
+  render();
   wrap.appendChild(listWrap);
   return wrap;
 }
 
-// ═══════════════════════════════════════
-// 【辅助】
-// ═══════════════════════════════════════
-
-function formatMailTime(timeStr) {
-  if (!timeStr) return '';
+function formatTime(t) {
+  if (!t) return '';
   try {
-    var d = new Date(timeStr);
-    if (isNaN(d.getTime())) return timeStr.slice(0, 10) || '';
-    var month = String(d.getMonth() + 1).padStart(2, '0');
+    var d = new Date(t);
+    if (isNaN(d.getTime())) return t.slice(0, 10);
+    var m = String(d.getMonth() + 1).padStart(2, '0');
     var day = String(d.getDate()).padStart(2, '0');
-    var hour = String(d.getHours()).padStart(2, '0');
+    var h = String(d.getHours()).padStart(2, '0');
     var min = String(d.getMinutes()).padStart(2, '0');
-    return month + '/' + day + ' ' + hour + ':' + min;
+    return m + '/' + day + ' ' + h + ':' + min;
   } catch (e) {
-    return timeStr.slice(0, 10) || '';
+    return t.slice(0, 10);
   }
 }
 
-function createEmptyTip(text) {
-  var el = document.createElement('div');
-  el.className = 'tools-empty';
-  el.textContent = text || '';
-  return el;
+function el(tag, cls, text) {
+  var n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (text) n.textContent = text;
+  return n;
 }
 
