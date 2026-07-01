@@ -498,6 +498,7 @@ function createErrorBubble(state, message, pageEl) {
   card.append(icon, text, retryBtn);
   return card;
 }
+
 // ───────────────────
 // 语音消息卡片（猫爪图标 + 全局播放管理 + 暂停/继续）
 // ───────────────────
@@ -2162,7 +2163,7 @@ function injectStyle() {
       line-height: 1.65;
     }
 
-    /* ── 思维链 ── */
+    /* ── 思维链容器（样式由 thinking-chain.js 自管） ── */
 
     .chat-reasoning-stack {
       width: auto;
@@ -2184,269 +2185,6 @@ function injectStyle() {
 
     .chat-reasoning-stack.mode-dialog {
       max-width: 220px;
-    }
-
-    /* ── thinking 折叠卡片 ── */
-
-    .chat-thinking-card {
-      width: 100%;
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-    }
-
-    .chat-thinking-trigger {
-      width: 100%;
-      min-height: 34px;
-      display: grid;
-      grid-template-columns: auto minmax(0, 1fr) auto;
-      align-items: center;
-      gap: 8px;
-      padding: 7px 10px;
-      border: none;
-      outline: none;
-      border-radius: 16px;
-      background: var(--surface-muted);
-      color: var(--text-secondary);
-      box-shadow: var(--shadow-sm);
-      font: inherit;
-      font-size: 12px;
-      line-height: 1.4;
-      text-align: left;
-      transition: all 200ms ease;
-      touch-action: manipulation;
-      -webkit-user-select: none;
-      user-select: none;
-    }
-
-    .chat-thinking-trigger:active {
-      transform: scale(0.98);
-    }
-
-    .chat-thinking-trigger-icon {
-      width: 16px;
-      height: 16px;
-      flex: 0 0 auto;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      color: var(--text-hint);
-    }
-
-    .chat-thinking-trigger-text {
-      min-width: 0;
-      overflow: hidden;
-      white-space: nowrap;
-      text-overflow: ellipsis;
-    }
-
-    .chat-thinking-trigger-arrow {
-      width: 14px;
-      height: 14px;
-      flex: 0 0 auto;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      color: var(--text-hint);
-      transition: transform 200ms ease;
-    }
-
-    .chat-thinking-card[data-expanded="true"] .chat-thinking-trigger-arrow {
-      transform: rotate(90deg);
-    }
-
-    .chat-thinking-body {
-      display: grid;
-      grid-template-rows: 0fr;
-      overflow: hidden;
-      opacity: 0;
-      transition: grid-template-rows 220ms ease, opacity 200ms ease;
-    }
-
-    .chat-thinking-card[data-expanded="true"] .chat-thinking-body {
-      grid-template-rows: 1fr;
-      opacity: 1;
-    }
-
-    .chat-thinking-body > * {
-      min-height: 0;
-    }
-
-    .chat-thinking-text {
-      margin: 0;
-      padding: 12px 14px;
-      border-radius: 18px;
-      background: var(--bg-card);
-      color: var(--text-primary);
-      box-shadow: var(--shadow-sm);
-      font-size: 13px;
-      line-height: 1.65;
-      white-space: pre-wrap;
-      word-break: break-word;
-    }
-
-    .chat-thinking-waiting {
-      margin: 0;
-      padding: 12px 14px;
-      border-radius: 18px;
-      background: var(--bg-card);
-      color: var(--text-secondary);
-      box-shadow: var(--shadow-sm);
-      font-size: 13px;
-      line-height: 1.65;
-    }
-
-    /* ── 工具时间线 ── */
-
-    .chat-thinking-tools {
-      position: relative;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      padding-left: 14px;
-    }
-
-    .chat-thinking-tools::before {
-      content: "";
-      position: absolute;
-      left: 25px;
-      top: 14px;
-      bottom: 14px;
-      width: 2px;
-      border-radius: 999px;
-      background: var(--bg-hover);
-      opacity: 0.6;
-    }
-
-    .chat-thinking-tool-item {
-      position: relative;
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-    }
-
-    .chat-thinking-tool-head {
-      width: 100%;
-      display: grid;
-      grid-template-columns: auto auto minmax(0,1fr) auto;
-      align-items: center;
-      gap: 8px;
-      padding: 6px 10px;
-      border: none;
-      outline: none;
-      border-radius: 14px;
-      background: var(--bg-card);
-      color: var(--text-primary);
-      box-shadow: var(--shadow-sm);
-      font: inherit;
-      font-size: 12px;
-      line-height: 1.4;
-      text-align: left;
-      transition: all 200ms ease;
-      touch-action: manipulation;
-    }
-
-    .chat-thinking-tool-head:active {
-      transform: scale(0.98);
-    }
-
-    .chat-thinking-tool-dot {
-      width: 10px;
-      height: 10px;
-      border-radius: 999px;
-      background: var(--accent);
-      box-shadow: 0 0 0 3px var(--bg-primary);
-      z-index: 1;
-    }
-
-    .chat-thinking-tool-dot[data-status="running"] {
-      background: var(--accent);
-      animation: chatThinkingToolPulse 1.2s ease-in-out infinite;
-    }
-
-    .chat-thinking-tool-dot[data-status="error"] {
-      background: var(--text-secondary);
-    }
-
-    .chat-thinking-tool-dot[data-status="done"] {
-      background: var(--text-hint);
-    }
-
-    .chat-thinking-tool-icon {
-      width: 14px;
-      height: 14px;
-      flex: 0 0 auto;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      color: var(--text-secondary);
-    }
-
-    .chat-thinking-tool-title {
-      min-width: 0;
-      overflow: hidden;
-      white-space: nowrap;
-      text-overflow: ellipsis;
-      color: var(--text-secondary);
-    }
-
-    .chat-thinking-tool-arrow {
-      width: 12px;
-      height: 12px;
-      flex: 0 0 auto;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      color: var(--text-hint);
-      transition: transform 200ms ease;
-    }
-
-    .chat-thinking-tool-item[data-open="true"] .chat-thinking-tool-arrow {
-      transform: rotate(90deg);
-    }
-
-    .chat-thinking-tool-body {
-      display: grid;
-      grid-template-rows: 0fr;
-      overflow: hidden;
-      opacity: 0;
-      padding-left: 32px;
-      transition: grid-template-rows 220ms ease, opacity 200ms ease;
-    }
-
-    .chat-thinking-tool-item[data-open="true"] .chat-thinking-tool-body {
-      grid-template-rows: 1fr;
-      opacity: 1;
-      padding-top: 4px;
-    }
-
-    .chat-thinking-tool-body > .chat-thinking-tool-detail-text {
-      min-height: 0;
-    }
-
-    .chat-thinking-tool-detail-text {
-      margin: 0;
-      padding: 10px 12px;
-      border-radius: 14px;
-      background: var(--surface-muted);
-      color: var(--text-primary);
-      box-shadow: var(--shadow-sm);
-      font-family: var(--font-main);
-      font-size: 12px;
-      line-height: 1.6;
-      white-space: pre-wrap;
-      word-break: break-word;
-    }
-
-    @keyframes chatThinkingToolPulse {
-      0%, 100% {
-        opacity: 0.55;
-        transform: scale(0.9);
-      }
-      50% {
-        opacity: 1;
-        transform: scale(1.1);
-      }
     }
 
     /* ── 代码块卡片 ── */
@@ -3213,14 +2951,6 @@ function injectStyle() {
         min-width: 20px;
         padding: 0 5px;
       }
-
-      .chat-thinking-tools::before {
-        left: 23px;
-      }
-
-      .chat-thinking-tool-body {
-        padding-left: 28px;
-      }
     }
 
     /* 修复：对话模式下语音/骰子/猜拳卡片间距适配 */
@@ -3265,10 +2995,7 @@ function injectStyle() {
       .chat-voice-waves i,
       .chat-pending-dot,
       .chat-pending-text,
-      .chat-html-preview-overlay,
-      .chat-thinking-tool-dot,
-      .chat-thinking-body,
-      .chat-thinking-tool-body {
+      .chat-html-preview-overlay {
         animation: none;
         transition: none;
       }
@@ -3277,6 +3004,3 @@ function injectStyle() {
 
   document.head.appendChild(style);
 }
-
-// 改了什么：1) 导入加 switchThreadVersion/getVersionInfo；2) getVisibleMessages 过滤 archived 版本；3) createMessageRow AI 消息底部加版本翻页 createVersionPager；4) 新增 createVersionPager 函数；5) createLineIcon 加 chevron-left/chevron-right 图标；6) CSS 加 .chat-version-pager 系列样式；7) 修复 normalizeDiceValue 里乱码文字；8) 修复 CSS 里 ver → var。
-// 依赖：../../core/storage.js(getData)；../../core/ui.js(showToast,showBottomSheet,hideBottomSheet)；./thread-actions.js(copyThreadMessage,quoteThreadMessage,editThreadMessage,deleteThreadMessage,regenerateThreadMessage,resendThreadMessage,playThreadTTS,stopThreadTTS,switchThreadVersion,getVersionInfo)；./thinking-chain.js(createThinkingCard,hasThinkingChain)
