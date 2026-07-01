@@ -2,7 +2,7 @@
 // imports: none
 
 const DB_NAME = 'ai_phone_db';
-const DB_VERSION = 5;
+const DB_VERSION = 6;
 
 const STORE_DEFINITIONS = [
   { name: 'characters', options: { keyPath: 'id' } },
@@ -58,6 +58,66 @@ const STORE_DEFINITIONS = [
       { name: 'groupType', keyPath: 'groupType' },
       { name: 'updatedAt', keyPath: 'updatedAt' },
       { name: 'status', keyPath: 'status' }
+    ]
+  },
+  {
+    name: 'ai_phone_diaries',
+    options: { keyPath: 'id' },
+    indexes: [
+      { name: 'characterId', keyPath: 'characterId' },
+      { name: 'createdAt', keyPath: 'createdAt' }
+    ]
+  },
+  {
+    name: 'ai_phone_visits',
+    options: { keyPath: 'id' },
+    indexes: [
+      { name: 'characterId', keyPath: 'characterId' },
+      { name: 'createdAt', keyPath: 'createdAt' },
+      { name: 'appId', keyPath: 'appId' }
+    ]
+  },
+  {
+    name: 'ai_phone_chat_archives',
+    options: { keyPath: 'id' },
+    indexes: [
+      { name: 'characterId', keyPath: 'characterId' },
+      { name: 'createdAt', keyPath: 'createdAt' }
+    ]
+  },
+  {
+    name: 'ai_phone_memos',
+    options: { keyPath: 'id' },
+    indexes: [
+      { name: 'characterId', keyPath: 'characterId' },
+      { name: 'createdAt', keyPath: 'createdAt' }
+    ]
+  },
+  {
+    name: 'ai_phone_mailbox',
+    options: { keyPath: 'id' },
+    indexes: [
+      { name: 'characterId', keyPath: 'characterId' },
+      { name: 'createdAt', keyPath: 'createdAt' },
+      { name: 'readAt', keyPath: 'readAt' }
+    ]
+  },
+  {
+    name: 'ai_phone_app_locks',
+    options: { keyPath: 'id' },
+    indexes: [
+      { name: 'characterId', keyPath: 'characterId' },
+      { name: 'appId', keyPath: 'appId' },
+      { name: 'status', keyPath: 'status' }
+    ]
+  },
+  {
+    name: 'ai_phone_action_logs',
+    options: { keyPath: 'id' },
+    indexes: [
+      { name: 'characterId', keyPath: 'characterId' },
+      { name: 'createdAt', keyPath: 'createdAt' },
+      { name: 'actionType', keyPath: 'actionType' }
     ]
   }
 ];
@@ -481,6 +541,4 @@ export async function getStorageUsage() {
   };
 }
 
-// 改了什么：数据库版本升到 5，新增 api_pool 仓库（groupType + updatedAt + status 索引），原有核心读写不动。
-// 会不会影响其他文件：会影响 IndexedDB 初始化；旧库刷新后自动升级，不需要其他文件同步改导出。
-// depends: none
+// 改了什么：DB_VERSION 从 5 升到 6，新增 AI个人手机 7 个仓库与索引，保留已有 store 与导出函数不变。
