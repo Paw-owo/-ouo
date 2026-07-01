@@ -3,6 +3,7 @@
 //   from '../../core/storage.js': generateId, getNow, setDB, getDB, deleteDB, getByIndexDB
 //   from '../../core/ui.js': showToast
 //   from '../../core/tts.js': playTTS, stopAll
+//   from './thread-ai-phone-actions.js': archivePrivateMessageIfNeeded
 // dynamic imports:
 //   from './thread-ai.js': requestThreadAIReply, stopThreadAIReply
 
@@ -17,6 +18,7 @@ import {
 
 import { showToast } from '../../core/ui.js';
 import { playTTS, stopAll } from '../../core/tts.js';
+import { archivePrivateMessageIfNeeded } from './thread-ai-phone-actions.js';
 
 let requestThreadAIReplyFn = null;
 let stopThreadAIReplyFn = null;
@@ -473,7 +475,6 @@ export async function sendTransferMessage(state, amount, note = '', extra = {}) 
 
   return message;
 }
-
 export async function sendImageMessage(state, imageBase64, caption = '', extra = {}) {
   const image = String(imageBase64 || '').trim();
 
@@ -610,6 +611,7 @@ export async function sendRpsMessage(state, options = {}) {
     rolling: false
   };
 }
+
 // ═══════════════════════════════════════
 // 【TTS】语音朗读
 // ═══════════════════════════════════════
@@ -855,6 +857,10 @@ function normalizeNestedCard(value) {
   });
 }
 
+// ═══════════════════════════════════════
+// 【saveMessage】保存消息 + 私聊存档同步
+// ═══════════════════════════════════════
+
 async function saveMessage(state, message) {
   const store = getStoreName(state);
   const cleanMessage = cleanForDB(message);
@@ -876,6 +882,18 @@ async function saveMessage(state, message) {
   }
 
   await refreshStateMessages(state);
+
+  // ── 私聊消息同步到AI手机聊天存档 ──
+  if (state.mode !== 'group') {
+    const characterId = state.characterId || cleanMessage.characterId || '';
+    archivePrivateMessageIfNeeded({
+      characterId,
+      message: cleanMessage,
+      isGroup: false,
+      mode: 'private'
+    }).catch(() => {});
+  }
+
   return cleanMessage;
 }
 
@@ -1292,5 +1310,4 @@ function wait(ms) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
-// 改了什么：1) regenerateThreadMessage 不删旧消息，标记 archived + versionGroupId；2) 新增 switchThreadVersion 翻页；3) 新增 getVersionInfo；4) deleteThreadMessage 连带删除同版本组；5) buildBaseMessage/buildFallbackMessage 加 versionGroupId/versionStatus；6) 修复 getCopyText 里 '翻账' → 'transfer'；7) 修复 getCardSummary 里 'notes' → 'note'。
-// 依赖：../../core/storage.js(generateId,getNow,setDB,getDB,deleteDB,getByIndexDB)；../../core/ui.js(showToast)；../../core/tts.js(playTTS,stopAll)；动态依赖 ./thread-ai.js(requestThreadAIReply,stopThreadAIReply)
+// 改动说明：新增 import archivePrivateMessageIfNeeded，saveMessage 函数保存私聊消息后调 archivePrivateMessageIfNeeded 同步存档；群聊跳过；不影响现有流式、停止、重来、版本翻页、排队发送逻辑。
