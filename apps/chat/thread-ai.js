@@ -133,37 +133,64 @@ function getFriendlyErrorMessage(status) {
 }
 
 // ═══════════════════════════════════════
-// 【流式渲染辅助】节流更新内存消息 + 局部刷新
+// 【流式渲染辅助】实时拆分 think 标签 + 节流渲染
 // ═══════════════════════════════════════
 
 function createStreamAccumulator() {
   return {
-    content: '',
-    thinking: '',
-    thinkingSummary: '',
+    rawContent: '',
+    rawThinking: '',
+    rawThinkingSummary: '',
     lastRender: 0,
+    thinkClosed: false,
+    summaryClosed: false,
 
     append({ content, thinking, thinkingSummary }) {
-      if (content) this.content += content;
-      if (thinking) this.thinking = this.thinking ? this.thinking + '\n' + thinking : thinking;
+      if (content) this.rawContent += content;
+      if (thinking) this.rawThinking = this.rawThinking ? this.rawThinking + '\n' + thinking : thinking;
       if (thinkingSummary) {
-        this.thinkingSummary = this.thinkingSummary
-          ? this.thinkingSummary + thinkingSummary
+        this.rawThinkingSummary = this.rawThinkingSummary
+          ? this.rawThinkingSummary + thinkingSummary
           : thinkingSummary;
       }
     },
 
+    parse() {
+      let content = this.rawContent;
+      let thinking = this.rawThinking;
+      let thinkingSummary = this.rawThinkingSummary;
+
+      if (content) {
+        const result = parseStreamThinkTags(content);
+        if (result.thinking) {
+          thinking = thinking ? thinking + '\n' + result.thinking : result.thinking;
+        }
+        if (result.thinkingSummary) {
+          thinkingSummary = thinkingSummary
+            ? thinkingSummary + result.thinkingSummary
+            : result.thinkingSummary;
+        }
+        content = result.content;
+      }
+
+      return { content, thinking, thinkingSummary };
+    },
+
     applyTo(message) {
       if (!message) return;
-      message.content = this.content;
-      message.thinking = this.thinking;
+
+      const { content, thinking, thinkingSummary } = this.parse();
+
+      message.content = content;
+      message.thinking = thinking;
       message.isStreaming = true;
-      if (this.thinkingSummary) {
-        message.thinkingSummary = this.thinkingSummary.length > 15
-          ? this.thinkingSummary.slice(0, 15).trim()
-          : this.thinkingSummary;
-      } else if (this.thinking && !message.thinkingSummary) {
-        message.thinkingSummary = summarizeText(this.thinking, 15);
+
+      if (thinkingSummary) {
+        message.thinkingSummary = thinkingSummary.length > 15
+          ? thinkingSummary.slice(0, 15).trim()
+          : thinkingSummary;
+      } else if (thinking && !message.thinkingSummary) {
+        message.thinkingSummary = summarizeText(thinking, 15);
       }
     },
 
@@ -176,6 +203,82 @@ function createStreamAccumulator() {
       return false;
     }
   };
+}
+
+function parseStreamThinkTags(text) {
+  let content = String(text || '');
+  let thinking = '';
+  let thinkingSummary = '';
+
+  const thinkOpen = content.indexOf('<think');
+  if (thinkOpen >= 0) {
+    const tagEnd = content.indexOf('>', thinkOpen);
+    if (tagEnd >= 0) {
+      const closeIdx = content.indexOf('</think>', tagEnd + 1);
+
+      if (closeIdx >= 0) {
+        thinking = content.slice(tagEnd + 1, closeIdx).trim();
+        content = (content.slice(0, thinkOpen) + content.slice(closeIdx + 8)).trim();
+      } else {
+        thinking = content.slice(tagEnd + 1).trim();
+        content = content.slice(0, thinkOpen).trim();
+      }
+    }
+  }
+
+  const thinkOpen2 = content.indexOf('<thinking');
+  if (thinkOpen2 >= 0) {
+    const tagEnd2 = content.indexOf('>', thinkOpen2);
+    if (tagEnd2 >= 0) {
+      const closeIdx2 = content.indexOf('</thinking>', tagEnd2 + 1);
+
+      if (closeIdx2 >= 0) {
+        thinking = thinking ? thinking + '\n' + content.slice(tagEnd2 + 1, closeIdx2).trim() : content.slice(tagEnd2 + 1, closeIdx2).trim();
+        content = (content.slice(0, thinkOpen2) + content.slice(closeIdx2 + 12)).trim();
+      } else {
+        const partial = content.slice(tagEnd2 + 1).trim();
+        thinking = thinking ? thinking + '\n' + partial : partial;
+        content = content.slice(0, thinkOpen2).trim();
+      }
+    }
+  }
+
+  const summaryOpen = content.indexOf('<think_summary');
+  if (summaryOpen >= 0) {
+    const tagEnd3 = content.indexOf('>', summaryOpen);
+    if (tagEnd3 >= 0) {
+      const closeIdx3 = content.indexOf('</think_summary>', tagEnd3 + 1);
+
+      if (closeIdx3 >= 0) {
+        thinkingSummary = content.slice(tagEnd3 + 1, closeIdx3).trim();
+        content = (content.slice(0, summaryOpen) + content.slice(closeIdx3 + 16)).trim();
+      } else {
+        thinkingSummary = content.slice(tagEnd3 + 1).trim();
+        content = content.slice(0, summaryOpen).trim();
+      }
+    }
+  }
+
+  const summaryOpen2 = content.indexOf('<thinking_summary');
+  if (summaryOpen2 >= 0) {
+    const tagEnd4 = content.indexOf('>', summaryOpen2);
+    if (tagEnd4 >= 0) {
+      const closeIdx4 = content.indexOf('</thinking_summary>', tagEnd4 + 1);
+
+      if (closeIdx4 >= 0) {
+        thinkingSummary = thinkingSummary
+          ? thinkingSummary + content.slice(tagEnd4 + 1, closeIdx4).trim()
+          : content.slice(tagEnd4 + 1, closeIdx4).trim();
+        content = (content.slice(0, summaryOpen2) + content.slice(closeIdx4 + 19)).trim();
+      } else {
+        const partial2 = content.slice(tagEnd4 + 1).trim();
+        thinkingSummary = thinkingSummary ? thinkingSummary + partial2 : partial2;
+        content = content.slice(0, summaryOpen2).trim();
+      }
+    }
+  }
+
+  return { content, thinking, thinkingSummary };
 }
 
 function resolveGroupTypes(character) {
@@ -339,8 +442,8 @@ async function requestPrivateReply(state, options = {}) {
     groupId: '',
     character,
     content: '',
-    thinking: options.proactive ? `我想主动和${userName}说句话。` : `我正在认真想怎么回应${userName}。`,
-    thinkingSummary: options.proactive ? '想主动开口' : '正在整理思路',
+    thinking: '',
+    thinkingSummary: '',
     toolCalls: [],
     isPending: true,
     status: 'pending',
@@ -436,8 +539,8 @@ async function requestPrivateReply(state, options = {}) {
     const finalMessage = cleanForDB({
       ...placeholder,
       content: parsed.content || '我刚刚有点卡住了，可以再说一遍吗？',
-      thinking: parsed.thinking || placeholder.thinking,
-      thinkingSummary: parsed.thinkingSummary || summarizeText(parsed.thinking || placeholder.thinking, 15),
+      thinking: parsed.thinking || '',
+      thinkingSummary: parsed.thinkingSummary || summarizeText(parsed.thinking || '', 15),
       toolCalls: parsed.toolCalls,
       proactive: Boolean(options.proactive),
       proactiveReason: options.proactiveReason || '',
@@ -570,8 +673,8 @@ async function requestGroupReply(state, options = {}) {
         groupId,
         character,
         content: '',
-        thinking: `我正在想怎么接住${userName}的话。`,
-        thinkingSummary: '正在接话',
+        thinking: '',
+        thinkingSummary: '',
         toolCalls: [],
         isPending: true,
         status: 'pending',
@@ -664,8 +767,8 @@ async function requestGroupReply(state, options = {}) {
         const finalMessage = cleanForDB({
           ...placeholder,
           content: parsed.content || '我先听你们说。',
-          thinking: parsed.thinking || placeholder.thinking,
-          thinkingSummary: parsed.thinkingSummary || summarizeText(parsed.thinking || placeholder.thinking, 15),
+          thinking: parsed.thinking || '',
+          thinkingSummary: parsed.thinkingSummary || summarizeText(parsed.thinking || '', 15),
           toolCalls: parsed.toolCalls,
           characterName: character.name || 'TA',
           characterAvatar: character.avatar || '',
