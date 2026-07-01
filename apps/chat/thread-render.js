@@ -142,38 +142,43 @@ function createMessageRow(state, message, pageEl) {
   row.dataset.messageId = message.id || '';
   row.dataset.role = role;
 
+  const body = el('div', `chat-message-body role-${role}`);
+
+  // 作者信息：头像 + 名字 + 思维链胶囊（如果有）
+  const author = createMessageAuthor(state, message);
+
   if (role === 'assistant' && hasThinkingChain(message)) {
-    row.appendChild(createReasoningStack(state, message, mode));
+    const reasoning = createReasoningStack(state, message, mode);
+    author.appendChild(reasoning);
   }
+
+  body.append(
+    author,
+    createBubbleContent(state, message, pageEl),
+    createMessageActions(state, message, pageEl)
+  );
+  row.appendChild(body);
 
   if (role === 'assistant' && mode === 'bubble' && !message.isPending && !message.isError) {
     const chunks = splitAIBubbleChunks(message);
     if (chunks.length > 1) {
+      body.replaceChildren();
       chunks.forEach((chunkText, chunkIndex) => {
         const chunkBody = el('div', 'chat-message-body role-assistant');
         chunkBody.append(
-          createMessageAuthor(state, message),
+          chunkIndex === 0 ? author : el('div', 'chat-message-author-placeholder'),
           createSingleBubbleChunk(state, message, chunkText, chunkIndex === 0, chunkIndex === chunks.length - 1),
           chunkIndex === 0 ? createMessageActions(state, message, pageEl) : el('div', 'chat-message-actions-placeholder')
         );
         row.appendChild(chunkBody);
       });
 
-      // 版本翻页
       const pager = createVersionPager(state, message, pageEl);
       if (pager) row.appendChild(pager);
 
       return row;
     }
   }
-
-  const body = el('div', `chat-message-body role-${role}`);
-  body.append(
-    createMessageAuthor(state, message),
-    createBubbleContent(state, message, pageEl),
-    createMessageActions(state, message, pageEl)
-  );
-  row.appendChild(body);
 
   // 版本翻页（AI 消息且有多个版本时显示）
   if (role === 'assistant') {
@@ -1651,6 +1656,10 @@ function injectStyle() {
       min-height: 0;
     }
 
+    .chat-message-author-placeholder {
+      min-height: 26px;
+    }
+
     /* ── 对话模式 ── */
 
     .chat-message-row.mode-dialog {
@@ -1675,10 +1684,12 @@ function injectStyle() {
 
     .chat-message-author {
       max-width: 100%;
+      width: fit-content;
       display: inline-flex;
       align-items: center;
       gap: 6px;
       min-width: 0;
+      flex-wrap: wrap;
     }
 
     .chat-message-author.role-user {
@@ -2171,6 +2182,7 @@ function injectStyle() {
       display: flex;
       flex-direction: column;
       gap: 6px;
+      flex: 0 0 auto;
     }
 
     .chat-reasoning-stack.role-user {
@@ -2183,14 +2195,6 @@ function injectStyle() {
 
     .chat-reasoning-stack.mode-dialog {
       max-width: 220px;
-    }
-
-    .chat-message-row.mode-dialog.role-assistant .chat-reasoning-stack {
-      margin-left: 0;
-    }
-
-    .chat-message-row.mode-dialog.role-user .chat-reasoning-stack {
-      margin-right: 0;
     }
 
     /* ── 代码块卡片 ── */
