@@ -5,6 +5,7 @@
 //   from '../../core/memory.js': buildMemoryPrompt, checkImportantInfo, checkAndSummarize
 //   from './identity-core.js': getIdentityCore
 //   from './thread-ai-local.js': tryLocalOrSiliconFlowReply
+//   from './thread-ai-phone-actions.js': runAIPhoneActions, archivePrivateMessageIfNeeded
 
 import {
   getData,
@@ -30,9 +31,7 @@ import { getIdentityCore } from './identity-core.js';
 
 import { tryLocalOrSiliconFlowReply } from './thread-ai-local.js';
 
-// ═══════════════════════════════════════
-// 【基础配置】聊天 AI 常量和运行状态
-// ═══════════════════════════════════════
+import { runAIPhoneActions, archivePrivateMessageIfNeeded } from './thread-ai-phone-actions.js';
 
 const PRIVATE_STORE = 'messages';
 const GROUP_STORE = 'group_messages';
@@ -110,10 +109,6 @@ const PUNISHMENT_POOL = [
   }
 ];
 
-// ═══════════════════════════════════════
-// 【可爱报错文案】按 HTTP 状态码返回
-// ═══════════════════════════════════════
-
 const FRIENDLY_ERROR_MAP = {
   400: '这波啊，这波是格式没整对，',
   401: '没key就想进？急了急了。',
@@ -131,10 +126,6 @@ const FRIENDLY_ERROR_MAP = {
 function getFriendlyErrorMessage(status) {
   return FRIENDLY_ERROR_MAP[Number(status)] || '我刚刚出了点小状况，再说一遍试试？';
 }
-
-// ═══════════════════════════════════════
-// 【流式渲染辅助】实时拆分 think 标签 + 节流渲染
-// ═══════════════════════════════════════
 
 function createStreamAccumulator() {
   return {
@@ -298,10 +289,6 @@ function resolveGroupTypes(character) {
   return ['paid', 'free'];
 }
 
-// ═══════════════════════════════════════
-// 【公开接口】私聊、群聊、停止、主动消息
-// ═══════════════════════════════════════
-
 export async function requestThreadAIReply(state, options = {}) {
   if (!state) return null;
 
@@ -407,9 +394,8 @@ export async function requestProactiveThreadMessage(state, reason = 'manual') {
     incrementUnread: true
   });
 }
-
 // ═══════════════════════════════════════
-// 【私聊回复】生成单人聊天回复并触发统一记忆系统
+// 【私聊回复】生成单人聊天回复 + AI手机行为 + 私聊存档
 // ═══════════════════════════════════════
 
 async function requestPrivateReply(state, options = {}) {
@@ -536,12 +522,25 @@ async function requestPrivateReply(state, options = {}) {
       return null;
     }
 
+    // ── 执行AI手机行为（日记/备忘录/行为记录等） ──
+    const phoneToolCalls = await runAIPhoneActions({
+      characterId,
+      character,
+      aiContent: parsed.content || '',
+      userName
+    }).catch(() => []);
+
+    const mergedToolCalls = [
+      ...(Array.isArray(parsed.toolCalls) ? parsed.toolCalls : []),
+      ...phoneToolCalls
+    ];
+
     const finalMessage = cleanForDB({
       ...placeholder,
       content: parsed.content || '我刚刚有点卡住了，可以再说一遍吗？',
       thinking: parsed.thinking || '',
       thinkingSummary: parsed.thinkingSummary || summarizeText(parsed.thinking || '', 15),
-      toolCalls: parsed.toolCalls,
+      toolCalls: mergedToolCalls,
       proactive: Boolean(options.proactive),
       proactiveReason: options.proactiveReason || '',
       relationshipLockId: activeLock?.id || '',
@@ -554,6 +553,14 @@ async function requestPrivateReply(state, options = {}) {
     });
 
     await safeSetMessage(PRIVATE_STORE, finalMessage);
+
+    // ── 存档AI回复到AI手机 ──
+    archivePrivateMessageIfNeeded({
+      characterId,
+      message: finalMessage,
+      isGroup: false,
+      mode: 'private'
+    }).catch(() => {});
 
     const memoryMessages = [...messages, finalMessage];
 
@@ -630,10 +637,6 @@ async function sendProactivePrivateMessage(state, options = {}) {
     incrementUnread: options.incrementUnread !== false
   });
 }
-
-// ═══════════════════════════════════════
-// 【群聊回复】多人聊天回复并为对应角色写入记忆
-// ═══════════════════════════════════════
 
 async function requestGroupReply(state, options = {}) {
   const group = state.group;
@@ -833,11 +836,6 @@ async function requestGroupReply(state, options = {}) {
     finishAIJob(state, job);
   }
 }
-
-// ═══════════════════════════════════════
-// 【内心独白】后台生成角色思考过程
-// ═══════════════════════════════════════
-
 async function generateInnerMonologue({
   character,
   store,
@@ -970,10 +968,6 @@ function parseInnerMonologueResult(result, userName) {
 
   return { summary, thinking };
 }
-
-// ═══════════════════════════════════════
-// 【工具详情AI生成】后台异步，不阻塞主回复
-// ═══════════════════════════════════════
 
 function enrichToolCallsBackground(toolCalls, options = {}) {
   const character = options.character;
@@ -1118,10 +1112,6 @@ function stringifyToolDetail(value) {
   }
   return String(value || '').trim();
 }
-
-// ═══════════════════════════════════════
-// 【Prompt构建】身份、人设、世界书、记忆、上下文
-// ═══════════════════════════════════════
 
 async function buildPrompt({
   mode,
@@ -1354,10 +1344,6 @@ function buildGrudgePrompt(context, activeLock, userName) {
   return lines.join('\n');
 }
 
-// ═══════════════════════════════════════
-// 【梦境注入】把最近梦境注入 prompt
-// ═══════════════════════════════════════
-
 async function buildDreamPrompt(characterId, userName) {
   if (!characterId) return '';
 
@@ -1411,11 +1397,6 @@ function getDreamMoodLabel(moodId) {
   const moods = { sweet: '甜甜', weird: '奇怪', funny: '搞笑', sad: '忧伤', adventure: '冒险', chaos: '混乱' };
   return moods[moodId] || '奇怪';
 }
-
-// ═══════════════════════════════════════
-// 【模式提示】回复格式、think标签和输出约束
-// ═══════════════════════════════════════
-
 function buildModePrompt(mode, group, character, options, userName, userProfile = {}) {
   const callName = String(character?.nicknameForUser || '').trim() || userName;
   const genderHint = getUserGenderHint(userProfile);
@@ -1543,10 +1524,6 @@ function formatMessageForPrompt(message, mode, userName = '你') {
   return `${prefix}${message.content || ''}`.trim();
 }
 
-// ═══════════════════════════════════════
-// 【AI请求】走 callAPI 流式 + 轮换池
-// ═══════════════════════════════════════
-
 async function requestAITextDirect(promptMessages, options = {}) {
   const character = options.character || null;
   const signal = options.signal;
@@ -1628,10 +1605,6 @@ function extractResponseText(data, provider) {
 
   return data?.choices?.[0]?.message?.content || '';
 }
-
-// ═══════════════════════════════════════
-// 【旧版AI请求】保留兼容（内心独白等仍使用）
-// ═══════════════════════════════════════
 
 async function requestAIText(messages, options = {}) {
   const settings = getData('app_settings') || {};
@@ -1740,10 +1713,6 @@ function normalizeToolCalls(value) {
   });
 }
 
-// ═══════════════════════════════════════
-// 【记忆任务】实时检查和自动总结
-// ═══════════════════════════════════════
-
 async function runMemoryTasks(characterId, messages, options = {}) {
   if (!characterId) return;
 
@@ -1774,10 +1743,6 @@ function buildMemoryQueryText(messages, userName) {
     .map((message) => formatMessageForPrompt(message, 'private', userName))
     .join('\n');
 }
-
-// ═══════════════════════════════════════
-// 【占位消息】AI回复前先插一条空消息
-// ═══════════════════════════════════════
 
 function createAssistantPlaceholder({
   characterId,
@@ -1817,10 +1782,6 @@ function createAssistantPlaceholder({
     updatedAt: now
   });
 }
-
-// ═══════════════════════════════════════
-// 【AI任务管理】启动、停止、中止检测
-// ═══════════════════════════════════════
 
 function startAIJob(state, meta = {}) {
   const key = getAIJobKey(state);
@@ -1906,10 +1867,6 @@ async function markMessageStopped(store, id, content) {
   return next;
 }
 
-// ═══════════════════════════════════════
-// 【错误消息】把 placeholder 更新为可爱报错文案
-// ═══════════════════════════════════════
-
 async function markMessageError(store, id, content) {
   if (!store || !id) return null;
 
@@ -1937,10 +1894,6 @@ async function getMessageByIdFromStore(store, id) {
   const list = await getAllDB(store).catch(() => []);
   return normalizeList(list).find((item) => item.id === id) || null;
 }
-
-// ═══════════════════════════════════════
-// 【记仇系统】检测信号、触发惩罚
-// ═══════════════════════════════════════
 
 async function maybeWriteGrudge({ character, sourceMessage, aiText, activeLock }) {
   const settings = getData('app_grudge_settings') || {};
@@ -2077,10 +2030,6 @@ function choosePunishment(score) {
   return PUNISHMENT_POOL[Math.floor(Math.random() * Math.min(3, PUNISHMENT_POOL.length))];
 }
 
-// ═══════════════════════════════════════
-// 【关系锁】读取和管理锁定状态
-// ═══════════════════════════════════════
-
 async function loadGrudgeContext(characterId) {
   if (!characterId) return { score: 0, entries: [], punishment: null, lock: null };
 
@@ -2125,10 +2074,6 @@ async function getLatestActivePunishment(characterId) {
   const list = await getByIndexDB(PUNISHMENT_STORE, 'characterId', characterId).catch(() => []);
   return normalizeList(list).filter((item) => item.status === 'pending').sort(sortByUpdatedAtDesc)[0] || null;
 }
-
-// ═══════════════════════════════════════
-// 【数据加载】消息、群聊、世界书、道具
-// ═══════════════════════════════════════
 
 async function loadPrivateMessages(characterId) {
   const list = await getByIndexDB(PRIVATE_STORE, 'characterId', characterId).catch(() => []);
@@ -2182,10 +2127,6 @@ async function loadInventory() {
 function loadAnniversary() {
   return getData('anniversary_items') || getData('app_anniversary') || getData('anniversaries') || null;
 }
-
-// ═══════════════════════════════════════
-// 【用户档案】读取和规范化用户人设
-// ═══════════════════════════════════════
 
 function loadUserProfileForCharacter(character) {
   const settings = getData('app_settings') || {};
@@ -2257,10 +2198,6 @@ function getUserGenderHint(user) {
   return '';
 }
 
-// ═══════════════════════════════════════
-// 【群聊成员】解析和选择发言人
-// ═══════════════════════════════════════
-
 async function resolveGroupMembers(group) {
   const ids = Array.isArray(group?.memberIds) ? group.memberIds.map(String) : [];
   const characters = await getAllDB('characters').catch(() => []);
@@ -2287,10 +2224,6 @@ function chooseGroupSpeakers(members, messages) {
 function getLastUserMessage(messages) {
   return [...normalizeList(messages)].reverse().find((item) => item.role === 'user') || null;
 }
-
-// ═══════════════════════════════════════
-// 【聊天配置】主动消息和记忆参数
-// ═══════════════════════════════════════
 
 function getChatConfig(characterId) {
   const key = getChatConfigKey(characterId);
@@ -2321,212 +2254,4 @@ async function markUserReplyIfNeeded(characterId, config, lastMessage) {
   if (!characterId || !lastMessage || lastMessage.role !== 'user') return;
 
   const lastUserTime = new Date(lastMessage.timestamp || lastMessage.createdAt || 0).getTime();
-  const proactiveTime = new Date(config.proactiveLastSentAt || 0).getTime();
-
-  if (config.proactiveAwaitingUserReply && lastUserTime > proactiveTime) {
-    saveChatConfig(characterId, { ...config, proactiveAwaitingUserReply: false });
-  }
-}
-
-function markProactiveSent(characterId) {
-  const config = getChatConfig(characterId);
-  const now = getNow();
-
-  saveChatConfig(characterId, {
-    ...config,
-    proactiveLastSentAt: now,
-    proactiveAwaitingUserReply: true,
-    proactiveNextCheckAt: null
-  });
-}
-
-async function updateUnreadCount(characterId, delta = 0) {
-  if (!characterId) return;
-
-  const key = 'chat_unread_counts';
-  const counts = getData(key) || {};
-  const current = Number(counts[characterId] || 0);
-  const next = { ...counts, [characterId]: Math.max(0, current + Number(delta || 0)) };
-
-  setData(key, next);
-
-  window.AppEvents?.emit?.('badge:chat', { characterId, count: next[characterId] });
-
-  if (typeof window.refreshDesktopBadges === 'function') window.refreshDesktopBadges();
-}
-
-// ═══════════════════════════════════════
-// 【安全写入】数据库写入带降级
-// ═══════════════════════════════════════
-
-async function safeSetMessage(store, message) {
-  const clean = cleanForDB(message);
-
-  try {
-    await setDB(store, clean);
-    return clean;
-  } catch (error) {
-    console.error('AI message write failed', error);
-
-    const fallback = cleanForDB({
-      ...clean,
-      content: String(clean.content || '').slice(0, 4000),
-      thinking: String(clean.thinking || '').slice(0, 1000),
-      toolCalls: []
-    });
-
-    await setDB(store, fallback);
-    return fallback;
-  }
-}
-
-// ═══════════════════════════════════════
-// 【通用工具】清理、文本处理、排序
-// ═══════════════════════════════════════
-
-function cleanForDB(value) {
-  if (Array.isArray(value)) return value.map((item) => cleanForDB(item)).filter((item) => item !== undefined);
-
-  if (!value || typeof value !== 'object') {
-    if (typeof value === 'undefined') return undefined;
-    if (typeof value === 'function') return undefined;
-    if (typeof value === 'symbol') return undefined;
-    return value;
-  }
-
-  if (value instanceof Date) return value.toISOString();
-
-  const result = {};
-
-  Object.entries(value).forEach(([key, item]) => {
-    if (typeof item === 'undefined' || typeof item === 'function' || typeof item === 'symbol') return;
-
-    if (item instanceof Date) {
-      result[key] = item.toISOString();
-      return;
-    }
-
-    if (item && typeof item === 'object') {
-      result[key] = cleanForDB(item);
-      return;
-    }
-
-    result[key] = item;
-  });
-
-  return result;
-}
-
-function cleanPerspectiveText(text, userName = '你') {
-  return String(text || '')
-    .replace(/用户/g, userName)
-    .replace(/这位玩家/g, userName)
-    .replace(/对方/g, userName)
-    .replace(/你(应该)/g, '我会')
-    .replace(/你(需要)/g, '我会')
-    .replace(/你(要)/g, '我会')
-    .replace(/你(必须)/g, '我会')
-    .replace(/请(你)/g, '我会')
-    .replace(/请/g, '')
-    .trim();
-}
-
-function stripEmoji(text) {
-  return String(text || '')
-    .replace(/[\u{1F300}-\u{1FAFF}]/gu, '')
-    .replace(/[\u{2600}-\u{27BF}]/gu, '')
-    .trim();
-}
-
-function similarText(a, b) {
-  const left = String(a || '').replace(/\s+/g, '');
-  const right = String(b || '').replace(/\s+/g, '');
-  if (!left || !right) return false;
-  if (left === right) return true;
-  if (left.includes(right) || right.includes(left)) return true;
-  return left.slice(0, 24) === right.slice(0, 24);
-}
-
-function parseStructuredThinking(result) {
-  if (!result) return { summary: '', thinking: '' };
-
-  if (typeof result === 'object') {
-    const directSummary = String(result.summary || result.thinkingSummary || '').trim();
-    const directThinking = String(result.thinking || result.content || result.text || result.message || result.reply || '').trim();
-
-    if (directSummary || directThinking) {
-      return {
-        summary: directSummary,
-        thinking: directThinking
-      };
-    }
-
-    const nested = result.choices?.[0]?.message?.content || '';
-    return parseStructuredThinking(nested);
-  }
-
-  const text = String(result || '').trim();
-  if (!text) return { summary: '', thinking: '' };
-
-  try {
-    const parsed = JSON.parse(text);
-    return {
-      summary: String(parsed.summary || parsed.thinkingSummary || '').trim(),
-      thinking: String(parsed.thinking || parsed.content || '').trim()
-    };
-  } catch (_) {}
-
-  const fenced = text.match(/```json\s*([\s\S]*?)```/i) || text.match(/```\s*([\s\S]*?)```/i);
-  if (fenced) {
-    try {
-      const parsed = JSON.parse(fenced[1].trim());
-      return {
-        summary: String(parsed.summary || parsed.thinkingSummary || '').trim(),
-        thinking: String(parsed.thinking || parsed.content || '').trim()
-      };
-    } catch (_) {}
-  }
-
-  return { summary: '', thinking: text };
-}
-
-function isPageActive() {
-  return document.visibilityState === 'visible' && document.hasFocus();
-}
-
-function formatCurrentTime() {
-  return new Date().toLocaleString([], {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    weekday: 'short',
-    hour: '2-digit',
-    minute: '2-digit'
-  });
-}
-
-function summarizeText(text, max = 60) {
-  const clean = String(text || '').replace(/\s+/g, ' ').trim();
-  if (!clean) return '';
-  return clean.length > max ? `${clean.slice(0, max)}…` : clean;
-}
-
-function normalizeList(value) {
-  return Array.isArray(value) ? value.filter(Boolean) : [];
-}
-
-function sortByTimestamp(a, b) {
-  return String(a?.timestamp || '').localeCompare(String(b?.timestamp || ''));
-}
-
-function sortByUpdatedAtDesc(a, b) {
-  return String(b?.updatedAt || b?.createdAt || '').localeCompare(String(a?.updatedAt || a?.createdAt || ''));
-}
-
-function clampNumber(value, min, max) {
-  const number = Number(value);
-  if (!Number.isFinite(number)) return min;
-  return Math.max(min, Math.min(max, Math.floor(number)));
-}
-
-// depends: ../../core/storage.js(getData,setData,generateId,getNow,setDB,deleteDB,getByIndexDB,getAllDB,getDB)；../../core/api.js(silentRequest,callAPI)；../../core/memory.js(buildMemoryPrompt,checkImportantInfo,checkAndSummarize)；./identity-core.js(getIdentityCore)；./thread-ai-local.js(tryLocalOrSiliconFlowReply)
+  const proactiveTime = new Date(config.proactiveLastSentAt ||
