@@ -16,7 +16,7 @@ const THINKING_SHEET_CARD_CLASS = 'chat-thinking-sheet-card';
 
 const FIXED_SUMMARY_TEXT = '想了一小会';
 const FIXED_SUMMARY_TEXT_RUNNING = '还在想想';
-const THINKING_STYLE_ID = 'chat-thinking-chain-style-v5';
+const THINKING_STYLE_ID = 'chat-thinking-chain-style-v6';
 const MAX_CACHE_ENTRIES = 200;
 
 const stateCache = new Map();
@@ -1158,9 +1158,8 @@ function injectStyle() {
       right:0;
       bottom:0;
       z-index:10041;
-      width:min(430px,100vw);
-      max-height:56vh;
-      margin:0 auto;
+      width:100vw;
+      height:50vh;
       display:flex;
       flex-direction:column;
       border-radius:28px 28px 0 0;
@@ -1341,10 +1340,6 @@ function injectStyle() {
     }
 
     @media(max-width:520px){
-      .chat-thinking-sheet{
-        max-height:60vh;
-      }
-
       .chat-thinking-preview-text-wrap{
         padding:10px 11px;
       }
