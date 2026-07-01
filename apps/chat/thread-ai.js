@@ -205,7 +205,7 @@ function parseStreamThinkTags(text) {
   if (thinkOpen >= 0) {
     const tagEnd = content.indexOf('>', thinkOpen);
     if (tagEnd >= 0) {
-      const closeIdx = content.indexOf('</think>', tagEnd + 1);
+      const closeIdx = content.indexOf(' response', tagEnd + 1);
 
       if (closeIdx >= 0) {
         thinking = content.slice(tagEnd + 1, closeIdx).trim();
@@ -1052,9 +1052,7 @@ function enrichToolCallsBackground(toolCalls, options = {}) {
       }
       state.renderOnly?.();
     }
-  }).catch(() => {
-    // 静默失败，不影响主回复
-  });
+  }).catch(() => {});
 }
 
 function parseToolSummaries(result) {
@@ -1411,9 +1409,9 @@ function buildModePrompt(mode, group, character, options, userName, userProfile 
     genderHint ? `- 我用第三人称提到对方时，会优先按小档案写成"${genderHint}"，也可以直接用名字或关系称呼。` : '- 我用第三人称提到对方时，会优先用名字或关系称呼，拿不准就不硬写性别。',
     '- 我会根据自己的人设、世界书、长期记忆、当前时间和最近上下文来回应。',
     '- 每次正式回复前，我会先写一段真正属于我自己的内心想法，再输出正文。',
-    '- 我会把内心想法放在<think>标签里，内容必须是我自己真实会闪过的念头，不是固定模板。',
-    '- <think>里的内容用第一人称，像我自己心里在小声说话，可以有情绪、犹豫、在意、偏爱。',
-    '- <think>之后我会额外单独写一行<think_summary>，里面只有一句15字以内的小摘要，像我给自己贴的小标签，也必须按我的人设自己写。',
+    '- 我会把内心想法放在 thinking标签里，内容必须是我自己真实会闪过的念头，不是固定模板。',
+    '-  thinking里的内容用第一人称，像我自己心里在小声说话，可以有情绪、犹豫、在意、偏爱。',
+    '-  thinking之后我会额外单独写一行<think_summary>，里面只有一句15字以内的小摘要，像我给自己贴的小标签，也必须按我的人设自己写。',
     '- <think_summary>不重复正文，不写解释，不写固定词。',
     '- 正文优先像手机聊天，不机械总结，不官方，不教育腔。'
   ];
@@ -2254,4 +2252,210 @@ async function markUserReplyIfNeeded(characterId, config, lastMessage) {
   if (!characterId || !lastMessage || lastMessage.role !== 'user') return;
 
   const lastUserTime = new Date(lastMessage.timestamp || lastMessage.createdAt || 0).getTime();
-  const proactiveTime = new Date(config.proactiveLastSentAt ||
+  const proactiveTime = new Date(config.proactiveLastSentAt || 0).getTime();
+
+  if (config.proactiveAwaitingUserReply && lastUserTime > proactiveTime) {
+    saveChatConfig(characterId, { ...config, proactiveAwaitingUserReply: false });
+  }
+}
+
+function markProactiveSent(characterId)
+  if (config.proactiveAwaitingUserReply && lastUserTime > proactiveTime) {
+    saveChatConfig(characterId, { ...config, proactiveAwaitingUserReply: false });
+  }
+}
+
+function markProactiveSent(characterId) {
+  const config = getChatConfig(characterId);
+  const now = getNow();
+
+  saveChatConfig(characterId, {
+    ...config,
+    proactiveLastSentAt: now,
+    proactiveAwaitingUserReply: true,
+    proactiveNextCheckAt: null
+  });
+}
+
+async function updateUnreadCount(characterId, delta = 0) {
+  if (!characterId) return;
+
+  const key = 'chat_unread_counts';
+  const counts = getData(key) || {};
+  const current = Number(counts[characterId] || 0);
+  const next = { ...counts, [characterId]: Math.max(0, current + Number(delta || 0)) };
+
+  setData(key, next);
+
+  window.AppEvents?.emit?.('badge:chat', { characterId, count: next[characterId] });
+
+  if (typeof window.refreshDesktopBadges === 'function') window.refreshDesktopBadges();
+}
+
+async function safeSetMessage(store, message) {
+  const clean = cleanForDB(message);
+
+  try {
+    await setDB(store, clean);
+    return clean;
+  } catch (error) {
+    console.error('AI message write failed', error);
+
+    const fallback = cleanForDB({
+      ...clean,
+      content: String(clean.content || '').slice(0, 4000),
+      thinking: String(clean.thinking || '').slice(0, 1000),
+      toolCalls: []
+    });
+
+    await setDB(store, fallback);
+    return fallback;
+  }
+}
+
+function cleanForDB(value) {
+  if (Array.isArray(value)) return value.map((item) => cleanForDB(item)).filter((item) => item !== undefined);
+
+  if (!value || typeof value !== 'object') {
+    if (typeof value === 'undefined') return undefined;
+    if (typeof value === 'function') return undefined;
+    if (typeof value === 'symbol') return undefined;
+    return value;
+  }
+
+  if (value instanceof Date) return value.toISOString();
+
+  const result = {};
+
+  Object.entries(value).forEach(([key, item]) => {
+    if (typeof item === 'undefined' || typeof item === 'function' || typeof item === 'symbol') return;
+
+    if (item instanceof Date) {
+      result[key] = item.toISOString();
+      return;
+    }
+
+    if (item && typeof item === 'object') {
+      result[key] = cleanForDB(item);
+      return;
+    }
+
+    result[key] = item;
+  });
+
+  return result;
+}
+
+function cleanPerspectiveText(text, userName = '你') {
+  return String(text || '')
+    .replace(/用户/g, userName)
+    .replace(/这位玩家/g, userName)
+    .replace(/对方/g, userName)
+    .replace(/你(应该)/g, '我会')
+    .replace(/你(需要)/g, '我会')
+    .replace(/你(要)/g, '我会')
+    .replace(/你(必须)/g, '我会')
+    .replace(/请(你)/g, '我会')
+    .replace(/请/g, '')
+    .trim();
+}
+
+function stripEmoji(text) {
+  return String(text || '')
+    .replace(/[\u{1F300}-\u{1FAFF}]/gu, '')
+    .replace(/[\u{2600}-\u{27BF}]/gu, '')
+    .trim();
+}
+
+function similarText(a, b) {
+  const left = String(a || '').replace(/\s+/g, '');
+  const right = String(b || '').replace(/\s+/g, '');
+  if (!left || !right) return false;
+  if (left === right) return true;
+  if (left.includes(right) || right.includes(left)) return true;
+  return left.slice(0, 24) === right.slice(0, 24);
+}
+
+function parseStructuredThinking(result) {
+  if (!result) return { summary: '', thinking: '' };
+
+  if (typeof result === 'object') {
+    const directSummary = String(result.summary || result.thinkingSummary || '').trim();
+    const directThinking = String(result.thinking || result.content || result.text || result.message || result.reply || '').trim();
+
+    if (directSummary || directThinking) {
+      return {
+        summary: directSummary,
+        thinking: directThinking
+      };
+    }
+
+    const nested = result.choices?.[0]?.message?.content || '';
+    return parseStructuredThinking(nested);
+  }
+
+  const text = String(result || '').trim();
+  if (!text) return { summary: '', thinking: '' };
+
+  try {
+    const parsed = JSON.parse(text);
+    return {
+      summary: String(parsed.summary || parsed.thinkingSummary || '').trim(),
+      thinking: String(parsed.thinking || parsed.content || '').trim()
+    };
+  } catch (_) {}
+
+  const fenced = text.match(/```json\s*([\s\S]*?)```/i) || text.match(/```\s*([\s\S]*?)```/i);
+  if (fenced) {
+    try {
+      const parsed = JSON.parse(fenced[1].trim());
+      return {
+        summary: String(parsed.summary || parsed.thinkingSummary || '').trim(),
+        thinking: String(parsed.thinking || parsed.content || '').trim()
+      };
+    } catch (_) {}
+  }
+
+  return { summary: '', thinking: text };
+}
+
+function isPageActive() {
+  return document.visibilityState === 'visible' && document.hasFocus();
+}
+
+function formatCurrentTime() {
+  return new Date().toLocaleString([], {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    weekday: 'short',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+}
+
+function summarizeText(text, max = 60) {
+  const clean = String(text || '').replace(/\s+/g, ' ').trim();
+  if (!clean) return '';
+  return clean.length > max ? `${clean.slice(0, max)}…` : clean;
+}
+
+function normalizeList(value) {
+  return Array.isArray(value) ? value.filter(Boolean) : [];
+}
+
+function sortByTimestamp(a, b) {
+  return String(a?.timestamp || '').localeCompare(String(b?.timestamp || ''));
+}
+
+function sortByUpdatedAtDesc(a, b) {
+  return String(b?.updatedAt || b?.createdAt || '').localeCompare(String(a?.updatedAt || a?.createdAt || ''));
+}
+
+function clampNumber(value, min, max) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return min;
+  return Math.max(min, Math.min(max, Math.floor(number)));
+}
+
+// 改动说明：新增 import runAIPhoneActions/archivePrivateMessageIfNeeded，AI回复完成后调 runAIPhoneActions 合并 toolCalls，保存后调 archivePrivateMessageIfNeeded 同步私聊存档，群聊不存档。
