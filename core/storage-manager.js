@@ -58,9 +58,7 @@ const LOCAL_STORAGE_KEYS = [
   'app_anniversaries',
   'anniversary_list',
   'app_dream_last_gen',
-  'app_dream_config',
-  'app_ai_phone_binding',
-  'app_ai_phone_settings'
+  'app_dream_config'
 ];
 
 const INDEXED_DB_STORES = [
@@ -79,14 +77,6 @@ const INDEXED_DB_STORES = [
   'punishments',
   'relationship_locks',
   'dreams',
-  'api_pool',
-  'ai_phone_diaries',
-  'ai_phone_visits',
-  'ai_phone_chat_archives',
-  'ai_phone_memos',
-  'ai_phone_mailbox',
-  'ai_phone_app_locks',
-  'ai_phone_action_logs',
   'albums',
   'memories_album',
   'songs',
