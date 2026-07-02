@@ -5,16 +5,12 @@
 //   from './thread-sheets.js': openTransferSheet, openClearContextSheet, openMcpSheet
 //   from './thread-relationship.js': openRelationshipLockSheet
 //   from './thread-actions.js': sendDiceMessage, sendRpsMessage
-//   from './thread-mailbox.js': buildMailboxDetail
-//   from '../../core/ai-phone-hub.js': getAllUnreadMailboxCount
 
 import { showBottomSheet, hideBottomSheet, showToast } from '../../core/ui.js';
 import { getData, setData } from '../../core/storage.js';
 import { openTransferSheet, openClearContextSheet, openMcpSheet } from './thread-sheets.js';
 import { openRelationshipLockSheet } from './thread-relationship.js';
 import { sendDiceMessage, sendRpsMessage } from './thread-actions.js';
-import { buildMailboxDetail } from './thread-mailbox.js';
-import { getAllUnreadMailboxCount } from '../../core/ai-phone-hub.js';
 
 const STYLE_ID = 'thread-tools-style-v2';
 
@@ -28,10 +24,9 @@ const TOOLS = [
   { id: 'quickReply', title: '快捷回复', icon: 'chat' },
   { id: 'transfer', title: '转账', icon: 'transfer' },
   { id: 'phone', title: '电话', icon: 'phone' },
-  { id: 'mailbox', title: '信箱', icon: 'mailbox' },
   { id: 'clearCtx', title: '清上下文', icon: 'clean' },
   { id: 'relLock', title: '关系锁', icon: 'lock' },
-  { id: 'mcp', title: 'MCP', icon: 'mcp' },
+  { id: 'mcp', title: 'MCP', icon: 'mcp' }
 ];
 
 const TOOLS_PER_PAGE = 8;
@@ -49,9 +44,9 @@ const TOOL_ICONS = {
   rps: '<circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="2.5"/><circle cx="6" cy="7.5" r="0.8" fill="currentColor"/><circle cx="10" cy="7.5" r="0.8" fill="currentColor"/><path d="M6 10.5C6.8 11.5 7.5 11.5 8 10.5C8.5 11.5 9.2 11.5 10 10.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
   clean: '<rect x="3" y="4" width="10" height="10.5" rx="3" fill="none" stroke="currentColor" stroke-width="2.5"/><line x1="2" y1="4.5" x2="14" y2="4.5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><path d="M6 4V2.5C6 1.8 6.8 1.5 8 1.5C9.2 1.5 10 1.8 10 2.5V4" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><circle cx="6" cy="8.5" r="0.6" fill="currentColor"/><circle cx="10" cy="8.5" r="0.6" fill="currentColor"/><path d="M6.5 10.5C7 11.2 7.5 11.2 8 10.5C8.5 11.2 9 11.2 9.5 10.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>',
   lock: '<path d="M8 3L5.5 5.5C4 7 4 9.5 5.5 11L8 13.5L10.5 11C12 9.5 12 7 10.5 5.5L8 3Z" fill="currentColor" opacity="0.1" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"/><circle cx="8" cy="8.5" r="1.5" fill="currentColor"/>',
-  mailbox: '<rect x="1.5" y="4" width="13" height="9" rx="2" fill="none" stroke="currentColor" stroke-width="2.5"/><polyline points="1.5,5 8,10 14.5,5" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>',
-  mcp: '<rect x="1.5" y="3" width="13" height="10" rx="3" fill="none" stroke="currentColor" stroke-width="2.5"/><path d="M5 6.5L3.5 8L5 9.5" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><line x1="7" y1="9.5" x2="11" y2="9.5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>',
+  mcp: '<rect x="1.5" y="3" width="13" height="10" rx="3" fill="none" stroke="currentColor" stroke-width="2.5"/><path d="M5 6.5L3.5 8L5 9.5" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><line x1="7" y1="9.5" x2="11" y2="9.5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>'
 };
+
 // ═══════════════════════════════════════
 // 【CSS 注入】
 // ═══════════════════════════════════════
@@ -76,7 +71,6 @@ function injectStyle() {
     .tool-cell:active .tool-icon-wrap{transform:scale(0.92)}
     .tool-icon-wrap svg{width:100%;height:100%}
     .tool-name{font-size:11px;font-weight:500;color:var(--text-secondary);line-height:1.2;text-align:center;white-space:nowrap}
-    .tool-badge{position:absolute;top:4px;right:4px;min-width:14px;height:14px;display:flex;align-items:center;justify-content:center;padding:0 4px;border-radius:999px;background:var(--accent);color:var(--bubble-user-text,#fff);font-size:9px;font-weight:700;line-height:1;box-shadow:0 0 0 2px var(--bg-primary);pointer-events:none}
     .tools-detail-wrap{display:flex;flex-direction:column;gap:14px;padding:4px 4px 8px;animation:toolsFadeIn 200ms ease both}
     .tools-detail-header{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:10px;margin-bottom:4px}
     .tools-back-btn{width:38px;height:38px;display:inline-flex;align-items:center;justify-content:center;border:none;outline:none;border-radius:var(--radius-md);background:var(--bg-card);color:var(--text-primary);box-shadow:var(--shadow-sm);transition:all 200ms ease}
@@ -100,7 +94,7 @@ function injectStyle() {
     .tools-chip{display:flex;align-items:center;gap:8px;padding:10px 14px;border:none;outline:none;border-radius:var(--radius-lg);background:var(--surface-muted);color:var(--text-primary);box-shadow:var(--shadow-sm);cursor:pointer;transition:all 0.2s ease;font-family:inherit;font-size:14px;text-align:left;-webkit-tap-highlight-color:transparent}
     .tools-chip:active{transform:scale(0.97)}
     .tools-chip-text{flex:1;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
-    .tools-chip-del{width:26px;height:26px;flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;border:none;border-radius:999px;background:transparent;color:var(--text-hint);cursor:pointer;transition:all 0.2s ease}
+    .tools-chip-del{width:26px;height:26px;flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;border:none;outline:none;border-radius:999px;background:transparent;color:var(--text-hint);cursor:pointer;transition:all 0.2s ease}
     .tools-chip-del:active{transform:scale(0.85)}
     .tools-input-row{display:flex;gap:8px;margin-top:4px}
     .tools-input{flex:1;padding:0 12px;min-height:40px;border:none;outline:none;border-radius:var(--radius-md);background:var(--surface-muted);color:var(--text-primary);box-shadow:var(--shadow-sm);font-family:inherit;font-size:14px;line-height:1.5;-webkit-appearance:none;appearance:none}
@@ -109,20 +103,6 @@ function injectStyle() {
     .tools-empty{padding:16px 12px;border-radius:var(--radius-lg);background:var(--surface-muted);color:var(--text-hint);font-size:13px;line-height:1.6;text-align:center}
     .tools-section-title{font-size:14px;font-weight:600;color:var(--text-primary);margin-bottom:2px}
     .tools-section-desc{font-size:12px;color:var(--text-secondary);line-height:1.5;margin-bottom:8px}
-    .tools-mailbox-wrap{display:flex;flex-direction:column;gap:12px;min-height:0;max-height:52vh;overflow:hidden}
-    .tools-mailbox-list{flex:1;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;display:flex;flex-direction:column;gap:10px;padding-bottom:8px}
-    .tools-mailbox-card{padding:12px 14px;border-radius:var(--radius-lg);background:var(--bg-card);box-shadow:var(--shadow-sm);cursor:pointer;transition:all 0.2s ease}
-    .tools-mailbox-card:active{transform:scale(0.98)}
-    .tools-mailbox-card.is-read{opacity:0.75}
-    .tools-mailbox-card.is-open{background:var(--surface-muted)}
-    .tools-mailbox-top{display:flex;align-items:center;gap:8px}
-    .tools-mailbox-dot{width:8px;height:8px;flex:0 0 auto;border-radius:50%;background:transparent}
-    .tools-mailbox-dot.unread{background:var(--accent)}
-    .tools-mailbox-title{flex:1;min-width:0;font-size:14px;font-weight:600;color:var(--text-primary);overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
-    .tools-mailbox-time{font-size:11px;color:var(--text-hint);white-space:nowrap}
-    .tools-mailbox-preview{margin-top:6px;font-size:13px;color:var(--text-secondary);line-height:1.4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-    .tools-mailbox-detail{display:none;margin-top:10px;padding-top:10px;border-top:1px solid var(--surface-muted);font-size:14px;color:var(--text-primary);line-height:1.7;white-space:pre-wrap;word-break:break-word}
-    .tools-mailbox-card.is-open .tools-mailbox-detail{display:block}
     @keyframes toolsFadeIn{from{opacity:0;transform:translateX(12px)}to{opacity:1;transform:translateX(0)}}
     @media(max-width:430px){.tools-option-grid{grid-template-columns:repeat(2,1fr)}}
     @media(prefers-reduced-motion:reduce){.tool-cell,.tool-icon-wrap,.tools-option-btn,.tools-chip,.tools-back-btn,.tools-send-btn{transition:none}.tools-detail-wrap{animation:none}}
@@ -155,6 +135,22 @@ function createBackIcon() {
   return svg;
 }
 
+function createCloseIcon() {
+  var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('fill', 'none');
+  svg.setAttribute('stroke', 'currentColor');
+  svg.setAttribute('stroke-width', '1.5');
+  svg.setAttribute('stroke-linecap', 'round');
+  svg.setAttribute('stroke-linejoin', 'round');
+  var p1 = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  p1.setAttribute('d', 'M6 6l12 12');
+  var p2 = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  p2.setAttribute('d', 'M18 6 6 18');
+  svg.append(p1, p2);
+  return svg;
+}
+
 // ═══════════════════════════════════════
 // 【滑页宫格】导出给 thread-panels.js
 // ═══════════════════════════════════════
@@ -164,16 +160,6 @@ export function createThreadToolsGrid(state, options = {}) {
 
   var container = document.createElement('div');
   container.className = 'tools-container';
-
-  var unreadCount = 0;
-
-  async function loadUnread() {
-    try {
-      unreadCount = await getAllUnreadMailboxCount();
-    } catch (e) {
-      unreadCount = 0;
-    }
-  }
 
   function buildSwiper() {
     var swiper = document.createElement('div');
@@ -192,13 +178,6 @@ export function createThreadToolsGrid(state, options = {}) {
         cell.type = 'button';
         cell.className = 'tool-cell';
         cell.appendChild(createToolIcon(tool.icon));
-
-        if (tool.id === 'mailbox' && unreadCount > 0) {
-          var badge = document.createElement('span');
-          badge.className = 'tool-badge';
-          badge.textContent = unreadCount > 99 ? '99+' : String(unreadCount);
-          cell.appendChild(badge);
-        }
 
         var name = document.createElement('div');
         name.className = 'tool-name';
@@ -233,7 +212,6 @@ export function createThreadToolsGrid(state, options = {}) {
       dots.appendChild(dot);
     }
 
-    // 滑动更新圆点
     swiper.addEventListener('scroll', function() {
       var idx = Math.round(swiper.scrollLeft / swiper.clientWidth);
       var allDots = dots.querySelectorAll('.tools-dot');
@@ -242,7 +220,6 @@ export function createThreadToolsGrid(state, options = {}) {
       });
     });
 
-    // 点圆点跳页
     dots.addEventListener('click', function(e) {
       var dot = e.target.closest('.tools-dot');
       if (!dot) return;
@@ -254,12 +231,10 @@ export function createThreadToolsGrid(state, options = {}) {
   }
 
   function showGrid() {
-    loadUnread().then(function() {
-      var swiper = buildSwiper();
-      container.replaceChildren(swiper);
-      var dots = buildDots(swiper);
-      if (dots) container.appendChild(dots);
-    });
+    var swiper = buildSwiper();
+    container.replaceChildren(swiper);
+    var dots = buildDots(swiper);
+    if (dots) container.appendChild(dots);
   }
 
   function showDetail(title, detailEl) {
@@ -323,9 +298,6 @@ async function handleToolClick(toolId, state, options, showDetail) {
         options.onPick({ id: 'phone' });
       }
       break;
-    case 'mailbox':
-      showDetail('信箱', buildMailboxDetail(state, options));
-      break;
     case 'clearCtx':
       closeToolsSheet(options);
       openClearContextSheet(state, options);
@@ -360,6 +332,7 @@ async function sendMessageToChat(text, options) {
     await options.onSend(text);
   }
 }
+
 // ═══════════════════════════════════════
 // 【存储辅助】按角色 ID 存取
 // ═══════════════════════════════════════
@@ -374,7 +347,7 @@ function getQuickReplies(state) {
     '在忙吗~',
     '想你了',
     '晚安',
-    '今天辛苦啦',
+    '今天辛苦啦'
   ];
 }
 
@@ -408,7 +381,7 @@ function buildDiceDetail(state, options) {
   var diceTypes = [
     { sides: 6, label: 'D6', sub: '经典骰子' },
     { sides: 20, label: 'D20', sub: '跑团骰子' },
-    { sides: 100, label: 'D100', sub: '百分骰子' },
+    { sides: 100, label: 'D100', sub: '百分骰子' }
   ];
 
   diceTypes.forEach(function(d) {
@@ -469,7 +442,7 @@ function buildRpsDetail(state, options) {
   var stats = [
     { num: record.wins || 0, label: '胜' },
     { num: record.losses || 0, label: '负' },
-    { num: record.draws || 0, label: '平' },
+    { num: record.draws || 0, label: '平' }
   ];
 
   stats.forEach(function(stat, index) {
@@ -501,7 +474,7 @@ function buildRpsDetail(state, options) {
   var choices = [
     { choice: 'rock', label: '石头', svg: '<path d="M7 11c0-2 1.3-3.5 3-3.5h3.5c2 0 3.5 1.5 3.5 3.5v2.5c0 2.8-2.2 5-5 5s-5-2.2-5-5V11Z" fill="none" stroke="currentColor" stroke-width="2.5"/>' },
     { choice: 'paper', label: '布', svg: '<path d="M6 12V7.5a1.5 1.5 0 0 1 3 0V12M9 12V5.5a1.5 1.5 0 0 1 3 0V12M12 12V6.5a1.5 1.5 0 0 1 3 0V12M15 12V8.5a1.5 1.5 0 0 1 3 0v5c0 3-2.3 5.5-6 5.5-3.2 0-6-2.2-6-5.5V12" fill="none" stroke="currentColor" stroke-width="2.5"/>' },
-    { choice: 'scissors', label: '剪刀', svg: '<path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="2.5"/><circle cx="6" cy="6" r="2" fill="none" stroke="currentColor" stroke-width="2.5"/><circle cx="6" cy="18" r="2" fill="none" stroke="currentColor" stroke-width="2.5"/>' },
+    { choice: 'scissors', label: '剪刀', svg: '<path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="2.5"/><circle cx="6" cy="6" r="2" fill="none" stroke="currentColor" stroke-width="2.5"/><circle cx="6" cy="18" r="2" fill="none" stroke="currentColor" stroke-width="2.5"/>' }
   ];
 
   choices.forEach(function(c) {
@@ -554,9 +527,6 @@ function buildRpsDetail(state, options) {
 
 function buildQuickReplyDetail(state, options) {
   var wrap = document.createElement('div');
-
-  var replies = getQuickReplies(state);
-
   var list = document.createElement('div');
   list.className = 'tools-chip-list';
 
@@ -676,22 +646,6 @@ export function showToolsPanel(state, options = {}) {
   showBottomSheet(sheet);
 }
 
-function createCloseIcon() {
-  var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  svg.setAttribute('viewBox', '0 0 24 24');
-  svg.setAttribute('fill', 'none');
-  svg.setAttribute('stroke', 'currentColor');
-  svg.setAttribute('stroke-width', '1.5');
-  svg.setAttribute('stroke-linecap', 'round');
-  svg.setAttribute('stroke-linejoin', 'round');
-  var p1 = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-  p1.setAttribute('d', 'M6 6l12 12');
-  var p2 = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-  p2.setAttribute('d', 'M18 6 6 18');
-  svg.append(p1, p2);
-  return svg;
-}
-
 // ═══════════════════════════════════════
 // 【DOM 辅助】
 // ═══════════════════════════════════════
@@ -709,3 +663,4 @@ function createText(tag, className, text) {
 
 export { showToolsPanel as default };
 
+// 改动说明：临时断开信箱入口，删除 thread-mailbox.js 和 ai-phone-hub.js 的硬依赖，避免信箱/AI手机链路拖死消息APP主入口。
