@@ -5,7 +5,6 @@
 //   from '../../core/memory.js': buildMemoryPrompt, checkImportantInfo, checkAndSummarize
 //   from './identity-core.js': getIdentityCore
 //   from './thread-ai-local.js': tryLocalOrSiliconFlowReply
-//   from './thread-ai-phone-actions.js': runAIPhoneActions, archivePrivateMessageIfNeeded
 
 import {
   getData,
@@ -30,8 +29,6 @@ import {
 import { getIdentityCore } from './identity-core.js';
 
 import { tryLocalOrSiliconFlowReply } from './thread-ai-local.js';
-
-import { runAIPhoneActions, archivePrivateMessageIfNeeded } from './thread-ai-phone-actions.js';
 
 // ═══════════════════════════════════════
 // 【基础配置】聊天 AI 常量和运行状态
@@ -412,7 +409,7 @@ export async function requestProactiveThreadMessage(state, reason = 'manual') {
 }
 
 // ═══════════════════════════════════════
-// 【私聊回复】生成单人聊天回复 + AI手机行为 + 私聊存档
+// 【私聊回复】生成单人聊天回复并触发统一记忆系统
 // ═══════════════════════════════════════
 
 async function requestPrivateReply(state, options = {}) {
@@ -539,25 +536,12 @@ async function requestPrivateReply(state, options = {}) {
       return null;
     }
 
-    // ── 执行AI手机行为（日记/备忘录/行为记录等） ──
-    const phoneToolCalls = await runAIPhoneActions({
-      characterId,
-      character,
-      aiContent: parsed.content || '',
-      userName
-    }).catch(() => []);
-
-    const mergedToolCalls = [
-      ...(Array.isArray(parsed.toolCalls) ? parsed.toolCalls : []),
-      ...phoneToolCalls
-    ];
-
     const finalMessage = cleanForDB({
       ...placeholder,
       content: parsed.content || '我刚刚有点卡住了，可以再说一遍吗？',
       thinking: parsed.thinking || '',
       thinkingSummary: parsed.thinkingSummary || summarizeText(parsed.thinking || '', 15),
-      toolCalls: mergedToolCalls,
+      toolCalls: parsed.toolCalls,
       proactive: Boolean(options.proactive),
       proactiveReason: options.proactiveReason || '',
       relationshipLockId: activeLock?.id || '',
@@ -570,14 +554,6 @@ async function requestPrivateReply(state, options = {}) {
     });
 
     await safeSetMessage(PRIVATE_STORE, finalMessage);
-
-    // ── 存档AI回复到AI手机 ──
-    archivePrivateMessageIfNeeded({
-      characterId,
-      message: finalMessage,
-      isGroup: false,
-      mode: 'private'
-    }).catch(() => {});
 
     const memoryMessages = [...messages, finalMessage];
 
@@ -983,17 +959,16 @@ function parseInnerMonologueResult(result, userName) {
   thinking = thinking.replace(/^内心独白[:：]?\s*/i, '').trim();
   thinking = thinking.replace(/^独白[:：]?\s*/i, '').trim();
   thinking = thinking.replace(/^想法[:：]?\s*/i, '').trim();
-  
 
-    thinking = cleanPerspectiveText(thinking, userName);
-    thinking = stripEmoji(thinking);
+  thinking = cleanPerspectiveText(thinking, userName);
+  thinking = stripEmoji(thinking);
 
-    summary = stripEmoji(cleanPerspectiveText(summary, userName));
-    summary = summary.replace(/^摘要[:：]?\s*/i, '').trim();
-    if (!summary) summary = summarizeText(thinking, 15);
-    if (summary.length > 15) summary = summary.slice(0, 15).trim();
+  summary = stripEmoji(cleanPerspectiveText(summary, userName));
+  summary = summary.replace(/^摘要[:：]?\s*/i, '').trim();
+  if (!summary) summary = summarizeText(thinking, 15);
+  if (summary.length > 15) summary = summary.slice(0, 15).trim();
 
-    return { summary, thinking };
+  return { summary, thinking };
 }
 
 // ═══════════════════════════════════════
@@ -1873,7 +1848,7 @@ function startAIJob(state, meta = {}) {
   return job;
 }
 
-functionfinishAIJob(state, job) {
+function finishAIJob(state, job) {
   const key = job?.key || getAIJobKey(state);
   const current = activeAIJobs.get(key);
 
@@ -2554,4 +2529,4 @@ function clampNumber(value, min, max) {
   return Math.max(min, Math.min(max, Math.floor(number)));
 }
 
-// depends: ../../core/storage.js(getData,setData,generateId,getNow,setDB,deleteDB,getByIndexDB,getAllDB,getDB)；../../core/api.js(silentRequest,callAPI)；../../core/memory.js(buildMemoryPrompt,checkImportantInfo,checkAndSummarize)；./identity-core.js(getIdentityCore)；./thread-ai-local.js(tryLocalOrSiliconFlowReply)；./thread-ai-phone-actions.js(runAIPhoneActions,archivePrivateMessageIfNeeded)
+// depends: ../../core/storage.js(getData,setData,generateId,getNow,setDB,deleteDB,getByIndexDB,getAllDB,getDB)；../../core/api.js(silentRequest,callAPI)；../../core/memory.js(buildMemoryPrompt,checkImportantInfo,checkAndSummarize)；./identity-core.js(getIdentityCore)；./thread-ai-local.js(tryLocalOrSiliconFlowReply)
