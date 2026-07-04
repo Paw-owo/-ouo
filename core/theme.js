@@ -229,11 +229,13 @@ export function setTheme(id) {
     if (!custom || custom.id !== id) return false;
     setData(KEYS.appTheme, id);
     applyTheme(custom);
+    restoreCustomColors(); // 切主题后重应用自定义颜色覆盖
     bus.emit('theme:changed', { id, theme: custom });
     return true;
   }
   setData(KEYS.appTheme, id);
   applyTheme(preset);
+  restoreCustomColors(); // 切主题后重应用自定义颜色覆盖
   bus.emit('theme:changed', { id, theme: preset });
   return true;
 }

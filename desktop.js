@@ -617,7 +617,7 @@ function bindEvents() {
   });
 
   // 窗口尺寸变化重排
-  window.addEventListener('resize', debounce(async () => { await renderAll(); await applyAllImages(); }, 260));
+  window.addEventListener('resize', debounce(async () => { rebuildDesktopPages(); await renderAll(); await applyAllImages(); }, 260));
 
   // 锁屏键盘
   lockPadEl.addEventListener('click', onLockKeyClick);
@@ -850,8 +850,10 @@ function updateVinylWidget() {
 // ════════════════════════════════════════
 let vinylAudio = null;
 let vinylIndex = -1;
+// 会话内带 url 的歌曲列表（blob URL 不持久化，刷新后失效）
+const vinylSession = [];
 function getVinylSongs() { const v = getData(KEYS.appVinylSongs, []); return Array.isArray(v) ? v : []; }
-function getVinylCurrent() { const list = getVinylSongs(); return vinylIndex >= 0 ? list[vinylIndex] : null; }
+function getVinylCurrent() { return vinylIndex >= 0 ? vinylSession[vinylIndex] : null; }
 
 async function pickLocalSong() {
   const input = document.createElement('input');
@@ -865,12 +867,10 @@ async function pickLocalSong() {
   if (!file) return;
   const url = URL.createObjectURL(file);
   const song = { id: `vinyl_${Date.now()}`, title: file.name.replace(/\.[^.]+$/, ''), artist: '本地', url, size: file.size, addedAt: new Date().toISOString() };
-  // 注：blob URL 在页面刷新后会失效，歌曲列表只记元数据，刷新后需重新挑
-  const list = getVinylSongs();
-  list.push(song);
-  // 清掉失效的 blob url，只留可恢复的本地歌曲信息（提示用户）
-  // 实际持久化只存 title，url 标记为临时
-  const persistList = list.map((s) => ({ id: s.id, title: s.title, artist: s.artist, addedAt: s.addedAt }));
+  // 会话列表存带 url 的完整对象，用于切歌
+  vinylSession.push(song);
+  // 持久化只存元数据（blob URL 刷新后失效）
+  const persistList = getVinylSongs().concat([{ id: song.id, title: song.title, artist: song.artist, addedAt: song.addedAt }]);
   setData(KEYS.appVinylSongs, persistList);
   playVinylSong(song);
   showToast('挑好啦，正在播放', 'success');
@@ -884,21 +884,17 @@ function playVinylSong(song) {
   }
   vinylAudio.src = song.url;
   vinylAudio.play().catch(() => showToast('播放不出来嘛，换个格式试试', 'error'));
-  const list = getVinylSongs();
-  vinylIndex = list.findIndex((s) => s.id === song.id);
+  // 在会话列表里定位索引
+  vinylIndex = vinylSession.findIndex((s) => s.id === song.id);
   updateVinylWidget();
 }
 
 function playVinylAt(idx) {
-  const list = getVinylSongs();
-  if (!list.length) { pickLocalSong(); return; }
-  // 列表里持久化的没 url（blob 失效），所以切歌时如果当前有 url 就在带 url 的临时列表里切
-  // 简化：上一首/下一首只在当前会话有效
-  if (idx < 0 || !list[idx] || !list[idx].url) {
-    showToast('这首歌要重新挑一下嘛', 'default');
-    return;
-  }
-  playVinylSong(list[idx]);
+  if (!vinylSession.length) { pickLocalSong(); return; }
+  // 循环切歌：超出范围回到首/尾
+  if (idx < 0) idx = vinylSession.length - 1;
+  if (idx >= vinylSession.length) idx = 0;
+  playVinylSong(vinylSession[idx]);
 }
 
 function toggleVinylPlay() {
@@ -924,12 +920,16 @@ async function applyAllImages() {
 async function applyWallpaper() {
   const rec = await getDB(STORES.blobs, KEYS.appWallpaper);
   const url = rec?.value || rec?.source || rec?.data || '';
-  const opacity = Number(rec?.opacity ?? 100) / 100;
+  // 用户语义：opacity 100 = 完全显示壁纸，0 = 完全遮住壁纸
+  // --wallpaper-soft 是遮罩层不透明度：1 = 全遮，0 = 全显
+  // 转换：maskOpacity = (100 - userOpacity) / 100
+  const userOpacity = Number(rec?.opacity ?? 100);
+  const maskOpacity = Math.max(0, Math.min(1, (100 - userOpacity) / 100));
   if (isUsableImage(url)) {
     desktopEl.style.backgroundImage = `url("${cssUrl(url)}")`;
     desktopEl.style.backgroundSize = 'cover';
     desktopEl.style.backgroundPosition = 'center';
-    document.documentElement.style.setProperty('--wallpaper-soft', String(opacity));
+    document.documentElement.style.setProperty('--wallpaper-soft', String(maskOpacity));
   } else {
     desktopEl.style.backgroundImage = '';
     document.documentElement.style.setProperty('--wallpaper-soft', '0.10');
