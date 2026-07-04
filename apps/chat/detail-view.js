@@ -7,7 +7,7 @@
 import { KEYS, STORES } from '../../core/storage-keys.js';
 import { getData, getDB, setDB, getAllDB } from '../../core/storage.js';
 import { showToast, showBottomSheet, createIcon, registerIcon } from '../../core/ui.js';
-import { formatTime, formatRelative, clamp, throttle, isUsableImage, cssUrl } from '../../core/util.js';
+import { formatTime, formatRelative, clamp, throttle, isUsableImage, cssUrl, injectStyle } from '../../core/util.js';
 import { getState, render, backToSessionList } from './index.js';
 import { openChatMoreMenu, openMessageActionSheet } from './message-actions.js';
 import { sendMessage, sendImageMessage, cancelStreaming, retrySendMessage } from './sending.js';
@@ -15,9 +15,40 @@ import { applySessionWallpaper } from './wallpaper.js';
 import { renderMarkdown } from './markdown.js';
 import { escapeHTML, escapeAttr, attachLongPress } from './shared-utils.js';
 import { openApp } from '../../core/router.js';
+import { playTTS, stopAllTTS } from '../../core/tts.js';
 
 // 注册感叹号图标（用于消息发送失败状态）
 registerIcon('alert', 'M12 3v10 M12 17h.01');
+
+// 注入 TTS 小喇叭按钮样式（仅本模块用，全部走 CSS 变量）
+injectStyle('app-chat-tts-btn', `
+  .chat-tts-btn{
+    width:26px; height:26px; padding:0;
+    border:none; border-radius:50%;
+    background:color-mix(in srgb, var(--accent-light) 36%, transparent);
+    color:var(--accent-dark);
+    display:inline-flex; align-items:center; justify-content:center;
+    cursor:pointer; transition:var(--motion);
+    flex-shrink:0;
+  }
+  .chat-tts-btn:active{ transform:scale(var(--press-scale)); }
+  .chat-tts-btn.playing{
+    background:var(--accent); color:var(--bubble-user-text);
+    box-shadow:var(--shadow-sm);
+  }
+  /* 气泡模式：把按钮塞到 chat-meta 行 */
+  .chat-meta{ display:flex; align-items:center; gap:6px; }
+  .chat-meta:empty{ display:none; }
+  /* 对话模式：按钮浮在卡片右下角 */
+  .chat-dialog-card-body{ position:relative; }
+  .chat-dialog-card .chat-tts-btn{
+    position:absolute; right:6px; bottom:6px;
+  }
+`);
+
+// 当前正在念的消息 id 与控制器（模块级，避免污染共享 state）
+let currentTTSMsgId = null;
+let currentTTSController = null;
 
 // ════════════════════════════════════════
 // 聊天详情页渲染
@@ -289,6 +320,9 @@ function createMessageEl(msg, opts = {}) {
     } else {
       // AI 消息：独立卡片，头像 + 昵称 + 时间 + markdown 正文
       const avatarHTML = renderCharacterAvatar(state.currentCharacter);
+      // AI 文本消息：在卡片正文里塞小喇叭按钮（流式中、空内容、图片消息不显示）
+      const showTTSDialog = !isImage && !opts.stream && !!(msg.content);
+      const ttsHTML = showTTSDialog ? renderTTSButton(msg.id) : '';
       el.innerHTML = `
         <div class="chat-dialog-card">
           <div class="chat-dialog-card-header">
@@ -296,9 +330,10 @@ function createMessageEl(msg, opts = {}) {
             <div class="chat-dialog-card-name">${escapeHTML(name)}</div>
             <div class="chat-dialog-card-time">${escapeHTML(time)}</div>
           </div>
-          <div class="chat-bubble chat-dialog-card-body">${quoteHTML}${inner}</div>
+          <div class="chat-bubble chat-dialog-card-body">${quoteHTML}${inner}${ttsHTML}</div>
         </div>
       `;
+      if (showTTSDialog) bindTTSButton(el, msg);
     }
     attachLongPress(el, () => openMessageActionSheet(msg));
     return el;
@@ -332,15 +367,18 @@ function createMessageEl(msg, opts = {}) {
     bubbleInner += isUser ? escapeHTML(content) : renderMarkdown(content);
   }
 
-  // 状态图标（仅用户消息显示）
+  // 状态图标（仅用户消息显示）；AI 消息显示小喇叭按钮
   const statusHTML = isUser ? renderStatusIndicator(msg) : '';
+  // AI 文本消息才显示小喇叭（流式中、空内容、图片消息不显示）
+  const showTTS = !isUser && !isImage && !opts.stream && !!(msg.content);
+  const ttsHTML = showTTS ? renderTTSButton(msg.id) : '';
 
   el.innerHTML = `
     <div class="chat-avatar">${avatarHTML}</div>
     <div class="chat-msg-main">
       ${nicknameHTML}
       <div class="chat-bubble">${bubbleInner}</div>
-      <div class="chat-meta">${statusHTML}</div>
+      <div class="chat-meta">${statusHTML}${ttsHTML}</div>
     </div>
   `;
 
@@ -357,6 +395,10 @@ function createMessageEl(msg, opts = {}) {
         if (typeof retrySendMessage === 'function') retrySendMessage(msg);
       });
     }
+  }
+  // 小喇叭按钮：点一下念 / 再点一下停
+  if (showTTS) {
+    bindTTSButton(el, msg);
   }
   // 长按操作
   attachLongPress(el, () => openMessageActionSheet(msg));
@@ -503,6 +545,103 @@ function openImagePreview(url) {
   body.appendChild(saveBtn);
 
   showBottomSheet({ title: '查看图片', bodyElement: body, dismissible: true });
+}
+
+// ════════════════════════════════════════
+// TTS 小喇叭按钮：点一下念给我听 / 再点一下停
+// ════════════════════════════════════════
+
+/** 渲染小喇叭按钮 HTML（默认未播放态） */
+function renderTTSButton(msgId) {
+  const playing = currentTTSMsgId === msgId;
+  return `<button class="chat-tts-btn${playing ? ' playing' : ''}" data-msg-id="${escapeAttr(msgId)}" data-act="tts" type="button" aria-label="${playing ? '停止' : '念给我听'}" aria-pressed="${playing ? 'true' : 'false'}">${createIcon(playing ? 'pause' : 'volume', 14).outerHTML}</button>`;
+}
+
+/** 给小喇叭按钮绑定点击事件 */
+function bindTTSButton(rowEl, msg) {
+  const btn = rowEl.querySelector('.chat-tts-btn[data-act="tts"]');
+  if (!btn) return;
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    // 正在念这一条 -> 停
+    if (currentTTSMsgId === msg.id && currentTTSController) {
+      stopCurrentTTS();
+      return;
+    }
+    // 否则开始念这一条（会先停掉旧的）
+    const text = String(msg.content || '');
+    if (!text) {
+      showToast('这条没什么可以念呀', 'default', 1200);
+      return;
+    }
+    startTTS(msg.id, text);
+  });
+}
+
+/** 开始念一条消息 */
+function startTTS(msgId, text) {
+  // 先停掉旧的
+  stopCurrentTTS();
+  // 标记为正在念，先把按钮换成 pause 图标（避免等远程合成时还显示 volume）
+  currentTTSMsgId = msgId;
+  updateTTSButton(msgId, true);
+  playTTS(text).then((ctrl) => {
+    if (!ctrl) {
+      // 没拿到控制器（空文本或被清洗为空）
+      currentTTSMsgId = null;
+      updateTTSButton(msgId, false);
+      return;
+    }
+    // 如果期间用户又点了别的，把这个停掉
+    if (currentTTSMsgId !== msgId) {
+      try { ctrl.stop(); } catch (e) {}
+      return;
+    }
+    currentTTSController = ctrl;
+    ctrl.onEnd = () => {
+      if (currentTTSMsgId === msgId) {
+        currentTTSMsgId = null;
+        currentTTSController = null;
+        updateTTSButton(msgId, false);
+      }
+    };
+  }).catch((e) => {
+    console.warn('[chat] TTS 播放失败', e);
+    currentTTSMsgId = null;
+    currentTTSController = null;
+    updateTTSButton(msgId, false);
+    showToast('念不出来呀，去「我的声音」看看配置嘛', 'error');
+  });
+}
+
+/** 停掉当前正在念的，并复位按钮 */
+function stopCurrentTTS() {
+  const prevId = currentTTSMsgId;
+  const prevCtrl = currentTTSController;
+  currentTTSMsgId = null;
+  currentTTSController = null;
+  if (prevCtrl) {
+    try { prevCtrl.stop(); } catch (e) {}
+  }
+  if (prevId) updateTTSButton(prevId, false);
+}
+
+/** 更新某个消息的小喇叭按钮播放态 */
+function updateTTSButton(msgId, playing) {
+  const listEl = getState().messageListEl;
+  if (!listEl) return;
+  const btn = listEl.querySelector(`.chat-tts-btn[data-msg-id="${cssEscape(msgId)}"]`);
+  if (!btn) return;
+  btn.classList.toggle('playing', !!playing);
+  btn.setAttribute('aria-pressed', playing ? 'true' : 'false');
+  btn.setAttribute('aria-label', playing ? '停止' : '念给我听');
+  btn.innerHTML = createIcon(playing ? 'pause' : 'volume', 14).outerHTML;
+}
+
+/** 离开聊天详情页时调一下，把正在念的停掉 */
+export function stopChatTTS() {
+  stopCurrentTTS();
+  try { stopAllTTS(); } catch (e) {}
 }
 
 // ════════════════════════════════════════

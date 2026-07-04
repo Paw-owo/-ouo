@@ -11,7 +11,7 @@ import { STORES, KEYS } from '../../core/storage-keys.js';
 import { compressImage, fileToDataURL, getDB, setDB, deleteDB, getData, setData, removeData } from '../../core/storage.js';
 import { pickImageFile, isUsableImage, cssUrl, clamp, injectStyle } from '../../core/util.js';
 import { exportToFile, importFromFile } from '../../core/storage-manager.js';
-import { showToast, showBottomSheet, showConfirm, createIcon } from '../../core/ui.js';
+import { showToast, showBottomSheet, showConfirm, createIcon, createCollapsibleCard } from '../../core/ui.js';
 import bus from '../../core/events.js';
 import { get as getConfig } from '../../core/config.js';
 // 新增卡片的子模块：拆出来避免 index.js 超过 800 行
@@ -20,6 +20,8 @@ import { renderNotifyCard } from './card-notify.js';
 import { renderDataMgmtCard } from './card-data.js';
 import { renderAppBgCard } from './card-bg.js';
 import { renderWidgetBgCard } from './card-widget-bg.js';
+import { renderMCPCard } from './card-mcp.js';
+import { renderTTSCard } from './card-tts.js';
 import { applyAppBg } from '../../core/app-bg.js';
 
 let containerEl = null;
@@ -137,26 +139,33 @@ async function renderSections() {
   body.appendChild(wrapCard(await renderThemeCard(), 'appearance'));
   body.appendChild(wrapCard(renderCustomColorsCard(), 'appearance'));
   body.appendChild(wrapCard(renderWallpaperCard(), 'appearance'));
-  body.appendChild(wrapCard(await renderAppBgCard(), 'appearance'));
+  // APP 背景内容多，默认折叠收纳
+  body.appendChild(wrapCollapsible(await renderAppBgCard(), 'appearance'));
   body.appendChild(wrapCard(renderFontCard(), 'appearance'));
   body.appendChild(wrapCard(renderScaleCard(), 'appearance'));
 
-  // ── AI 与陪伴：AI 配置 / 通知 / 自定义图标 ──
+  // ── AI 与陪伴：AI 配置 / 小工具箱 / 我的声音 / 通知 / 自定义图标 ──
   body.appendChild(wrapCard(renderAICard(), 'ai'));
+  body.appendChild(wrapCard(renderMCPCard(), 'ai'));
+  body.appendChild(wrapCard(renderTTSCard(), 'ai'));
   body.appendChild(wrapCard(renderNotifyCard(), 'ai'));
-  body.appendChild(wrapCard(await renderIconCustomCard(), 'ai'));
+  // 自定义图标列表长，默认折叠收纳
+  body.appendChild(wrapCollapsible(await renderIconCustomCard(), 'ai'));
 
   // ── 桌面与锁屏：桌面分页 / Widget 管理 / Widget 皮肤 / 隐藏图标 / 锁屏 / 今日提示 ──
   body.appendChild(wrapCard(renderPagesCard(), 'desktop'));
   body.appendChild(wrapCard(renderWidgetMgmtCard(), 'desktop'));
-  body.appendChild(wrapCard(renderWidgetBgCard(), 'desktop'));
-  body.appendChild(wrapCard(await renderHiddenIconsCard(), 'desktop'));
+  // Widget 皮肤内容多，默认折叠收纳
+  body.appendChild(wrapCollapsible(renderWidgetBgCard(), 'desktop'));
+  // 隐藏图标默认折叠收纳
+  body.appendChild(wrapCollapsible(await renderHiddenIconsCard(), 'desktop'));
   body.appendChild(wrapCard(renderLockCard(), 'desktop'));
   body.appendChild(wrapCard(renderFocusCard(), 'desktop'));
 
   // ── 数据与系统：数据备份 / 数据管理 / 天气 / 关于 ──
   body.appendChild(wrapCard(renderDataCard(), 'system'));
-  body.appendChild(wrapCard(renderDataMgmtCard(), 'system'));
+  // 数据管理有危险操作，默认折叠收纳
+  body.appendChild(wrapCollapsible(renderDataMgmtCard(), 'system'));
   body.appendChild(wrapCard(renderWeatherCard(), 'system'));
   body.appendChild(wrapCard(renderAboutCard(), 'system'));
 
@@ -171,6 +180,16 @@ function wrapCard(cardEl, section) {
   wrap.dataset.section = section;
   wrap.appendChild(cardEl);
   return wrap;
+}
+
+/** 把内容较多的卡片包进可折叠容器，默认收起。
+ *  从卡片里抠出 .card-title 当折叠头标题，避免标题重复显示。 */
+function wrapCollapsible(cardEl, section, collapsed = true) {
+  const titleEl = cardEl.querySelector('.card-title');
+  const title = titleEl ? titleEl.textContent.trim() : '';
+  if (titleEl) titleEl.remove();
+  const collapsible = createCollapsibleCard(title, cardEl, { collapsed });
+  return wrapCard(collapsible, section);
 }
 
 // ════════════════════════════════════════

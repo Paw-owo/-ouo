@@ -10,7 +10,7 @@ import bus from '../../core/events.js';
 import { injectStyle, debounce } from '../../core/util.js';
 import { applyAppBg } from '../../core/app-bg.js';
 import { renderSessionListPage, renderSessionListItems } from './session-list.js';
-import { renderChatDetailView, flushDraft } from './detail-view.js';
+import { renderChatDetailView, flushDraft, stopChatTTS } from './detail-view.js';
 import { cancelStreaming } from './sending.js';
 
 // re-export 给 message-actions.js / session-list.js 等子文件用（保持原 import 路径不变）
@@ -580,6 +580,8 @@ export function unmount() {
   // 清掉流式定时器 + abort，避免组件卸载后还在跑
   if (state.typingTimer) { clearTimeout(state.typingTimer); state.typingTimer = null; }
   cancelStreaming();
+  // 停掉正在念的 TTS，避免离开后还在念
+  try { stopChatTTS(); } catch (e) {}
   // 落盘草稿
   try { if (state.saveDraftDebounced) state.saveDraftDebounced.cancel?.(); } catch (e) {}
   flushDraft();
@@ -706,6 +708,8 @@ export async function backToSessionList() {
   // 落盘草稿
   await flushDraft();
   // 不取消进行中的流式——让 AI 在后台跑完，消息中心也能收到
+  // 但 TTS 要停掉，避免回到列表还在念
+  try { stopChatTTS(); } catch (e) {}
   state.view = 'list';
   state.currentSessionId = null;
   state.currentSession = null;

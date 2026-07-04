@@ -40,7 +40,7 @@ const SIGNS = [
 
 const ELEMENT_LABELS = { fire: '火象', earth: '土象', wind: '风象', water: '水象' };
 
-// 四象相性矩阵：同象最高、火↔风/土↔水中等、其余偏低
+// 四象相性矩阵：同象最高、火<->风/土<->水中等、其余偏低
 const ELEMENT_COMPAT = {
   fire_fire: 92, fire_earth: 58, fire_wind: 88, fire_water: 55,
   earth_earth: 90, earth_wind: 60, earth_water: 86,
@@ -457,7 +457,7 @@ function renderFortune(body, signName) {
   body.querySelector('#astro-switch').addEventListener('click', () => {
     openSignPicker(() => render());
   });
-  // 点运势条目 → 详情
+  // 点运势条目 -> 详情
   body.querySelectorAll('.astro-fortune-row').forEach((row) => {
     row.addEventListener('click', () => {
       const key = row.dataset.key;

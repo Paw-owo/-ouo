@@ -136,7 +136,9 @@ export const KEYS = Object.freeze({
   inboxMessages: 'inbox_messages',
   systemName: 'system_name',
   chatMode: 'chat_mode',           // 'bubble' | 'dialog'
-  notifySettings: 'notify_settings'
+  notifySettings: 'notify_settings',
+  // TTS 配置：provider / voice / apiKey / model / voice_settings 等
+  ttsConfig: 'tts_config'
 });
 
 export const SCHEMA_VERSION = 3;

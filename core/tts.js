@@ -12,6 +12,7 @@
 import { getData, setData } from './storage.js';
 import { get as getConfig } from './config.js';
 import { showToast } from './ui.js';
+import { KEYS } from './storage-keys.js';
 
 const MAX_INPUT_LENGTH = 500;
 const PROVIDERS = Object.freeze({
@@ -22,7 +23,7 @@ const PROVIDERS = Object.freeze({
 });
 
 export function getTTSConfig() {
-  return getData('tts_config', {
+  return getData(KEYS.ttsConfig, {
     provider: PROVIDERS.webSpeech,
     voice: '',
     rate: 1.0,
@@ -36,7 +37,7 @@ export function getTTSConfig() {
 
 export function setTTSConfig(cfg) {
   const cur = getTTSConfig();
-  return setData('tts_config', { ...cur, ...cfg });
+  return setData(KEYS.ttsConfig, { ...cur, ...cfg });
 }
 
 // 修复：cleanTextForSpeech 必须过滤 ~thinking~ 标签
@@ -86,7 +87,7 @@ export async function playTTS(text, opts = {}) {
       // fallback
       return await playWebSpeech(cleaned, cfg, opts);
     }
-    return await playAudio(audioUrl, cfg, opts);
+    return await playAudio(audioUrl, cfg, opts, cleaned);
   } catch (e) {
     console.warn('[tts] 播放失败，回退到 Web Speech', e);
     return await playWebSpeech(cleaned, cfg, opts);
@@ -219,10 +220,10 @@ async function synthElevenLabs(text, cfg) {
 }
 
 // ════════════════════════════════════════
-// 音频播放（修复：被阻止时 fallback Web Speech）
+// 音频播放（修复：被阻止时 fallback Web Speech，传 cleaned 而非原始 text）
 // ════════════════════════════════════════
 
-function playAudio(url, cfg, opts = {}) {
+function playAudio(url, cfg, opts = {}, cleaned) {
   return new Promise((resolve) => {
     const audio = new Audio(url);
     audio.rate = cfg.rate || 1.0;
@@ -240,13 +241,15 @@ function playAudio(url, cfg, opts = {}) {
     audio.onerror = async (e) => {
       console.warn('[tts] 音频播放失败，回退 Web Speech', e);
       URL.revokeObjectURL(url);
-      const fallback = await playWebSpeech(text, cfg, opts);
+      // 修复：原代码传了原始 text，应使用已清洗的 cleaned
+      const fallback = await playWebSpeech(cleaned || '', cfg, opts);
       resolve(fallback);
     };
     audio.play().catch(async (e) => {
       console.warn('[tts] play() 被阻止，回退 Web Speech', e);
       URL.revokeObjectURL(url);
-      const fallback = await playWebSpeech(cfg._cleanedText || '', cfg, opts);
+      // 修复：删除 cfg._cleanedText（从未赋值），直接传 cleaned
+      const fallback = await playWebSpeech(cleaned || '', cfg, opts);
       resolve(fallback);
     });
     resolve(ctrl);

@@ -4,7 +4,7 @@
 // 依赖：core/ai-client.js, core/ui.js, core/util.js, core/config.js
 
 import { getAIConfig, saveAIConfig, isAIConfigured, streamChat } from '../../core/ai-client.js';
-import { showToast } from '../../core/ui.js';
+import { showToast, createIcon } from '../../core/ui.js';
 import { injectStyle, clamp } from '../../core/util.js';
 import { get as getConfig, set as setConfig } from '../../core/config.js';
 
@@ -24,6 +24,14 @@ injectStyle('popo-settings-ai-card', `
   .ai-card-actions .btn{flex:1}
   .ai-card-hint{font-size:var(--font-size-small);color:var(--text-hint);line-height:1.5;margin-top:10px}
   .ai-card-hint.warn{color:var(--danger)}
+  .ai-card-model-row{display:flex;align-items:center;gap:6px}
+  .ai-card-model-row .input{flex:1;min-width:0}
+  .ai-card-model-row select.input{cursor:pointer}
+  .ai-card-model-btn{flex-shrink:0;width:36px;height:36px;display:flex;align-items:center;justify-content:center;background:var(--bg-secondary);border:none;border-radius:var(--radius-sm);color:var(--text-secondary);cursor:pointer;transition:var(--motion)}
+  .ai-card-model-btn:active{transform:scale(var(--press-scale))}
+  .ai-card-model-btn:disabled{opacity:0.5;cursor:not-allowed}
+  .ai-card-model-btn.spinning .popo-icon-svg{animation:popo-ai-spin 0.8s linear infinite}
+  @keyframes popo-ai-spin{to{transform:rotate(360deg)}}
 `);
 
 // 简单转义，input 的 value 和 textarea 内容都能用
@@ -31,6 +39,18 @@ function escapeAttr(s) {
   return String(s ?? '').replace(/[&<>"']/g, (c) => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
   }[c]));
+}
+
+// 从 OpenAI 兼容的 /v1/chat/completions 地址里提取 base URL，再请求 /models 拉模型列表
+// baseUrl 可能长这样：https://api.openai.com/v1/chat/completions，要去掉末尾的 /chat/completions
+async function fetchModelList(baseUrl, apiKey) {
+  const apiBase = baseUrl.replace(/\/chat\/completions\/?$/, '');
+  const res = await fetch(`${apiBase}/models`, {
+    headers: { 'Authorization': `Bearer ${apiKey}` }
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const json = await res.json();
+  return (json.data || []).map((m) => m.id).filter(Boolean);
 }
 
 export function renderAICard() {
@@ -56,11 +76,16 @@ export function renderAICard() {
     </div>
     <div class="ai-card-field">
       <span class="ai-card-field-label">AI 的型号</span>
-      <input class="input" id="ai-model" type="text" placeholder="gpt-4o-mini" value="${escapeAttr(cfg.model)}">
+      <div class="ai-card-model-row">
+        <input class="input" id="ai-model" type="text" placeholder="gpt-4o-mini" value="${escapeAttr(cfg.model)}">
+        <button class="ai-card-model-btn" id="ai-model-fetch" type="button" aria-label="拉取模型列表">${createIcon('refresh', 18).outerHTML}</button>
+        <button class="ai-card-model-btn" id="ai-model-manual" type="button" aria-label="切回手动输入" style="display:none">${createIcon('edit', 18).outerHTML}</button>
+      </div>
+      <span class="ai-card-field-label" style="margin-top:4px">点刷新拉一份模型列表，拉不到也能手动填嘛</span>
     </div>
     <div class="ai-card-field">
       <span class="ai-card-field-label">我的说话方式</span>
-      <textarea class="textarea ai-card-textarea" id="ai-style" placeholder="温柔可爱，第一人称，软萌语气">${escapeAttr(cfg.style)}</textarea>
+      <textarea class="textarea ai-card-textarea" id="ai-style" placeholder="留空就让 TA 跟着人设自然发挥，或写点想要的语气嘛">${escapeAttr(cfg.style)}</textarea>
     </div>
     <div class="card-row">
       <span class="card-row-label">思维链</span>
@@ -102,6 +127,71 @@ export function renderAICard() {
     eye.textContent = hidden ? '隐藏' : '显示';
   });
 
+  // 模型拉取 + 手动输入切换
+  const fetchBtn = card.querySelector('#ai-model-fetch');
+  const manualBtn = card.querySelector('#ai-model-manual');
+  const urlInput = card.querySelector('#ai-url');
+
+  // 把当前 #ai-model 节点换成新节点（input <-> select），保留当前值
+  const swapModelNode = (newNode) => {
+    const cur = card.querySelector('#ai-model');
+    const val = cur ? cur.value : '';
+    newNode.id = 'ai-model';
+    newNode.className = 'input';
+    newNode.value = val;
+    if (cur) cur.replaceWith(newNode);
+  };
+
+  // 点击拉取：读地址和钥匙，请求 /models，成功就换成下拉
+  fetchBtn.addEventListener('click', async () => {
+    const url = urlInput.value.trim();
+    const apiKey = keyInput.value.trim();
+    if (!url || !apiKey) {
+      showToast('先填好地址和钥匙嘛', 'error');
+      return;
+    }
+    fetchBtn.disabled = true;
+    fetchBtn.classList.add('spinning');
+    try {
+      const models = await fetchModelList(url, apiKey);
+      if (!models.length) {
+        showToast('拉不到模型列表呢，可以手动输入', 'error');
+        return;
+      }
+      // 换成下拉，当前填的值如果在列表里就选中它
+      const curVal = card.querySelector('#ai-model').value;
+      const select = document.createElement('select');
+      models.forEach((m) => {
+        const opt = document.createElement('option');
+        opt.value = m;
+        opt.textContent = m;
+        if (m === curVal) opt.selected = true;
+        select.appendChild(opt);
+      });
+      swapModelNode(select);
+      // 如果当前填的模型不在列表里，就默认选第一个，免得下拉空着
+      if (select.selectedIndex < 0 && select.options.length > 0) {
+        select.selectedIndex = 0;
+      }
+      manualBtn.style.display = '';
+      showToast('模型列表拉好啦', 'success');
+    } catch (e) {
+      showToast('拉不到模型列表呢，可以手动输入', 'error');
+    } finally {
+      fetchBtn.disabled = false;
+      fetchBtn.classList.remove('spinning');
+    }
+  });
+
+  // 切回手动输入：select 换回 input
+  manualBtn.addEventListener('click', () => {
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.placeholder = 'gpt-4o-mini';
+    swapModelNode(input);
+    manualBtn.style.display = 'none';
+  });
+
   // 温度滑块实时回填，让小数字跟着动
   const tempInput = card.querySelector('#ai-temp');
   const tempVal = card.querySelector('#ai-temp-val');
@@ -128,7 +218,7 @@ export function renderAICard() {
     url: card.querySelector('#ai-url').value.trim(),
     apiKey: card.querySelector('#ai-key').value.trim(),
     model: card.querySelector('#ai-model').value.trim() || 'gpt-4o-mini',
-    style: card.querySelector('#ai-style').value.trim() || '温柔可爱，第一人称，软萌语气',
+    style: card.querySelector('#ai-style').value.trim(),
     enableChain: !!card.querySelector('#ai-chain').checked,
     temperature: Number(card.querySelector('#ai-temp').value),
     maxTokens: Number(card.querySelector('#ai-max-tokens').value),
@@ -178,8 +268,8 @@ export function renderAICard() {
     try {
       const result = await streamChat({
         messages: [
-          { role: 'system', content: '你是温柔的 AI 助手，回复一句话即可，不要用 emoji。' },
-          { role: 'user', content: '你好' }
+          { role: 'system', content: '你是泡泡，一个软萌的小伙伴。用第一人称回复。' },
+          { role: 'user', content: '你好呀，能听见我说话吗？' }
         ]
       });
       if (result.ok) {

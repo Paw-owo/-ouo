@@ -28,7 +28,7 @@ const DEFAULT_AI_CONFIG = Object.freeze({
   url: '',           // 例：https://api.openai.com/v1/chat/completions
   apiKey: '',        // sk-xxx
   model: 'gpt-4o-mini',
-  style: '温柔可爱，第一人称，软萌语气，偶尔用"嘛""啦""呀"结尾',
+  style: '',         // 说话风格留空，让 AI 跟着人设自然发挥；用户可在设置里手动填
   enableChain: false, // 思维链开关
   temperature: 0.8,
   maxTokens: 800,

@@ -11,6 +11,7 @@ import bus from '../../core/events.js';
 import { downloadBlob, isUsableImage, cssUrl, clamp, pickImageFile } from '../../core/util.js';
 import { getState, render, applySessionWallpaper, setQuoteToInput } from './index.js';
 import { escapeHTML, escapeAttr } from './shared-utils.js';
+import { playTTS, stopAllTTS } from '../../core/tts.js';
 
 // 撤回时间窗（毫秒）：仅自己的消息 2 分钟内可撤回
 const RECALL_WINDOW_MS = 2 * 60 * 1000;
@@ -30,6 +31,7 @@ export function openMessageActionSheet(msg) {
   const canRecall = isUser && (Date.now() - new Date(msg.timestamp || msg.createdAt).getTime()) < RECALL_WINDOW_MS;
 
   const actions = [
+    { key: 'speak',  label: '念给我听',  icon: 'volume', show: !isUser && !isImage, onClick: () => speakMessage(msg) },
     { key: 'copy',    label: '复制',     icon: 'memo',  show: !isImage, onClick: () => copyMessage(msg) },
     { key: 'quote',   label: '引用',      icon: 'chat',  show: true,    onClick: () => quoteMessage(msg) },
     { key: 'recall',  label: '撤回',      icon: 'back',  show: canRecall, onClick: () => recallMessage(msg) },
@@ -64,6 +66,24 @@ export function openMessageActionSheet(msg) {
       }
     });
   });
+}
+
+// ── 念给我听（TTS）──
+async function speakMessage(msg) {
+  const text = String(msg.content || '');
+  if (!text) {
+    showToast('这条没什么可以念呀', 'default', 1200);
+    return;
+  }
+  // 先停掉任何正在念的，避免叠播
+  try { stopAllTTS(); } catch (e) {}
+  showToast('正在念给你听～', 'default', 1400);
+  try {
+    await playTTS(text);
+  } catch (e) {
+    console.warn('[chat] 念给我听失败', e);
+    showToast('念不出来呀，检查一下「我的声音」配置嘛', 'error');
+  }
 }
 
 // ── 复制 ──

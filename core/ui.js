@@ -51,7 +51,11 @@ const ICON_PATHS = {
   download: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M7 10l5 5 5-5 M12 15V3',
   upload: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M17 8l-5-5-5 5 M12 3v12',
   lock: 'M19 11H5a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2z M7 11V7a5 5 0 0 1 10 0v4',
-  unlock: 'M19 11H5a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2z M7 11V7a5 5 0 0 1 9.9-1'
+  unlock: 'M19 11H5a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2z M7 11V7a5 5 0 0 1 9.9-1',
+  // 刷新：拉取模型列表时用，转起来软萌
+  refresh: 'M23 4v6h-6 M1 20v-6h6 M3.51 9a9 9 0 0 1 14.85-3.36L23 10 M1 14l4.64 4.36A9 9 0 0 0 20.49 15',
+  // 下箭头：折叠卡用，收起时旋转 -90deg
+  'chevron-down': 'M6 9l6 6 6-6'
 };
 
 // 注入全局 UI 样式（基于 CSS 变量，主题适配）
@@ -62,7 +66,7 @@ function ensureUIStyle() {
     .popo-toast-stack{position:fixed;top:calc(env(safe-area-inset-top,0px) + 12px);left:50%;transform:translateX(-50%);z-index:9999;display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:none;width:max-content;max-width:90vw}
     .popo-toast{background:color-mix(in srgb,var(--bg-card) 92%,transparent);backdrop-filter:blur(var(--glass-blur));-webkit-backdrop-filter:blur(var(--glass-blur));color:var(--text-primary);padding:10px 18px;border-radius:var(--radius-md);box-shadow:var(--shadow-md);font-size:var(--font-size-small);line-height:1.4;pointer-events:auto;border:1px solid color-mix(in srgb,var(--accent-light) 60%,transparent);animation:popoToastIn var(--motion) var(--motion-spring);max-width:80vw;text-align:center}
     .popo-toast.leaving{animation:popoToastOut 160ms ease forwards}
-    .popo-toast.error{background:color-mix(in srgb,#E8888C 92%,transparent);color:#fff;border-color:#E8888C}
+    .popo-toast.error{background:color-mix(in srgb,var(--danger) 92%,transparent);color:#fff;border-color:var(--danger)}
     .popo-toast.success{background:color-mix(in srgb,var(--accent) 92%,transparent);color:var(--bubble-user-text);border-color:var(--accent)}
     @keyframes popoToastIn{from{opacity:0;transform:translateY(-12px) scale(.96)}to{opacity:1;transform:translateY(0) scale(1)}}
     @keyframes popoToastOut{to{opacity:0;transform:translateY(-8px) scale(.96)}}
@@ -82,14 +86,31 @@ function ensureUIStyle() {
     .popo-dialog-actions button{flex:1;padding:11px 14px;border-radius:var(--radius-sm);font-size:var(--font-size-base);font-weight:500;background:color-mix(in srgb,var(--bg-secondary) 80%,transparent);color:var(--text-primary);transition:var(--motion)}
     .popo-dialog-actions button:active{transform:scale(var(--press-scale))}
     .popo-dialog-actions button.primary{background:var(--accent);color:var(--bubble-user-text)}
-    .popo-dialog-actions button.danger{background:#E8888C;color:#fff}
+    .popo-dialog-actions button.danger{background:var(--danger);color:#fff}
     .popo-icon-svg{stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;fill:none;display:inline-block;vertical-align:middle}
     .popo-loading{position:fixed;inset:0;z-index:9500;display:flex;align-items:center;justify-content:center;background:var(--bg-overlay);backdrop-filter:blur(4px)}
     .popo-loading-dot{width:14px;height:14px;border-radius:50%;background:var(--accent);margin:0 5px;animation:popoPulse 1s ease-in-out infinite}
     .popo-loading-dot:nth-child(2){animation-delay:.2s}
     .popo-loading-dot:nth-child(3){animation-delay:.4s}
     @keyframes popoPulse{0%,80%,100%{transform:scale(.6);opacity:.4}40%{transform:scale(1);opacity:1}}
-    @media (prefers-reduced-motion:reduce){.popo-toast,.popo-sheet,.popo-dialog,.popo-loading-dot{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+    /* 折叠卡片：用 grid-template-rows 0fr/1fr 做高度动画，比 max-height 优雅 */
+    .collapsible-card{background:var(--bg-card);border-radius:var(--radius-card);border:1px solid color-mix(in srgb,var(--text-hint) 14%,transparent);overflow:hidden;margin-bottom:12px}
+    .collapsible-header{display:flex;align-items:center;gap:8px;padding:14px 16px;cursor:pointer;transition:var(--motion)}
+    .collapsible-header:active{transform:scale(var(--press-scale))}
+    .collapsible-title{font-size:var(--font-size-base);font-weight:600;color:var(--text-primary)}
+    .collapsible-subtitle{font-size:var(--font-size-small);color:var(--text-hint);flex:1}
+    .collapsible-arrow{color:var(--text-hint);transition:transform var(--motion);display:flex;align-items:center}
+    .collapsible-card.collapsed .collapsible-arrow{transform:rotate(-90deg)}
+    .collapsible-body{overflow:hidden;transition:max-height var(--motion);max-height:5000px}
+    .collapsible-card.collapsed .collapsible-body{max-height:0}
+    @supports (grid-template-rows:1fr){
+      .collapsible-body{display:grid;grid-template-rows:1fr;transition:grid-template-rows var(--motion);max-height:none}
+      .collapsible-card.collapsed .collapsible-body{grid-template-rows:0fr;max-height:none}
+    }
+    .collapsible-body-inner{overflow:hidden;padding:0 16px 14px}
+    /* 折叠卡里包着 .card 时，把内层卡片摊平，避免双层背景/内边距 */
+    .collapsible-body-inner>.card{background:transparent;box-shadow:none;padding:0;margin-bottom:0}
+    @media (prefers-reduced-motion:reduce){.popo-toast,.popo-sheet,.popo-dialog,.popo-loading-dot,.collapsible-body,.collapsible-arrow{animation-duration:.01ms!important;transition-duration:.01ms!important}}
   `);
   uiStyleInjected = true;
 }
@@ -323,6 +344,77 @@ export function createIcon(name, size = 22, opts = {}) {
   wrapper.style.display = 'inline-flex';
   wrapper.innerHTML = iconHTML(name, size, opts);
   return wrapper;
+}
+
+// ════════════════════════════════════════
+// 折叠卡片
+// ════════════════════════════════════════
+
+/**
+ * 我创建一个可折叠的卡片。点 header 就能收起/展开，软软的。
+ * @param {string} title 标题文字
+ * @param {HTMLElement|string} content 内容，可以是节点或 HTML 字符串
+ * @param {object} opts { collapsed:false, icon:'chevron-down', subtitle:'' }
+ * @returns {HTMLElement} 折叠卡片根节点
+ */
+export function createCollapsibleCard(title, content, opts = {}) {
+  ensureUIStyle();
+  const { collapsed = false, icon = 'chevron-down', subtitle = '' } = opts;
+  const card = document.createElement('div');
+  card.className = 'collapsible-card' + (collapsed ? ' collapsed' : '');
+
+  // 头部：标题 + 副标题（占位让箭头靠右）+ 箭头
+  const header = document.createElement('div');
+  header.className = 'collapsible-header';
+  header.setAttribute('role', 'button');
+  header.setAttribute('tabindex', '0');
+  header.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+
+  const titleEl = document.createElement('span');
+  titleEl.className = 'collapsible-title';
+  titleEl.textContent = title || '';
+  header.appendChild(titleEl);
+
+  // 副标题：有就显示文字，没有也留个占位把箭头推到右边
+  const subEl = document.createElement('span');
+  subEl.className = 'collapsible-subtitle';
+  subEl.textContent = subtitle || '';
+  header.appendChild(subEl);
+
+  // 箭头：展开朝下，收起时旋转 -90deg 朝右
+  const arrow = createIcon(icon, 18);
+  arrow.classList.add('collapsible-arrow');
+  header.appendChild(arrow);
+
+  // 内容区：grid-template-rows 0fr/1fr 做高度动画，旧浏览器走 max-height 兜底
+  const body = document.createElement('div');
+  body.className = 'collapsible-body';
+  const inner = document.createElement('div');
+  inner.className = 'collapsible-body-inner';
+  if (content instanceof HTMLElement) {
+    inner.appendChild(content);
+  } else {
+    inner.innerHTML = content || '';
+  }
+  body.appendChild(inner);
+
+  card.appendChild(header);
+  card.appendChild(body);
+
+  // 点击或回车/空格切换收起状态
+  const toggle = () => {
+    const isCollapsed = card.classList.toggle('collapsed');
+    header.setAttribute('aria-expanded', isCollapsed ? 'false' : 'true');
+  };
+  header.addEventListener('click', toggle);
+  header.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      toggle();
+    }
+  });
+
+  return card;
 }
 
 // ════════════════════════════════════════

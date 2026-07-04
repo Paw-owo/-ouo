@@ -11,7 +11,7 @@
 //   7) 卡片存 IndexedDB STORES.flashcards
 //      字段：{id, deck, front, back, createdAt, updatedAt,
 //             reviewCount, lastReview,
-//             interval, ease, reps, nextReview}  ← 后四个是 SM-2 字段
+//             interval, ease, reps, nextReview}  <- 后四个是 SM-2 字段
 // 依赖：core/storage.js, core/storage-keys.js, core/ui.js, core/events.js, core/util.js
 
 import { KEYS, STORES } from '../../core/storage-keys.js';
@@ -258,7 +258,7 @@ async function render() {
       setCurrentDeckPref(currentDeck);
       render();
     });
-    // 长按牌组（非「全部」）→ 删除牌组
+    // 长按牌组（非「全部」）-> 删除牌组
     if (btn.dataset.deck && btn.dataset.deck !== 'all') {
       attachLongPress(btn, () => confirmDeleteDeck(btn.dataset.deck));
     }
