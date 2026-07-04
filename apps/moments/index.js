@@ -22,6 +22,7 @@ import {
 import { renderCommentPreview, openCommentSheet } from './comments.js';
 import { aiPost, scheduleAIReactions } from './ai-post.js';
 import { openDetail } from './detail.js';
+import { applyAppBg } from '../../core/app-bg.js';
 
 let containerEl = null;
 let activeFilter = '全部';     // 当前角色筛选：'全部' | '我' | 角色名
@@ -53,6 +54,7 @@ export async function mount(container) {
     await render();
   });
   await render();
+  applyAppBg(container, 'moments');
 }
 
 export function unmount() {

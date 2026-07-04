@@ -9,6 +9,7 @@ import { getData, setData, compressImage } from '../../core/storage.js';
 import { showToast, showConfirm, createIcon } from '../../core/ui.js';
 import bus from '../../core/events.js';
 import { injectStyle, pickImageFile, isUsableImage, clamp } from '../../core/util.js';
+import { applyAppBg } from '../../core/app-bg.js';
 
 let containerEl = null;
 // 编辑中的状态（实时预览用，保存才写库）
@@ -158,6 +159,7 @@ export async function mount(container, context) {
   container.querySelector('#av-back').addEventListener('click', () => bus.emit('router:home'));
   bindControls();
   renderPreview();
+  applyAppBg(container, 'avatar');
 }
 
 export function unmount() {

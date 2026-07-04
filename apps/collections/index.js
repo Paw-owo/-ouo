@@ -11,6 +11,7 @@ import { getData, setData, generateId, getNow, compressImage } from '../../core/
 import { showToast, showConfirm, showBottomSheet, createIcon } from '../../core/ui.js';
 import bus from '../../core/events.js';
 import { injectStyle, pickImageFile, isUsableImage, formatRelative, debounce } from '../../core/util.js';
+import { applyAppBg } from '../../core/app-bg.js';
 
 let containerEl = null;
 let activeFilter = 'all';
@@ -207,6 +208,7 @@ export async function mount(container, context) {
   }, 180);
   container.querySelector('#coll-search').addEventListener('input', onSearch);
   await render();
+  applyAppBg(container, 'collections');
 }
 
 export function unmount() {

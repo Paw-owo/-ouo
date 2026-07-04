@@ -327,7 +327,7 @@ export function normalizeMoment(m) {
   let likes = m.likes;
   let likedByMe = m.likedByMe;
   if (likes && typeof likes === 'object') {
-    // 旧版 {liked, count} → 迁移
+    // 旧版 {liked, count} -> 迁移
     likedByMe = likedByMe ?? !!likes.liked;
     likes = Number(likes.count) || 0;
   } else if (typeof likes === 'number') {

@@ -3,7 +3,7 @@
 // 功能：
 //   1) 城市存 localStorage（KEYS.weatherCity），用户可输入切换
 //   2) 优先联网 open-meteo 免费无 key API（地理编码 + 天气查询）
-//   3) 联网失败/超时(5s) → 本地模拟（按城市名 hash 生成固定天气，同城市同结果）
+//   3) 联网失败/超时(5s) -> 本地模拟（按城市名 hash 生成固定天气，同城市同结果）
 //   4) 30 分钟缓存（KEYS.weatherCache），缓存内直接复用
 //   5) 顶部大卡片：城市 + 天气图标 + 温度(大字) + 描述 + 贴心建议
 //   6) 刷新 / 换城市按钮
@@ -15,6 +15,7 @@ import { getData, setData } from '../../core/storage.js';
 import { showToast, showBottomSheet, createIcon } from '../../core/ui.js';
 import bus from '../../core/events.js';
 import { injectStyle } from '../../core/util.js';
+import { applyAppBg } from '../../core/app-bg.js';
 
 let containerEl = null;
 
@@ -65,6 +66,7 @@ export async function mount(container, context) {
   `;
   container.querySelector('#weather-back').addEventListener('click', () => bus.emit('router:home'));
   await render();
+  applyAppBg(container, 'weather');
 }
 
 export function unmount() {
@@ -81,7 +83,7 @@ async function render() {
 
   state.city = String(getData(KEYS.weatherCity, '') || '').trim();
 
-  // 还没设城市 → 空状态
+  // 还没设城市 -> 空状态
   if (!state.city) {
     body.innerHTML = `
       <div class="card">
@@ -97,7 +99,7 @@ async function render() {
     return;
   }
 
-  // 有城市 → 主界面骨架
+  // 有城市 -> 主界面骨架
   body.innerHTML = `
     <div id="weather-card-wrap"></div>
     <div class="weather-actions">
@@ -180,7 +182,7 @@ async function loadWeather() {
   try {
     data = await fetchWeatherData(city);
   } catch (e) {
-    // 联网失败/超时/找不到城市 → 本地模拟
+    // 联网失败/超时/找不到城市 -> 本地模拟
     data = simulateWeather(city);
     isOffline = true;
     showToast('没网也能看，我先猜一个嘛', 'default', 2200);
@@ -208,7 +210,7 @@ async function loadWeather() {
 }
 
 async function fetchWeatherData(city) {
-  // 1. 地理编码：城市名 → 经纬度
+  // 1. 地理编码：城市名 -> 经纬度
   const geoUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1&language=zh`;
   const geoResp = await fetchWithTimeout(geoUrl, 5000);
   if (!geoResp.ok) throw new Error('地理编码请求失败');
@@ -263,7 +265,7 @@ function simulateWeather(city) {
 }
 
 // ════════════════════════════════════════
-// 天气码 → 中文 + 图标 + 建议
+// 天气码 -> 中文 + 图标 + 建议
 // ════════════════════════════════════════
 
 function weatherCodeInfo(code, isNight) {

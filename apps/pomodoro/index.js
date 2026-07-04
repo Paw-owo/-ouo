@@ -6,7 +6,7 @@
 //   2) 开始 / 暂停（切换）、重置、跳过三个控制
 //   3) 25 / 5 与 50 / 10 两个预设，一键切换并持久化
 //   4) 顶部统计卡片：今日完成 X 个番茄 + 连续 Y 天
-//   5) 工作结束 → toast + 自动切休息 + completedCount+1；休息结束 → toast + 自动切工作
+//   5) 工作结束 -> toast + 自动切休息 + completedCount+1；休息结束 -> toast + 自动切工作
 //   6) unmount 一定清掉定时器，不偷偷占内存
 // 依赖：core/storage.js, core/storage-keys.js, core/ui.js, core/events.js, core/util.js
 
@@ -15,6 +15,7 @@ import { getData, setData } from '../../core/storage.js';
 import { showToast, createIcon } from '../../core/ui.js';
 import bus from '../../core/events.js';
 import { injectStyle, formatDate, clamp } from '../../core/util.js';
+import { applyAppBg } from '../../core/app-bg.js';
 
 let containerEl = null;
 let timer = null;
@@ -86,6 +87,7 @@ export async function mount(container) {
   `;
   container.querySelector('#pomo-back').addEventListener('click', () => bus.emit('router:home'));
   render();
+  applyAppBg(container, 'pomodoro');
 }
 
 export function unmount() {

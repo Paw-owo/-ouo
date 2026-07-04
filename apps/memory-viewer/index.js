@@ -23,7 +23,7 @@ let currentCharacterName = '';
 let filterType = 'all';       // 'all' | fact | preference | event | relationship | summary
 let searchKeyword = '';
 
-// 类型映射（source 值 → 中文标签）
+// 类型映射（source 值 -> 中文标签）
 const TYPE_LABELS = {
   fact: '事实',
   preference: '喜好',

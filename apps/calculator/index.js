@@ -13,6 +13,7 @@ import { KEYS } from '../../core/storage-keys.js';
 import { getData, setData } from '../../core/storage.js';
 import { showToast, createIcon, showBottomSheet } from '../../core/ui.js';
 import bus from '../../core/events.js';
+import { applyAppBg } from '../../core/app-bg.js';
 
 let containerEl = null;
 let ctxRef = null;
@@ -57,6 +58,7 @@ export async function mount(container, context) {
   // 键盘可达（桌面调试也舒服）
   keydownListener = (e) => handleKeydown(e);
   window.addEventListener('keydown', keydownListener);
+  applyAppBg(container, 'calculator');
 }
 
 export function unmount() {

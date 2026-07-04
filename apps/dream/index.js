@@ -11,6 +11,7 @@ import { showToast, showConfirm, createIcon } from '../../core/ui.js';
 import bus from '../../core/events.js';
 import { injectStyle, formatRelative, daysBetween, pick } from '../../core/util.js';
 import { get as getConfig } from '../../core/config.js';
+import { applyAppBg } from '../../core/app-bg.js';
 
 let containerEl = null;
 
@@ -111,6 +112,7 @@ export async function mount(container, context) {
   // 进入时检查离线时长，超过阈值就悄悄生成一条新梦境
   await maybeGenerateDream();
   await render();
+  applyAppBg(container, 'dream');
 }
 
 export function unmount() {

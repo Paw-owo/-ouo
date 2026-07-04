@@ -172,8 +172,77 @@ export const APPS = [
     dock: false,
     page: 1,
     loader: () => import('./apps/avatar/index.js')
+  },
+  {
+    id: 'wallet',
+    name: '钱包',
+    icon: 'wallet',
+    iconColor: '#E8A04A',
+    dock: false,
+    page: 1,
+    loader: () => import('./apps/wallet/index.js')
+  },
+  {
+    id: 'shop',
+    name: '商店',
+    icon: 'shop',
+    iconColor: '#F5A0B0',
+    dock: false,
+    page: 1,
+    loader: () => import('./apps/shop/index.js')
+  },
+  {
+    id: 'games',
+    name: '游戏',
+    icon: 'games',
+    iconColor: '#8FD0B9',
+    dock: false,
+    page: 1,
+    loader: () => import('./apps/games/index.js')
+  },
+  {
+    id: 'music',
+    name: '音乐',
+    icon: 'music',
+    iconColor: '#7AA2D6',
+    dock: false,
+    page: 1,
+    loader: () => import('./apps/music/index.js')
+  },
+  {
+    id: 'collections',
+    name: '收藏',
+    icon: 'star',
+    iconColor: '#F5D88A',
+    dock: false,
+    page: 1,
+    loader: () => import('./apps/collections/index.js')
+  },
+  {
+    id: 'grudge',
+    name: '记仇本',
+    icon: 'bell',
+    iconColor: '#E8888C',
+    dock: false,
+    page: 1,
+    loader: () => import('./apps/grudge/index.js')
+  },
+  {
+    id: 'memory-viewer',
+    name: '记忆',
+    icon: 'star',
+    iconColor: '#6B7FA0',
+    dock: false,
+    page: 1,
+    loader: () => import('./apps/memory-viewer/index.js')
+  },
+  {
+    id: 'inbox',
+    name: '消息中心',
+    icon: 'bell',
+    iconColor: '#7AA2D6',
+    dock: true,
+    page: 0,
+    loader: () => import('./apps/inbox/index.js')
   }
-
-  // 后续批次会追加：wallet / shop / gallery / games / music /
-  // collections / widget-store / photos
 ];

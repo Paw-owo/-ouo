@@ -17,6 +17,7 @@ import { setDB, deleteDB, getAllDB, generateId, getNow } from '../../core/storag
 import { showToast, showConfirm, showBottomSheet, createIcon } from '../../core/ui.js';
 import bus from '../../core/events.js';
 import { formatDate, injectStyle } from '../../core/util.js';
+import { applyAppBg } from '../../core/app-bg.js';
 
 let containerEl = null;
 
@@ -150,6 +151,7 @@ export async function mount(container, context) {
   container.querySelector('#cd-back').addEventListener('click', () => bus.emit('router:home'));
   container.querySelector('#cd-add').addEventListener('click', () => openEditor(null));
   await render();
+  applyAppBg(container, 'countdown');
 }
 
 export function unmount() {

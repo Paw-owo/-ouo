@@ -15,6 +15,7 @@ import { getData, setData, setDB, deleteDB, getAllDB, generateId, getNow } from 
 import { showToast, showConfirm, showBottomSheet, createIcon } from '../../core/ui.js';
 import bus from '../../core/events.js';
 import { injectStyle, formatRelative } from '../../core/util.js';
+import { applyAppBg } from '../../core/app-bg.js';
 
 let containerEl = null;
 
@@ -79,6 +80,7 @@ export async function mount(container) {
   if (pref && pref.currentDeck) currentDeck = pref.currentDeck;
   await loadCards();
   await render();
+  applyAppBg(container, 'flashcard');
 }
 
 export function unmount() {

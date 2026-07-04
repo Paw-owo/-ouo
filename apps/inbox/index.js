@@ -25,7 +25,7 @@ let containerEl = null;
 let disposeInboxNew = null;
 let disposeInboxUpdated = null;
 
-// app 标识 → 图标名映射（全部走 ICON_PATHS 已注册的 SVG 线稿图标，禁止 emoji）
+// app 标识 -> 图标名映射（全部走 ICON_PATHS 已注册的 SVG 线稿图标，禁止 emoji）
 const APP_ICON_MAP = {
   chat: 'chat',
   moments: 'heart',
@@ -40,7 +40,7 @@ const APP_ICON_MAP = {
   system: 'bell'
 };
 
-// app 标识 → 中文小标签（给消息卡片右上角贴个来源小条）
+// app 标识 -> 中文小标签（给消息卡片右上角贴个来源小条）
 const APP_LABEL_MAP = {
   chat: '聊天',
   moments: '朋友圈',

@@ -10,6 +10,7 @@ import { getData, setData } from '../../core/storage.js';
 import { showToast, showBottomSheet, createIcon } from '../../core/ui.js';
 import bus from '../../core/events.js';
 import { injectStyle, formatDate } from '../../core/util.js';
+import { applyAppBg } from '../../core/app-bg.js';
 
 let containerEl = null;
 
@@ -149,6 +150,7 @@ export async function mount(container, context) {
   `;
   container.querySelector('#astro-back').addEventListener('click', () => bus.emit('router:home'));
   await render();
+  applyAppBg(container, 'astro');
 }
 
 export function unmount() {

@@ -11,6 +11,7 @@ import { getDB, setDB, deleteDB, getAllDB, generateId, getNow } from '../../core
 import { showToast, showConfirm, showBottomSheet, createIcon, showAlert } from '../../core/ui.js';
 import bus from '../../core/events.js';
 import { injectStyle } from '../../core/util.js';
+import { applyAppBg } from '../../core/app-bg.js';
 
 let containerEl = null;
 let timer = null;
@@ -116,6 +117,7 @@ export async function mount(container, context) {
 
   await render();
   startPolling();
+  applyAppBg(container, 'alarm');
 }
 
 export function unmount() {

@@ -82,7 +82,7 @@ export function getPoolStatus(endpointId) {
 // ════════════════════════════════════════
 
 /**
- * 统一 AI 调用。三层回退：付费组 → 免费组 → 本地关键词。
+ * 统一 AI 调用。三层回退：付费组 -> 免费组 -> 本地关键词。
  * @param {object} opts
  *   { messages, systemPrompt, characterId, stream, onChunk, signal, timeoutMs }
  */
@@ -116,7 +116,7 @@ export async function callAPI(opts = {}) {
     }
   }
 
-  // 全部失败 → 抛出，由调用方决定是否走 local-chat
+  // 全部失败 -> 抛出，由调用方决定是否走 local-chat
   const err = new Error(`所有端点都失败啦：${lastError ? lastError.message : '未知'}`);
   err.allFailed = true;
   err.lastError = lastError;

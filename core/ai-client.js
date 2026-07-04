@@ -3,7 +3,7 @@
 // 职责：
 //   1) 读 settings 里的 AI 配置（url / apiKey / model / style / chain）
 //   2) 流式输出（OpenAI 兼容 /v1/chat/completions，stream:true）
-//   3) 无配置 → 返回 null，调用方走本地兜底
+//   3) 无配置 -> 返回 null，调用方走本地兜底
 //   4) 失败可重试，超时友好提示
 //   5) 注入角色人设 + 记忆 + 最近事件上下文
 // 依赖：core/storage-keys.js, core/storage.js, core/memory.js, core/events.js, core/config.js

@@ -14,7 +14,7 @@ import bus from './events.js';
 
 const INBOX_MAX = 100;
 
-// 事件 → 消息卡片生成器映射
+// 事件 -> 消息卡片生成器映射
 // 每个生成器返回 { app, title, body, type } 或 null（不生成消息）
 const EVENT_HANDLERS = {
   'chat:message-received': (p) => ({

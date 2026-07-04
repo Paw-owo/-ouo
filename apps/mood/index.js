@@ -11,6 +11,7 @@ import { getDB, setDB, deleteDB, getAllDB, getNow } from '../../core/storage.js'
 import { showToast, showConfirm, showBottomSheet, createIcon } from '../../core/ui.js';
 import bus from '../../core/events.js';
 import { injectStyle } from '../../core/util.js';
+import { applyAppBg } from '../../core/app-bg.js';
 
 let containerEl = null;
 
@@ -276,6 +277,7 @@ export async function mount(container, context) {
     }
   });
   await render();
+  applyAppBg(container, 'mood');
 }
 
 export function unmount() {

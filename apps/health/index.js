@@ -17,6 +17,7 @@ import { showToast, createIcon } from '../../core/ui.js';
 import bus from '../../core/events.js';
 import { formatDate, clamp, debounce, injectStyle } from '../../core/util.js';
 import { get as getConfig } from '../../core/config.js';
+import { applyAppBg } from '../../core/app-bg.js';
 
 let containerEl = null;
 let todayEntry = null;   // 今天的打卡（可能为 null）
@@ -68,6 +69,7 @@ export async function mount(container, context) {
   `;
   container.querySelector('#health-back').addEventListener('click', () => bus.emit('router:home'));
   await render();
+  applyAppBg(container, 'health');
 }
 
 export function unmount() {

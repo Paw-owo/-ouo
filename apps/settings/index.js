@@ -19,6 +19,7 @@ import { renderAICard } from './card-ai.js';
 import { renderNotifyCard } from './card-notify.js';
 import { renderDataMgmtCard } from './card-data.js';
 import { renderAppBgCard } from './card-bg.js';
+import { applyAppBg } from '../../core/app-bg.js';
 
 let containerEl = null;
 
@@ -34,6 +35,7 @@ export async function mount(container, context) {
   `;
   container.querySelector('#settings-back').addEventListener('click', () => bus.emit('router:home'));
   await renderSections();
+  applyAppBg(container, 'settings');
 }
 
 async function renderSections() {

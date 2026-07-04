@@ -21,7 +21,7 @@ let containerEl = null;
 let filterCharacter = 'all';   // 'all' 或某个 characterId
 let filterTime = 'all';        // 'all' | 'today' | 'week' | 'month'
 
-// 来源映射（source 值 → 中文标签）
+// 来源映射（source 值 -> 中文标签）
 const SOURCE_LABELS = { chat: '聊天', moments: '朋友圈', game: '游戏' };
 const SOURCE_OPTIONS = [
   { value: 'chat', label: '聊天' },

@@ -50,7 +50,7 @@ export async function recordInteraction(entry) {
       lastUsedAt: now,
       usedCount: 0
     };
-    // 去重：同 characterId + 同 source + 内容前 40 字相同 → 视为同一条，更新
+    // 去重：同 characterId + 同 source + 内容前 40 字相同 -> 视为同一条，更新
     const existing = await findDuplicate(record);
     let saved;
     if (existing) {

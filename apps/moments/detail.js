@@ -127,7 +127,7 @@ export async function openDetail(momentId, charAvatarMap = {}, onChange) {
       const input = bodyEl.querySelector('.mom-comment-input');
       if (input) { try { input.focus(); } catch (e) {} input.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
     });
-    // 图片 → 大图查看
+    // 图片 -> 大图查看
     bodyEl.querySelectorAll('.mom-img').forEach((el) => {
       el.addEventListener('click', () => {
         const i = Number(el.dataset.i);
