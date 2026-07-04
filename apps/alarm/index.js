@@ -88,7 +88,7 @@ export async function mount(container, context) {
       padding:60px 24px;text-align:center;color:var(--text-hint);
       font-size:var(--font-size-small);line-height:1.7;
     }
-    .alarm-empty-icon{font-size:42px;margin-bottom:10px;opacity:.5}
+    .alarm-empty-icon{margin-bottom:10px;opacity:.6;display:flex;justify-content:center;color:var(--accent)}
     /* 新增 / 编辑表单 */
     .alarm-form{display:flex;flex-direction:column;gap:12px}
     .alarm-form .field-label{font-size:var(--font-size-small);color:var(--text-secondary);margin-bottom:4px}
@@ -149,7 +149,7 @@ async function render() {
   if (!sorted.length) {
     list.innerHTML = `
       <div class="alarm-empty">
-        <div class="alarm-empty-icon">⏰</div>
+        <div class="alarm-empty-icon">${createIcon('bell', 48).outerHTML}</div>
         <div>还没有闹钟呢，右上角加一个嘛<br>「起床啦」「别睡过头嘛」</div>
       </div>
     `;

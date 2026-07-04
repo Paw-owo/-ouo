@@ -13,22 +13,27 @@ import { injectStyle, formatDate } from '../../core/util.js';
 
 let containerEl = null;
 
-// 12 星座数据：名字 + 日期范围 + emoji
+// 12 星座数据：名字 + 日期范围 + 图标名（统一用 star 线稿）
 // 摩羯跨年（12.22 - 1.19），这里只用作展示，不参与运算
 const SIGNS = [
-  { name: '白羊', emoji: '♈', start: '3.21', end: '4.19' },
-  { name: '金牛', emoji: '♉', start: '4.20', end: '5.20' },
-  { name: '双子', emoji: '♊', start: '5.21', end: '6.21' },
-  { name: '巨蟹', emoji: '♋', start: '6.22', end: '7.22' },
-  { name: '狮子', emoji: '♌', start: '7.23', end: '8.22' },
-  { name: '处女', emoji: '♍', start: '8.23', end: '9.22' },
-  { name: '天秤', emoji: '♎', start: '9.23', end: '10.23' },
-  { name: '天蝎', emoji: '♏', start: '10.24', end: '11.22' },
-  { name: '射手', emoji: '♐', start: '11.23', end: '12.21' },
-  { name: '摩羯', emoji: '♑', start: '12.22', end: '1.19' },
-  { name: '水瓶', emoji: '♒', start: '1.20', end: '2.18' },
-  { name: '双鱼', emoji: '♓', start: '2.19', end: '3.20' }
+  { name: '白羊', icon: 'star', start: '3.21', end: '4.19' },
+  { name: '金牛', icon: 'star', start: '4.20', end: '5.20' },
+  { name: '双子', icon: 'star', start: '5.21', end: '6.21' },
+  { name: '巨蟹', icon: 'star', start: '6.22', end: '7.22' },
+  { name: '狮子', icon: 'star', start: '7.23', end: '8.22' },
+  { name: '处女', icon: 'star', start: '8.23', end: '9.22' },
+  { name: '天秤', icon: 'star', start: '9.23', end: '10.23' },
+  { name: '天蝎', icon: 'star', start: '10.24', end: '11.22' },
+  { name: '射手', icon: 'star', start: '11.23', end: '12.21' },
+  { name: '摩羯', icon: 'star', start: '12.22', end: '1.19' },
+  { name: '水瓶', icon: 'star', start: '1.20', end: '2.18' },
+  { name: '双鱼', icon: 'star', start: '2.19', end: '3.20' }
 ];
+
+// 把星座图标渲染成 SVG 线稿
+function signIcon(name, size) {
+  return createIcon(name || 'star', size).outerHTML;
+}
 
 // 贴心话文案库：每天根据 hash 选一句，保证同一天同一星座结果一致
 const QUOTES = [
@@ -77,7 +82,8 @@ export async function mount(container, context) {
     }
     .astro-sign-card:active{transform:scale(var(--press-scale))}
     .astro-sign-emoji{
-      font-size:30px;color:var(--accent-dark);line-height:1;margin-bottom:6px;
+      color:var(--accent-dark);line-height:1;margin-bottom:6px;
+      display:flex;justify-content:center;
     }
     .astro-sign-name{
       font-size:var(--font-size-base);font-weight:600;color:var(--text-primary);
@@ -94,7 +100,7 @@ export async function mount(container, context) {
       box-shadow:var(--shadow-md);
     }
     .astro-hero-top{display:flex;align-items:center;gap:14px}
-    .astro-hero-emoji{font-size:42px;line-height:1}
+    .astro-hero-emoji{line-height:1;display:flex}
     .astro-hero-name{font-size:var(--font-size-title);font-weight:700}
     .astro-hero-date{font-size:var(--font-size-small);opacity:.85;margin-top:2px}
     .astro-hero-switch{
@@ -114,8 +120,8 @@ export async function mount(container, context) {
       background:color-mix(in srgb,var(--bg-secondary) 60%,transparent);
     }
     .astro-fortune-label{font-size:var(--font-size-base);color:var(--text-primary)}
-    .astro-stars{color:var(--accent);font-size:var(--font-size-large);letter-spacing:2px}
-    .astro-stars .dim{color:var(--text-hint);opacity:.55}
+    .astro-stars{color:var(--accent);display:inline-flex;gap:2px;align-items:center}
+    .astro-star-dim{opacity:.4;display:inline-flex}
     /* 幸运色 / 数字 */
     .astro-lucky{display:flex;gap:12px;margin-top:12px}
     .astro-lucky-pill{
@@ -179,7 +185,7 @@ function renderPicker(grid, onPick) {
     const btn = document.createElement('button');
     btn.className = 'astro-sign-card';
     btn.innerHTML = `
-      <div class="astro-sign-emoji">${s.emoji}</div>
+      <div class="astro-sign-emoji">${signIcon(s.icon, 30)}</div>
       <div class="astro-sign-name">${s.name}座</div>
       <div class="astro-sign-range">${s.start} - ${s.end}</div>
     `;
@@ -210,7 +216,7 @@ function renderFortune(body, signName) {
   body.innerHTML = `
     <div class="astro-hero">
       <div class="astro-hero-top">
-        <div class="astro-hero-emoji">${sign.emoji}</div>
+        <div class="astro-hero-emoji">${signIcon(sign.icon, 42)}</div>
         <div>
           <div class="astro-hero-name">${sign.name}座</div>
           <div class="astro-hero-date">${formatDate(today, { withWeek: true })}</div>
@@ -249,13 +255,18 @@ function renderFortune(body, signName) {
 }
 
 function fortuneRow(label, stars) {
-  // 实心 ★ 表示得分，空心 ☆ 表示剩下
-  const full = '★'.repeat(stars);
-  const empty = '☆'.repeat(5 - stars);
+  // 实心星用 fill，空心星用 stroke（线稿）
+  let html = '';
+  for (let i = 0; i < 5; i++) {
+    const icon = i < stars
+      ? createIcon('star', 18, { fill: 'currentColor' }).outerHTML
+      : `<span class="astro-star-dim">${createIcon('star', 18).outerHTML}</span>`;
+    html += icon;
+  }
   return `
     <div class="astro-fortune-row">
       <span class="astro-fortune-label">${label}</span>
-      <span class="astro-stars">${full}<span class="dim">${empty}</span></span>
+      <span class="astro-stars">${html}</span>
     </div>
   `;
 }
@@ -273,7 +284,7 @@ function openSignPicker(onPick) {
     const btn = document.createElement('button');
     btn.className = 'astro-sign-card';
     btn.innerHTML = `
-      <div class="astro-sign-emoji">${s.emoji}</div>
+      <div class="astro-sign-emoji">${signIcon(s.icon, 30)}</div>
       <div class="astro-sign-name">${s.name}座</div>
       <div class="astro-sign-range">${s.start} - ${s.end}</div>
     `;

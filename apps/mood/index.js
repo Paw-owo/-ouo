@@ -2,7 +2,7 @@
 // 心情日记 App——软萌少女风格 PWA「泡泡」。
 // 每一天的心情都值得被看见。我帮主人把今天的感觉记下来，回头看也会很温柔。
 // 存 IndexedDB（STORES.moodEntries），字段：
-//   {id, date(YYYY-MM-DD), score(1-5), emoji, note, createdAt, updatedAt}
+//   {id, date(YYYY-MM-DD), score(1-5), icon, note, createdAt, updatedAt}
 //   一天一条：用日期做 id，再写会覆盖旧的那条（保留原 createdAt）。
 // 依赖：core/storage.js, core/storage-keys.js, core/ui.js, core/events.js, core/util.js
 
@@ -16,12 +16,17 @@ let containerEl = null;
 
 // 五档心情，从难过得想抱抱到开心得想转圈圈
 const MOODS = [
-  { score: 1, emoji: '😢', label: '难过' },
-  { score: 2, emoji: '😕', label: '低落' },
-  { score: 3, emoji: '😐', label: '平静' },
-  { score: 4, emoji: '🙂', label: '开心' },
-  { score: 5, emoji: '😀', label: '超开心' }
+  { score: 1, icon: 'moon',  label: '难过' },   // 月亮：暗淡
+  { score: 2, icon: 'dream', label: '低落' },   // 云：阴沉
+  { score: 3, icon: 'smile', label: '平静' },   // 微笑
+  { score: 4, icon: 'heart', label: '开心' },   // 爱心
+  { score: 5, icon: 'star',  label: '超开心' }  // 星星
 ];
+
+// 把心情图标渲染成 SVG 线稿
+function moodIcon(name, size) {
+  return createIcon(name, size).outerHTML;
+}
 
 const HAPPY_THRESHOLD = 4; // 4 分及以上算开心
 
@@ -63,7 +68,6 @@ injectStyle('app-mood-style', `
     border-radius: var(--radius-md);
     border: 2px solid transparent;
     background: rgba(255,255,255,.18);
-    font-size: 26px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -165,7 +169,7 @@ injectStyle('app-mood-style', `
   }
   .mood-item:active { transform: scale(var(--press-scale)); }
   .mood-item-emoji {
-    font-size: 26px;
+    color: var(--accent-dark);
     line-height: 1;
     flex-shrink: 0;
     width: 44px;
@@ -202,7 +206,9 @@ injectStyle('app-mood-style', `
     color: var(--text-hint);
   }
   .mood-empty-emoji {
-    font-size: 44px;
+    color: var(--accent);
+    display: flex;
+    justify-content: center;
     margin-bottom: 8px;
     opacity: .8;
   }
@@ -225,7 +231,6 @@ injectStyle('app-mood-style', `
     border-radius: var(--radius-md);
     border: 2px solid transparent;
     background: var(--bg-secondary);
-    font-size: 26px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -338,7 +343,7 @@ async function render() {
   if (history.length === 0) {
     listEl.innerHTML = `
       <div class="mood-empty">
-        <div class="mood-empty-emoji">📝</div>
+        <div class="mood-empty-emoji">${moodIcon('memo', 44)}</div>
         <div class="mood-empty-text">${sorted.length === 0 ? '今天还没记心情呢，告诉我你现在感觉怎么样嘛' : '今天记下第一条后，明天这里就会出现历史啦'}</div>
       </div>
     `;
@@ -361,7 +366,7 @@ function renderToday(entry) {
       <span class="mood-today-bubble b2"></span>
       <div class="mood-today-title">今天的心情</div>
       <div class="mood-emoji-row" id="mood-emoji-row">
-        ${MOODS.map((m) => `<button type="button" class="mood-emoji-btn ${entry && entry.score === m.score ? 'active' : ''}" data-score="${m.score}" aria-label="${m.label}">${m.emoji}</button>`).join('')}
+        ${MOODS.map((m) => `<button type="button" class="mood-emoji-btn ${entry && entry.score === m.score ? 'active' : ''}" data-score="${m.score}" aria-label="${m.label}">${moodIcon(m.icon, 24)}</button>`).join('')}
       </div>
       <textarea class="mood-today-note" id="mood-today-note" placeholder="想说说今天发生的事吗..." maxlength="500">${escapeHTML(entry ? entry.note : '')}</textarea>
       <button class="mood-today-save" id="mood-today-save">${entry ? '改一下' : '记下来'}</button>
@@ -390,7 +395,7 @@ function wireTodayCard(body, entry) {
       id: today,
       date: today,
       score: mood.score,
-      emoji: mood.emoji,
+      icon: mood.icon,
       note,
       createdAt: (prev && prev.createdAt) || getNow()
     };
@@ -421,7 +426,7 @@ function renderItem(entry) {
   const isToday = entry.date === todayStr();
   return `
     <button class="mood-item" data-id="${entry.id}">
-      <div class="mood-item-emoji">${entry.emoji || mood.emoji}</div>
+      <div class="mood-item-emoji">${moodIcon(entry.icon || mood.icon, 22)}</div>
       <div class="mood-item-main">
         <div class="mood-item-date">${prettyDate(entry.date)}${isToday ? ' · 今天' : ''}</div>
         <div class="mood-item-note">${entry.note ? escapeHTML(entry.note) : '没有写文字'}</div>
@@ -484,9 +489,9 @@ function openHistoryForm(entry) {
   const mood = moodFor(entry.score);
   const body = document.createElement('div');
   body.innerHTML = `
-    <div class="mood-edit-meta">${prettyDate(entry.date)} · 心情：${mood.emoji} ${mood.label}</div>
+    <div class="mood-edit-meta">${prettyDate(entry.date)} · 心情：${moodIcon(mood.icon, 18)} ${mood.label}</div>
     <div class="mood-edit-emoji-row" id="mood-edit-row">
-      ${MOODS.map((m) => `<button type="button" class="mood-edit-emoji-btn ${entry.score === m.score ? 'active' : ''}" data-score="${m.score}" aria-label="${m.label}">${m.emoji}</button>`).join('')}
+      ${MOODS.map((m) => `<button type="button" class="mood-edit-emoji-btn ${entry.score === m.score ? 'active' : ''}" data-score="${m.score}" aria-label="${m.label}">${moodIcon(m.icon, 24)}</button>`).join('')}
     </div>
     <textarea class="textarea" id="mood-edit-note" placeholder="想说点什么..." maxlength="500">${escapeHTML(entry.note || '')}</textarea>
     <div class="mood-edit-actions">
@@ -518,7 +523,7 @@ function openHistoryForm(entry) {
       id: entry.id,
       date: entry.date,
       score: m.score,
-      emoji: m.emoji,
+      icon: m.icon,
       note,
       createdAt: (prev && prev.createdAt) || entry.createdAt || getNow()
     };

@@ -13,8 +13,15 @@ import { injectStyle } from '../../core/util.js';
 
 let containerEl = null;
 
-// 八个软萌 emoji，主人在表单里点一下就能选
-const EMOJI_CHOICES = ['🎂', '🎉', '💍', '❤️', '🌹', '🎁', '✈️', '🌸'];
+// 八个 SVG 线稿图标供主人挑（红线：图标只准 SVG 线稿，不准 emoji）
+const ICON_CHOICES = ['heart', 'star', 'gift', 'camera', 'dream', 'smile', 'moon', 'sun'];
+const DEFAULT_ICON = 'heart';
+
+// 把图标名渲染成 SVG 线稿（兼容旧数据：若值不是已知图标名，回退成 heart）
+function renderIcon(name, size) {
+  const known = ICON_CHOICES.includes(name);
+  return createIcon(known ? name : DEFAULT_ICON, size).outerHTML;
+}
 
 // 注入样式（基于 CSS 变量，主题变了我也跟着变）
 injectStyle('app-anniversary-style', `
@@ -32,9 +39,10 @@ injectStyle('app-anniversary-style', `
   }
   .ann-hero:active { transform: scale(var(--press-scale)); }
   .ann-hero-emoji {
-    font-size: 44px;
+    display: flex;
     line-height: 1;
     margin-bottom: 8px;
+    color: var(--bubble-user-text);
     filter: drop-shadow(0 2px 6px rgba(0,0,0,.18));
   }
   .ann-hero-title {
@@ -102,7 +110,6 @@ injectStyle('app-anniversary-style', `
   }
   .ann-item:active { transform: scale(var(--press-scale)); }
   .ann-item-emoji {
-    font-size: 26px;
     line-height: 1;
     flex-shrink: 0;
     width: 44px;
@@ -110,6 +117,7 @@ injectStyle('app-anniversary-style', `
     display: flex;
     align-items: center;
     justify-content: center;
+    color: var(--accent-dark);
     background: color-mix(in srgb, var(--accent-light) 50%, transparent);
     border-radius: 50%;
   }
@@ -147,7 +155,9 @@ injectStyle('app-anniversary-style', `
     color: var(--text-hint);
   }
   .ann-empty-emoji {
-    font-size: 52px;
+    color: var(--accent);
+    display: flex;
+    justify-content: center;
     margin-bottom: 12px;
     opacity: .8;
   }
@@ -168,13 +178,12 @@ injectStyle('app-anniversary-style', `
     border-radius: var(--radius-sm);
     border: 2px solid transparent;
     background: var(--bg-secondary);
-    font-size: 22px;
+    color: var(--text-primary);
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
     transition: var(--motion);
-    color: inherit;
   }
   .ann-emoji-btn:active { transform: scale(var(--press-scale)); }
   .ann-emoji-btn.active {
@@ -334,7 +343,7 @@ async function render() {
   if (sorted.length === 0) {
     body.innerHTML = `
       <div class="ann-empty">
-        <div class="ann-empty-emoji">🎀</div>
+        <div class="ann-empty-emoji">${renderIcon('heart', 48)}</div>
         <div class="ann-empty-text">还没有纪念日，加一个嘛，我会一直帮你记着</div>
       </div>
     `;
@@ -370,17 +379,16 @@ async function render() {
 
 function renderHero(decorated) {
   const { item, days } = decorated;
-  const emoji = item.emoji || '🎀';
   const today = days === 0;
   const repeatTag = item.repeat === 'year' ? ' · 每年提醒' : '';
-  const daysText = today ? '🎉 就是今天呀' : `还有 ${days} 天就到啦`;
+  const daysText = today ? '就是今天呀' : `还有 ${days} 天就到啦`;
   const note = item.note ? `<div class="ann-hero-note">${escapeHTML(item.note)}</div>` : '';
   return `
     <div class="ann-hero" data-id="${item.id}">
       <span class="ann-hero-bubble b1"></span>
       <span class="ann-hero-bubble b2"></span>
       <span class="ann-hero-bubble b3"></span>
-      <div class="ann-hero-emoji">${emoji}</div>
+      <div class="ann-hero-emoji">${renderIcon(item.emoji, 40)}</div>
       <div class="ann-hero-title">${escapeHTML(item.title)}</div>
       <div class="ann-hero-date">${prettyDate(item.date)}${repeatTag}</div>
       <div class="ann-hero-days">${daysText}</div>
@@ -391,14 +399,13 @@ function renderHero(decorated) {
 
 function renderItem(decorated) {
   const { item, days } = decorated;
-  const emoji = item.emoji || '🎀';
   const today = days === 0;
   const cls = today ? 'today' : days < 0 ? 'past' : '';
   const repeatTag = item.repeat === 'year' ? ' · 每年' : '';
   const noteTag = item.note ? ' · ' + escapeHTML(item.note) : '';
   return `
     <button class="ann-item" data-id="${item.id}">
-      <div class="ann-item-emoji">${emoji}</div>
+      <div class="ann-item-emoji">${renderIcon(item.emoji, 22)}</div>
       <div class="ann-item-main">
         <div class="ann-item-title">${escapeHTML(item.title)}</div>
         <div class="ann-item-meta">${prettyDate(item.date)}${repeatTag}${noteTag}</div>
@@ -414,7 +421,7 @@ function renderItem(decorated) {
 
 function openForm(existing) {
   const editing = !!existing;
-  const data = existing || { emoji: EMOJI_CHOICES[0], repeat: '' };
+  const data = existing || { emoji: ICON_CHOICES[0], repeat: '' };
 
   const body = document.createElement('div');
   body.innerHTML = `
@@ -429,7 +436,7 @@ function openForm(existing) {
     <div class="ann-field">
       <label class="ann-field-label">选个小图标</label>
       <div class="ann-emoji-grid" id="ann-f-emoji">
-        ${EMOJI_CHOICES.map((e) => `<button type="button" class="ann-emoji-btn ${e === data.emoji ? 'active' : ''}" data-emoji="${e}">${e}</button>`).join('')}
+        ${ICON_CHOICES.map((e) => `<button type="button" class="ann-emoji-btn ${e === data.emoji ? 'active' : ''}" data-emoji="${e}">${renderIcon(e, 22)}</button>`).join('')}
       </div>
     </div>
     <div class="ann-field">
@@ -453,7 +460,7 @@ function openForm(existing) {
   });
 
   // 选中的 emoji
-  let pickedEmoji = data.emoji || EMOJI_CHOICES[0];
+  let pickedEmoji = data.emoji || ICON_CHOICES[0];
   const emojiGrid = body.querySelector('#ann-f-emoji');
   emojiGrid.addEventListener('click', (e) => {
     const btn = e.target.closest('.ann-emoji-btn');

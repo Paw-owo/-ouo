@@ -72,6 +72,15 @@ export const APPS = [
     page: 0,
     loader: () => import('./apps/weather/index.js')
   },
+  {
+    id: 'chat',
+    name: '聊天',
+    icon: 'chat',
+    iconColor: '#F5A0B0',
+    dock: false,
+    page: 0,
+    loader: () => import('./apps/chat/index.js')
+  },
 
   // ── page 1 ──
   {
@@ -118,9 +127,53 @@ export const APPS = [
     dock: false,
     page: 1,
     loader: () => import('./apps/health/index.js')
+  },
+  {
+    id: 'characters',
+    name: '角色',
+    icon: 'smile',
+    iconColor: '#F5D88A',
+    dock: false,
+    page: 1,
+    loader: () => import('./apps/characters/index.js')
+  },
+  {
+    id: 'worldbook',
+    name: '世界书',
+    icon: 'memo',
+    iconColor: '#B89878',
+    dock: false,
+    page: 1,
+    loader: () => import('./apps/worldbook/index.js')
+  },
+  {
+    id: 'moments',
+    name: '朋友圈',
+    icon: 'heart',
+    iconColor: '#E8888C',
+    dock: false,
+    page: 1,
+    loader: () => import('./apps/moments/index.js')
+  },
+  {
+    id: 'dream',
+    name: '梦境',
+    icon: 'dream',
+    iconColor: '#6B7FA0',
+    dock: false,
+    page: 1,
+    loader: () => import('./apps/dream/index.js')
+  },
+  {
+    id: 'avatar',
+    name: '头像',
+    icon: 'smile',
+    iconColor: '#F5B88A',
+    dock: false,
+    page: 1,
+    loader: () => import('./apps/avatar/index.js')
   }
 
-  // 后续批次会追加：chat / characters / worldbook / wallet / shop / moments /
-  // gallery / games / music / dream / avatar / collections /
-  // widget-store / photos
+  // 后续批次会追加：wallet / shop / gallery / games / music /
+  // collections / widget-store / photos
 ];
