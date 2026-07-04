@@ -154,8 +154,8 @@ function getDockOrder(reg) {
   return [...ordered, ...missing];
 }
 
-function getHiddenIcons() { return getData('app_hidden_icons', []); }
-function saveHiddenIcons(arr) { setData('app_hidden_icons', [...new Set(arr)]); }
+function getHiddenIcons() { return getData(KEYS.appHiddenIcons, []); }
+function saveHiddenIcons(arr) { setData(KEYS.appHiddenIcons, [...new Set(arr)]); }
 
 async function renderDock() {
   const reg = await getRegistry();
@@ -206,7 +206,7 @@ async function createWidget(w) {
   } else if (w.type === 'anniversary') {
     el.innerHTML = `<div class="widget-title">纪念日</div><div class="widget-value" id="w-anniversary">还没有纪念日呢</div>`;
   } else if (w.type === 'focus') {
-    const focus = getData('app_focus_widget', { title: '今天也要好好休息', text: '打开设置，看看我能帮你做什么' });
+    const focus = getData(KEYS.appFocusWidget, { title: '今天也要好好休息', text: '打开设置，看看我能帮你做什么' });
     el.innerHTML = `<div class="widget-title">今日提示</div><div class="widget-value" id="w-focus-title">${escapeHtml(focus.title || '今天也要好好休息')}</div><div class="widget-sub" id="w-focus-text">${escapeHtml(focus.text || '')}</div>`;
   } else if (w.type === 'vinyl') {
     el.innerHTML = `
@@ -362,7 +362,7 @@ function handleIconPointerDown(event, element) {
 
 function saveIconOrder(grid) {
   const ids = [...grid.querySelectorAll('.desktop-icon[data-app-id]')].map((n) => n.dataset.appId);
-  setData('app_icon_order_' + (grid.dataset.iconGrid || '0'), ids);
+  setData(KEYS.appIconOrder(grid.dataset.iconGrid || '0'), ids);
 }
 
 function updateEditingClass() {
@@ -390,7 +390,7 @@ function bindEvents() {
   });
 
   // 窗口尺寸变化重排
-  window.addEventListener('resize', debounce(() => { renderAll(); applyAllImages(); }, 260));
+  window.addEventListener('resize', debounce(async () => { await renderAll(); await applyAllImages(); }, 260));
 
   // 锁屏键盘
   lockPadEl.addEventListener('click', onLockKeyClick);
@@ -421,7 +421,7 @@ function renderLockDots() {
 function checkLockPassword() {
   const pwd = getData(KEYS.appLockPassword, '0326');
   if (lockInput === String(pwd)) {
-    setData('app_lock_unlocked', true);
+    setData(KEYS.appLockUnlocked, true);
     lockScreenEl.classList.add('unlocked');
     setTimeout(() => lockScreenEl.classList.add('hidden'), 360);
     showToast('解锁啦，见到你真好', 'success');
@@ -436,7 +436,7 @@ function checkLockPassword() {
 
 async function refreshLockScreen() {
   // 已解锁就不显示
-  const unlocked = getData('app_lock_unlocked', false);
+  const unlocked = getData(KEYS.appLockUnlocked, false);
   if (unlocked) {
     lockScreenEl.classList.add('unlocked', 'hidden');
   } else {
@@ -640,11 +640,11 @@ function refreshBadges() {
 
 function getBadgeMap() {
   const map = {};
-  const direct = getData('app_badges', null);
+  const direct = getData(KEYS.appBadges, null);
   if (direct && typeof direct === 'object') Object.assign(map, direct);
-  const chatUnread = getData('chat_unread_count', 0);
+  const chatUnread = getData(KEYS.chatUnreadCount, 0);
   if (Number(chatUnread) > 0) map.chat = Number(chatUnread);
-  const momentsUnread = getData('moments_unread_count', 0);
+  const momentsUnread = getData(KEYS.momentsUnreadCount, 0);
   if (Number(momentsUnread) > 0) map.moments = Number(momentsUnread);
   return map;
 }
@@ -681,7 +681,7 @@ function escapeHtml(s) {
 // 暴露给设置 App 用（图片写入后触发刷新）
 window.popoRefreshDesktop = async () => { await renderAll(); await applyAllImages(); refreshBadges(); };
 window.popoRefreshLock = refreshLockScreen;
-window.popoLock = () => { setData('app_lock_unlocked', false); lockScreenEl.classList.remove('unlocked', 'hidden'); lockInput = ''; lockErrorEl.textContent = ''; renderLockDots(); };
+window.popoLock = () => { setData(KEYS.appLockUnlocked, false); lockScreenEl.classList.remove('unlocked', 'hidden'); lockInput = ''; lockErrorEl.textContent = ''; renderLockDots(); };
 
 // 启动
 boot();

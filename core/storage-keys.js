@@ -58,6 +58,9 @@ export const KEYS = Object.freeze({
   appSchemaVersion: 'app_schema_version',
   appLastOpenedApp: 'app_last_opened_app',
   appInstallPrompted: 'app_install_prompted',
+  appLockUnlocked: 'app_lock_unlocked',
+  appIconOrder: (page) => `app_icon_order_${page}`,
+  appHiddenIcons: 'app_hidden_icons',
 
   // 聊天相关
   chatCurrentCharacter: 'chat_current_character',
@@ -68,6 +71,7 @@ export const KEYS = Object.freeze({
   chatWallpaperOpacity: (characterId) => `chat_${characterId}_wallpaper_opacity`,
   chatStickerPack: (characterId) => `chat_${characterId}_sticker_pack`,
   chatConfig: (characterId) => `chat_${characterId}_config`,
+  chatUnreadCount: 'chat_unread_count',
 
   // 群聊（必须用 groupId，避免与单聊冲突）
   groupConfig: (groupId) => `chat_group_${groupId}_config`,
@@ -94,6 +98,9 @@ export const KEYS = Object.freeze({
   widgetStoreState: 'widget_store_state',
   astroState: 'astro_state',
   calculatorHistory: 'calculator_history',
+  appFocusWidget: 'app_focus_widget',
+  appBadges: 'app_badges',
+  momentsUnreadCount: 'moments_unread_count',
 
   // 防打扰与主动消息
   aiProactiveBudget: 'ai_proactive_budget',

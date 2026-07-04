@@ -27,7 +27,8 @@ const PRESETS = {
       '--bubble-user-bg': '#7AA2D6',
       '--bubble-user-text': '#FFFFFF',
       '--bubble-ai-bg': '#FFFFFF',
-      '--bubble-ai-text': '#1C1C1E'
+      '--bubble-ai-text': '#1C1C1E',
+      '--shadow-glow': '0 0 16px rgba(122,162,214,0.45)'
     }
   },
   sakura: {
@@ -46,7 +47,8 @@ const PRESETS = {
       '--bubble-user-bg': '#E2A0B4',
       '--bubble-user-text': '#FFFFFF',
       '--bubble-ai-bg': '#FFFFFF',
-      '--bubble-ai-text': '#2A1C22'
+      '--bubble-ai-text': '#2A1C22',
+      '--shadow-glow': '0 0 16px rgba(226,160,180,0.45)'
     }
   },
   lavender: {
@@ -65,7 +67,8 @@ const PRESETS = {
       '--bubble-user-bg': '#A88CC8',
       '--bubble-user-text': '#FFFFFF',
       '--bubble-ai-bg': '#FFFFFF',
-      '--bubble-ai-text': '#1F1A2A'
+      '--bubble-ai-text': '#1F1A2A',
+      '--shadow-glow': '0 0 16px rgba(168,140,200,0.45)'
     }
   },
   skyDark: {
@@ -84,7 +87,8 @@ const PRESETS = {
       '--bubble-user-bg': '#5B84BC',
       '--bubble-user-text': '#FFFFFF',
       '--bubble-ai-bg': '#2A3544',
-      '--bubble-ai-text': '#E8ECF2'
+      '--bubble-ai-text': '#E8ECF2',
+      '--shadow-glow': '0 0 16px rgba(143,184,232,0.45)'
     }
   },
   sakuraDark: {
@@ -103,7 +107,8 @@ const PRESETS = {
       '--bubble-user-bg': '#C88898',
       '--bubble-user-text': '#FFFFFF',
       '--bubble-ai-bg': '#33262C',
-      '--bubble-ai-text': '#F2E0E6'
+      '--bubble-ai-text': '#F2E0E6',
+      '--shadow-glow': '0 0 16px rgba(226,160,180,0.45)'
     }
   },
   lavenderDark: {
@@ -122,7 +127,8 @@ const PRESETS = {
       '--bubble-user-bg': '#826BA0',
       '--bubble-user-text': '#FFFFFF',
       '--bubble-ai-bg': '#2A2440',
-      '--bubble-ai-text': '#ECDEF8'
+      '--bubble-ai-text': '#ECDEF8',
+      '--shadow-glow': '0 0 16px rgba(168,140,200,0.45)'
     }
   }
 };
@@ -152,7 +158,6 @@ const SHARED_VARS = {
   '--shadow-sm': '0 1px 4px rgba(0,0,0,0.06)',
   '--shadow-md': '0 2px 12px rgba(0,0,0,0.10)',
   '--shadow-lg': '0 8px 32px rgba(0,0,0,0.16)',
-  '--shadow-glow': '0 0 16px rgba(122,162,214,0.45)',
   '--glass-blur': '20px',
   '--glass-blur-strong': '32px',
   '--wallpaper-soft': '0.10',

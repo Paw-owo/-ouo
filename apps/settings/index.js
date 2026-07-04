@@ -8,20 +8,17 @@
 
 import { getPresets, getCurrentThemeId, setTheme, exportTheme, importTheme, applyDesktopScale, applyFontFamily, getCurrentTheme } from '../../core/theme.js';
 import { STORES, KEYS } from '../../core/storage-keys.js';
-import { compressImage, fileToDataURL, getDB, setDB, deleteDB, getData, setData } from '../../core/storage.js';
+import { compressImage, fileToDataURL, getDB, setDB, deleteDB, getData, setData, removeData } from '../../core/storage.js';
 import { pickImageFile, isUsableImage, cssUrl, clamp } from '../../core/util.js';
 import { exportToFile, importFromFile } from '../../core/storage-manager.js';
-import { showToast, showBottomSheet, hideBottomSheet, showConfirm, createIcon } from '../../core/ui.js';
+import { showToast, showBottomSheet, showConfirm, createIcon } from '../../core/ui.js';
 import bus from '../../core/events.js';
 import { get as getConfig } from '../../core/config.js';
 
 let containerEl = null;
-let ctxRef = null;
-let resizeListener = null;
 
 export async function mount(container, context) {
   containerEl = container;
-  ctxRef = context;
   container.innerHTML = `
     <div class="app-header">
       <button class="app-back" id="settings-back" aria-label="返回桌面">${createIcon('back', 20).outerHTML}</button>
@@ -234,7 +231,7 @@ function renderFontCard() {
   });
   card.querySelector('#font-clear').addEventListener('click', async () => {
     await deleteDB(STORES.blobs, KEYS.appCustomFontBlob);
-    removeDataLocal(KEYS.appFontFamily);
+    removeData(KEYS.appFontFamily);
     applyFontFamily('');
     showToast('字体清掉啦');
   });
@@ -246,17 +243,17 @@ function renderFontCard() {
 // ════════════════════════════════════════
 function renderFocusCard() {
   const card = document.createElement('div');
-  const focus = getData('app_focus_widget', { title: '今天也要好好休息', text: '打开设置，看看我能帮你做什么' });
+  const focus = getData(KEYS.appFocusWidget, { title: '今天也要好好休息', text: '打开设置，看看我能帮你做什么' });
   card.className = 'card';
   card.innerHTML = `<div class="card-title">今日提示 Widget</div>
     <input class="input" id="focus-title" placeholder="标题" value="${escapeAttr(focus.title || '')}" style="margin-bottom:8px">
     <textarea class="textarea" id="focus-text" placeholder="想说点什么...">${escapeHtml(focus.text || '')}</textarea>
     <button class="btn primary block" id="focus-save" style="margin-top:10px">记下来</button>`;
-  card.querySelector('#focus-save').addEventListener('click', () => {
+  card.querySelector('#focus-save').addEventListener('click', async () => {
     const title = card.querySelector('#focus-title').value.trim() || '今天也要好好休息';
     const text = card.querySelector('#focus-text').value.trim();
-    setData('app_focus_widget', { title, text });
-    refreshDesktop();
+    setData(KEYS.appFocusWidget, { title, text });
+    await refreshDesktop();
     showToast('好啦，记下来啦', 'success');
   });
   return card;
@@ -267,7 +264,7 @@ function renderFocusCard() {
 // ════════════════════════════════════════
 async function renderHiddenIconsCard() {
   const reg = await import('../../apps-registry.js');
-  const hidden = getData('app_hidden_icons', []);
+  const hidden = getData(KEYS.appHiddenIcons, []);
   const card = document.createElement('div');
   card.className = 'card';
   if (!hidden.length) {
@@ -283,7 +280,7 @@ async function renderHiddenIconsCard() {
     row.innerHTML = `<span class="card-row-label">${app.name}</span><button class="btn ghost">放回去</button>`;
     row.querySelector('button').addEventListener('click', () => {
       const next = hidden.filter((id) => id !== appId);
-      setData('app_hidden_icons', next);
+      setData(KEYS.appHiddenIcons, next);
       refreshDesktop();
       renderSections();
       showToast(`${app.name} 放回去啦`);
@@ -352,7 +349,6 @@ async function refreshDesktop() {
   if (window.popoRefreshDesktop) await window.popoRefreshDesktop();
   bus.emit('desktop:refresh');
 }
-function removeDataLocal(key) { try { localStorage.removeItem(key); } catch (e) {} }
 function downloadText(filename, text) {
   const blob = new Blob([text], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
@@ -365,5 +361,4 @@ function escapeAttr(s) { return escapeHtml(s).replace(/"/g, '&quot;'); }
 
 export function unmount() {
   containerEl = null;
-  ctxRef = null;
 }
