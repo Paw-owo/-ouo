@@ -1,608 +1,317 @@
-// imports:
-//   from './storage.js': getData, setData
+// core/theme.js
+// 主题系统：6 套预设 + 自定义颜色 + 导入导出。
+// 修复原 bug：
+//  1) getCurrentTheme 深拷贝（避免污染预设）
+//  2) importTheme 的 JSON.parse 加 try-catch
+//  3) 派发 theme:changed 事件
+// 依赖：core/storage-keys.js, core/events.js, core/storage.js
 
+import { KEYS } from './storage-keys.js';
 import { getData, setData } from './storage.js';
-
-const THEME_KEY = 'app_theme';
-const PRESET_KEY = 'app_theme_preset';
-const MODE_KEY = 'app_theme_mode';
-
-const DEFAULT_PRESET = 'coconut-spring';
-const DEFAULT_MODE = 'light';
-
-const FONT_FALLBACK = "'PingFang SC', 'Microsoft YaHei', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-
-// ═══════════════════════════════════════
-// 【基础变量】默认值（椰乳四季春）
-// ═══════════════════════════════════════
-
-const BASE_VARIABLES = {
-  'bg-main': '#F8F2E8',
-  'bg-light': '#FFF5E6',
-  'bg-card': '#FFFCF5',
-  'color-accent': '#C8A87A',
-  'color-text': '#6B5B4E',
-  'bg-primary': '#F8F2E8',
-  'bg-secondary': '#FFF5E6',
-  'bg-overlay': 'rgba(0, 0, 0, 0.28)',
-  'surface': '#FFFCF5',
-  'surface-muted': 'color-mix(in srgb, var(--bg-card) 90%, var(--text-hint) 10%)',
-  'accent': '#C8A87A',
-  'accent-light': '#E8D8C0',
-  'accent-dark': '#A88A5A',
-  'text-primary': '#6B5B4E',
-  'text-secondary': '#8A7A6C',
-  'text-hint': '#B0A498',
-  'bubble-user-bg': '#C8A87A',
-  'bubble-user-text': '#FFFCF5',
-  'bubble-ai-bg': '#EDE5D8',
-  'bubble-ai-text': '#6B5B4E',
-  'bubble-radius': '18px',
-  'bubble-radius-tail': '4px',
-  'font-main': FONT_FALLBACK,
-  'font-size-base': '15px',
-  'font-size-small': '13px',
-  'font-size-title': '17px',
-  'spacing-xs': '4px',
-  'spacing-sm': '8px',
-  'spacing-md': '16px',
-  'spacing-lg': '24px',
-  'radius-sm': '8px',
-  'radius-md': '16px',
-  'radius-lg': '24px',
-  'shadow-sm': '0 1px 4px rgba(0, 0, 0, 0.05)',
-  'shadow-md': '0 2px 12px rgba(0, 0, 0, 0.08)',
-  'shadow-lg': '0 8px 32px rgba(0, 0, 0, 0.12)',
-  'shadow-card': '0 2px 12px rgba(0, 0, 0, 0.06)',
-  'shadow-float': '0 8px 32px rgba(0, 0, 0, 0.10)',
-  'shadow-neu-out': '2px 2px 6px rgba(0,0,0,0.06), -2px -2px 6px rgba(255,255,255,0.8)',
-  'shadow-neu-in': 'inset 2px 2px 6px rgba(0,0,0,0.06), inset -2px -2px 6px rgba(255,255,255,0.8)',
-  'motion': 'all 200ms ease',
-  'press-scale': '0.96',
-  'radius-xl': '28px',
-  'radius-full': '999px'
-};
-
-// ═══════════════════════════════════════
-// 【阴影常量】日间 / 夜间
-// ═══════════════════════════════════════
-
-const LIGHT_SHADOWS = {
-  'shadow-sm': '0 1px 4px rgba(0, 0, 0, 0.05)',
-  'shadow-md': '0 2px 12px rgba(0, 0, 0, 0.08)',
-  'shadow-lg': '0 8px 32px rgba(0, 0, 0, 0.12)',
-  'shadow-card': '0 2px 12px rgba(0, 0, 0, 0.06)',
-  'shadow-float': '0 8px 32px rgba(0, 0, 0, 0.10)'
-};
-
-const DARK_SHADOWS = {
-  'shadow-sm': '0 1px 4px rgba(0, 0, 0, 0.18)',
-  'shadow-md': '0 2px 12px rgba(0, 0, 0, 0.24)',
-  'shadow-lg': '0 8px 32px rgba(0, 0, 0, 0.36)',
-  'shadow-card': '0 2px 12px rgba(0, 0, 0, 0.20)',
-  'shadow-float': '0 8px 32px rgba(0, 0, 0, 0.28)'
-};
-
-// ═══════════════════════════════════════
-// 【主题预设】3 浅色 + 3 夜间
-// ═══════════════════════════════════════
+import bus from './events.js';
 
 const PRESETS = {
-  // ────────────────────────────────────────────
-  // 椰乳四季春 — 米黄暖色系
-  // ────────────────────────────────────────────
-  'coconut-spring': {
-    id: 'coconut-spring',
-    name: '椰乳四季春',
-    mode: 'light',
-    variables: {
-      'bg-main': '#F8F2E8',
-      'bg-light': '#FFF5E6',
-      'bg-card': '#FFFCF5',
-      'color-accent': '#C8A87A',
-      'color-text': '#6B5B4E',
-      'bg-primary': '#F8F2E8',
-      'bg-secondary': '#FFF5E6',
-      'bg-overlay': 'rgba(0, 0, 0, 0.28)',
-      'surface': '#FFFCF5',
-      'surface-muted': 'color-mix(in srgb, #FFFCF5 90%, #B0A498 10%)',
-      'accent': '#C8A87A',
-      'accent-light': '#E8D8C0',
-      'accent-dark': '#A88A5A',
-      'text-primary': '#6B5B4E',
-      'text-secondary': '#8A7A6C',
-      'text-hint': '#B0A498',
-      'bubble-user-bg': '#C8A87A',
-      'bubble-user-text': '#FFFCF5',
-      'bubble-ai-bg': '#EDE5D8',
-      'bubble-ai-text': '#6B5B4E',
-      ...LIGHT_SHADOWS
+  sky: {
+    id: 'sky', name: '天空蓝', mode: 'light',
+    vars: {
+      '--bg-primary': '#F2F6FB',
+      '--bg-secondary': '#E4ECF5',
+      '--bg-card': '#FFFFFF',
+      '--bg-overlay': 'rgba(0,0,0,0.28)',
+      '--accent': '#7AA2D6',
+      '--accent-light': '#DAE5F5',
+      '--accent-dark': '#5B84BC',
+      '--text-primary': '#1C1C1E',
+      '--text-secondary': '#8A8A8E',
+      '--text-hint': '#C4C4C8',
+      '--bubble-user-bg': '#7AA2D6',
+      '--bubble-user-text': '#FFFFFF',
+      '--bubble-ai-bg': '#FFFFFF',
+      '--bubble-ai-text': '#1C1C1E'
     }
   },
-
-  // ────────────────────────────────────────────
-  // 椰青冰美式 — 蓝灰底 + 棕色气泡
-  // ────────────────────────────────────────────
-  'coconut-iced': {
-    id: 'coconut-iced',
-    name: '椰青冰美式',
-    mode: 'light',
-    variables: {
-      'bg-main': '#E1EFF4',
-      'bg-light': '#EDDFD4',
-      'bg-card': '#F5EDE6',
-      'color-accent': '#9D7C6D',
-      'color-text': '#512128',
-      'bg-primary': '#E1EFF4',
-      'bg-secondary': '#EDDFD4',
-      'bg-overlay': 'rgba(0, 0, 0, 0.28)',
-      'surface': '#F5EDE6',
-      'surface-muted': 'color-mix(in srgb, #F5EDE6 90%, #A89890 10%)',
-      'accent': '#9D7C6D',
-      'accent-light': '#C8B8A8',
-      'accent-dark': '#7A5C4D',
-      'text-primary': '#512128',
-      'text-secondary': '#7A6058',
-      'text-hint': '#A89890',
-      'bubble-user-bg': '#9D7C6D',
-      'bubble-user-text': '#FFF8F0',
-      'bubble-ai-bg': '#E8DDD4',
-      'bubble-ai-text': '#512128',
-      ...LIGHT_SHADOWS
+  sakura: {
+    id: 'sakura', name: '樱花粉', mode: 'light',
+    vars: {
+      '--bg-primary': '#FDF5F7',
+      '--bg-secondary': '#F8E6EC',
+      '--bg-card': '#FFFFFF',
+      '--bg-overlay': 'rgba(0,0,0,0.24)',
+      '--accent': '#E2A0B4',
+      '--accent-light': '#F8DEE8',
+      '--accent-dark': '#C88898',
+      '--text-primary': '#2A1C22',
+      '--text-secondary': '#9A8088',
+      '--text-hint': '#C4B0B6',
+      '--bubble-user-bg': '#E2A0B4',
+      '--bubble-user-text': '#FFFFFF',
+      '--bubble-ai-bg': '#FFFFFF',
+      '--bubble-ai-text': '#2A1C22'
     }
   },
-
-  // ────────────────────────────────────────────
-  // 葡萄气泡 — 紫色系撞色
-  // ────────────────────────────────────────────
-  'strawberry-milk': {
-    id: 'strawberry-milk',
-    name: '葡萄气泡',
-    mode: 'light',
-    variables: {
-      'bg-main': '#F4F0F8',
-      'bg-light': '#EDE6F5',
-      'bg-card': '#FCFAFF',
-      'color-accent': '#9B7EC8',
-      'color-text': '#4A3A5C',
-      'bg-primary': '#F4F0F8',
-      'bg-secondary': '#EDE6F5',
-      'bg-overlay': 'rgba(0, 0, 0, 0.28)',
-      'surface': '#FCFAFF',
-      'surface-muted': 'color-mix(in srgb, #FCFAFF 90%, #A898B8 10%)',
-      'accent': '#9B7EC8',
-      'accent-light': '#D4C8E8',
-      'accent-dark': '#7A5CAE',
-      'text-primary': '#4A3A5C',
-      'text-secondary': '#7A6890',
-      'text-hint': '#B0A4C0',
-      'bubble-user-bg': '#9B7EC8',
-      'bubble-user-text': '#FCFAFF',
-      'bubble-ai-bg': '#E8E0F0',
-      'bubble-ai-text': '#4A3A5C',
-      ...LIGHT_SHADOWS
+  lavender: {
+    id: 'lavender', name: '薰衣紫', mode: 'light',
+    vars: {
+      '--bg-primary': '#F6F3FC',
+      '--bg-secondary': '#E7DEF2',
+      '--bg-card': '#FFFFFF',
+      '--bg-overlay': 'rgba(0,0,0,0.26)',
+      '--accent': '#A88CC8',
+      '--accent-light': '#E0D2F0',
+      '--accent-dark': '#826BA0',
+      '--text-primary': '#1F1A2A',
+      '--text-secondary': '#8A82A0',
+      '--text-hint': '#C0B8CE',
+      '--bubble-user-bg': '#A88CC8',
+      '--bubble-user-text': '#FFFFFF',
+      '--bubble-ai-bg': '#FFFFFF',
+      '--bubble-ai-text': '#1F1A2A'
     }
   },
-
-  // ────────────────────────────────────────────
-  // 黑巧夜语 — 深巧底 + 金强调
-  // ────────────────────────────────────────────
-  'dark-chocolate': {
-    id: 'dark-chocolate',
-    name: '黑巧夜语',
-    mode: 'dark',
-    variables: {
-      'bg-main': '#1E1410',
-      'bg-light': '#2A1C15',
-      'bg-card': '#2F1F18',
-      'color-accent': '#D4A853',
-      'color-text': '#E8D5C0',
-      'bg-primary': '#1E1410',
-      'bg-secondary': '#2A1C15',
-      'bg-overlay': 'rgba(0, 0, 0, 0.52)',
-      'surface': '#2F1F18',
-      'surface-muted': 'color-mix(in srgb, #2F1F18 90%, #786858 10%)',
-      'accent': '#D4A853',
-      'accent-light': '#4A3C28',
-      'accent-dark': '#E8C070',
-      'text-primary': '#E8D5C0',
-      'text-secondary': '#B8A090',
-      'text-hint': '#786858',
-      'bubble-user-bg': '#D4A853',
-      'bubble-user-text': '#2A1C15',
-      'bubble-ai-bg': '#3A2C22',
-      'bubble-ai-text': '#E8D5C0',
-      ...DARK_SHADOWS
+  skyDark: {
+    id: 'skyDark', name: '深夜蓝', mode: 'dark',
+    vars: {
+      '--bg-primary': '#0F1622',
+      '--bg-secondary': '#1A2230',
+      '--bg-card': '#222B3A',
+      '--bg-overlay': 'rgba(0,0,0,0.55)',
+      '--accent': '#8FB8E8',
+      '--accent-light': '#2A3A52',
+      '--accent-dark': '#6A95C8',
+      '--text-primary': '#E8ECF2',
+      '--text-secondary': '#9AA4B0',
+      '--text-hint': '#5C6674',
+      '--bubble-user-bg': '#5B84BC',
+      '--bubble-user-text': '#FFFFFF',
+      '--bubble-ai-bg': '#2A3544',
+      '--bubble-ai-text': '#E8ECF2'
     }
   },
-
-  // ────────────────────────────────────────────
-  // 泰迪暖窝 — 暖棕底 + 奶茶气泡
-  // ────────────────────────────────────────────
-  'teddy-nest': {
-    id: 'teddy-nest',
-    name: '泰迪暖窝',
-    mode: 'dark',
-    variables: {
-      'bg-main': '#2A1F1A',
-      'bg-light': '#332520',
-      'bg-card': '#3A2820',
-      'color-accent': '#E8C4A0',
-      'color-text': '#F5E6D3',
-      'bg-primary': '#2A1F1A',
-      'bg-secondary': '#332520',
-      'bg-overlay': 'rgba(0, 0, 0, 0.52)',
-      'surface': '#3A2820',
-      'surface-muted': 'color-mix(in srgb, #3A2820 90%, #807060 10%)',
-      'accent': '#E8C4A0',
-      'accent-light': '#4A3830',
-      'accent-dark': '#F0D8B8',
-      'text-primary': '#F5E6D3',
-      'text-secondary': '#C0A890',
-      'text-hint': '#807060',
-      'bubble-user-bg': '#E8C4A0',
-      'bubble-user-text': '#3A2820',
-      'bubble-ai-bg': '#443428',
-      'bubble-ai-text': '#F5E6D3',
-      ...DARK_SHADOWS
+  sakuraDark: {
+    id: 'sakuraDark', name: '夜樱粉', mode: 'dark',
+    vars: {
+      '--bg-primary': '#1F161A',
+      '--bg-secondary': '#2A1F24',
+      '--bg-card': '#33262C',
+      '--bg-overlay': 'rgba(0,0,0,0.55)',
+      '--accent': '#E2A0B4',
+      '--accent-light': '#3A2630',
+      '--accent-dark': '#C88898',
+      '--text-primary': '#F2E0E6',
+      '--text-secondary': '#A89098',
+      '--text-hint': '#6C5A60',
+      '--bubble-user-bg': '#C88898',
+      '--bubble-user-text': '#FFFFFF',
+      '--bubble-ai-bg': '#33262C',
+      '--bubble-ai-text': '#F2E0E6'
     }
   },
-
-  // ────────────────────────────────────────────
-  // 香草米布丁 — 深米底 + 灰粉气泡
-  // ────────────────────────────────────────────
-  'vanilla-pudding': {
-    id: 'vanilla-pudding',
-    name: '香草米布丁',
-    mode: 'dark',
-    variables: {
-      'bg-main': '#2A1F18',
-      'bg-light': '#2F231A',
-      'bg-card': '#352820',
-      'color-accent': '#C3AB99',
-      'color-text': '#F3EEE9',
-      'bg-primary': '#2A1F18',
-      'bg-secondary': '#2F231A',
-      'bg-overlay': 'rgba(0, 0, 0, 0.52)',
-      'surface': '#352820',
-      'surface-muted': 'color-mix(in srgb, #352820 90%, #786858 10%)',
-      'accent': '#C3AB99',
-      'accent-light': '#4A3C32',
-      'accent-dark': '#D8C0B0',
-      'text-primary': '#F3EEE9',
-      'text-secondary': '#B8A898',
-      'text-hint': '#786858',
-      'bubble-user-bg': '#C3AB99',
-      'bubble-user-text': '#2A1F18',
-      'bubble-ai-bg': '#3E3028',
-      'bubble-ai-text': '#F3EEE9',
-      ...DARK_SHADOWS
+  lavenderDark: {
+    id: 'lavenderDark', name: '暮色紫', mode: 'dark',
+    vars: {
+      '--bg-primary': '#161220',
+      '--bg-secondary': '#221C30',
+      '--bg-card': '#2A2440',
+      '--bg-overlay': 'rgba(0,0,0,0.55)',
+      '--accent': '#A88CC8',
+      '--accent-light': '#2E2640',
+      '--accent-dark': '#826BA0',
+      '--text-primary': '#ECDEF8',
+      '--text-secondary': '#9A8FB0',
+      '--text-hint': '#5E5670',
+      '--bubble-user-bg': '#826BA0',
+      '--bubble-user-text': '#FFFFFF',
+      '--bubble-ai-bg': '#2A2440',
+      '--bubble-ai-text': '#ECDEF8'
     }
   }
 };
 
-// ═══════════════════════════════════════
-// 【旧版兼容】老主题 ID 映射到新 ID
-// ═══════════════════════════════════════
-
-const LEGACY_PRESET_ALIAS = {
-  default: 'coconut-spring',
-  light: 'coconut-spring',
-  blue: 'coconut-spring',
-  pink: 'strawberry-milk',
-  cream: 'coconut-spring',
-  sky: 'coconut-iced',
-  paper: 'coconut-spring',
-  peach: 'coconut-spring',
-  coral: 'coconut-iced',
-  berry: 'strawberry-milk',
-  strawberry: 'strawberry-milk',
-  blush: 'coconut-spring',
-  lavender: 'strawberry-milk',
-  purple: 'strawberry-milk',
-  warm: 'coconut-spring',
-  dark: 'dark-chocolate',
-  night: 'dark-chocolate',
-  dusk: 'dark-chocolate',
-  'rose-noir': 'dark-chocolate',
-  candle: 'teddy-nest',
-  milk: 'vanilla-pudding',
-  cocoa: 'vanilla-pudding',
-  'warm-gray': 'vanilla-pudding',
-  'milk-cafe': 'teddy-nest',
-  caramel: 'teddy-nest',
-  gray: 'vanilla-pudding'
+// 全局共享变量（与主题无关，固定结构）
+const SHARED_VARS = {
+  '--font-main': "'PingFang SC', 'Microsoft YaHei', sans-serif",
+  '--font-size-base': '15px',
+  '--font-size-small': '13px',
+  '--font-size-title': '17px',
+  '--font-size-large': '20px',
+  '--font-size-huge': '28px',
+  '--spacing-xs': '4px',
+  '--spacing-sm': '8px',
+  '--spacing-md': '16px',
+  '--spacing-lg': '24px',
+  '--spacing-xl': '32px',
+  '--radius-sm': '8px',
+  '--radius-md': '16px',
+  '--radius-lg': '24px',
+  '--radius-icon': '14px',
+  '--radius-card': '20px',
+  '--radius-sheet': '24px',
+  '--radius-dock': '28px',
+  '--bubble-radius': '18px',
+  '--bubble-radius-tail': '4px',
+  '--shadow-sm': '0 1px 4px rgba(0,0,0,0.06)',
+  '--shadow-md': '0 2px 12px rgba(0,0,0,0.10)',
+  '--shadow-lg': '0 8px 32px rgba(0,0,0,0.16)',
+  '--shadow-glow': '0 0 16px rgba(122,162,214,0.45)',
+  '--glass-blur': '20px',
+  '--glass-blur-strong': '32px',
+  '--wallpaper-soft': '0.10',
+  '--press-scale': '0.96',
+  '--motion': 'all 200ms ease',
+  '--motion-spring': 'cubic-bezier(0.34, 1.56, 0.64, 1)',
+  '--motion-fast': 'all 120ms ease',
+  '--icon-size': '60px',
+  '--dock-base': '84px',
+  '--status-bar-base': '44px',
+  '--widget-scale': '1'
 };
 
-let currentTheme = null;
+export function getPresets() {
+  // 深拷贝避免污染
+  return JSON.parse(JSON.stringify(PRESETS));
+}
 
-// ═══════════════════════════════════════
-// 【主题应用】写入变量 + 更新主题对象
-// ═══════════════════════════════════════
+export function getPreset(id) {
+  if (!PRESETS[id]) return null;
+  // 深拷贝避免污染
+  return JSON.parse(JSON.stringify(PRESETS[id]));
+}
 
-export function applyTheme(variables = {}) {
-  const safeVariables = normalizeVariables(variables);
+export function getCurrentThemeId() {
+  return getData(KEYS.appTheme, 'sky');
+}
+
+export function getCurrentTheme() {
+  const id = getCurrentThemeId();
+  const preset = getPreset(id);
+  if (preset) return preset;
+  // 自定义主题
+  const custom = getData(KEYS.appCustomTheme, null);
+  if (custom && custom.id === id) return JSON.parse(JSON.stringify(custom));
+  return getPreset('sky');
+}
+
+export function applyTheme(theme) {
   const root = document.documentElement;
-
-  Object.entries(safeVariables).forEach(([key, value]) => {
-    if (value === undefined || value === null || value === '') return;
-    root.style.setProperty(`--${key}`, String(value));
-  });
-
-  const base = readCurrentTheme();
-  const mergedCustom = {
-    ...(base.customVariables || {}),
-    ...safeVariables
-  };
-
-  currentTheme = normalizeTheme({
-    ...base,
-    variables: {
-      ...(base.variables || {}),
-      ...safeVariables
-    },
-    customVariables: mergedCustom
-  });
-
-  setMetaColor(currentTheme.variables['bg-main'] || currentTheme.variables['bg-primary']);
-  return currentTheme;
+  // 先清掉旧主题变量
+  const allKeys = new Set([
+    ...Object.keys(SHARED_VARS),
+    ...Object.keys(PRESETS.sky.vars)
+  ]);
+  allKeys.forEach((k) => root.style.removeProperty(k));
+  // 写入共享变量
+  for (const [k, v] of Object.entries(SHARED_VARS)) root.style.setProperty(k, v);
+  // 写入主题变量
+  if (theme && theme.vars) {
+    for (const [k, v] of Object.entries(theme.vars)) root.style.setProperty(k, v);
+  }
+  // data-mode 用于深色选择器
+  if (theme && theme.mode) root.setAttribute('data-theme-mode', theme.mode);
+  // theme-color meta
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta && theme.vars && theme.vars['--bg-primary']) {
+    meta.setAttribute('content', theme.vars['--bg-primary']);
+  }
 }
 
-// ═══════════════════════════════════════
-// 【导入导出】主题文件读写
-// ═══════════════════════════════════════
-
-export function exportTheme() {
-  const theme = getCurrentTheme();
-  return {
-    preset: theme.preset,
-    mode: theme.mode,
-    variables: { ...theme.variables },
-    customVariables: { ...theme.customVariables }
-  };
+export function setTheme(id) {
+  const preset = getPreset(id);
+  if (!preset) {
+    // 可能是自定义
+    const custom = getData(KEYS.appCustomTheme, null);
+    if (!custom || custom.id !== id) return false;
+    setData(KEYS.appTheme, id);
+    applyTheme(custom);
+    bus.emit('theme:changed', { id, theme: custom });
+    return true;
+  }
+  setData(KEYS.appTheme, id);
+  applyTheme(preset);
+  bus.emit('theme:changed', { id, theme: preset });
+  return true;
 }
 
-export function importTheme(json) {
-  const data = typeof json === 'string' ? JSON.parse(json) : json;
-  const imported = data && typeof data === 'object' ? data : {};
-
-  const preset = normalizePresetId(imported.preset || getData(PRESET_KEY) || DEFAULT_PRESET);
-  const presetTheme = getPresetById(preset);
-  const mode = normalizeMode(imported.mode || presetTheme.mode || DEFAULT_MODE);
-
-  document.documentElement.setAttribute('data-theme', preset);
-
-  const next = normalizeTheme({
-    preset,
-    mode,
-    variables: {
-      ...BASE_VARIABLES,
-      ...presetTheme.variables,
-      ...normalizeVariables(imported.variables || {}),
-      ...normalizeVariables(imported.customVariables || {})
-    },
-    customVariables: {
-      ...normalizeVariables(imported.customVariables || {})
-    }
-  });
-
-  currentTheme = next;
-  writeTheme(next);
-  applyVariablesToDOM(next.variables);
-  setMetaColor(next.variables['bg-main'] || next.variables['bg-primary']);
-  return next;
+export function saveCustomTheme(theme) {
+  if (!theme || !theme.id) throw new Error('自定义主题缺少 id 嘛');
+  setData(KEYS.appCustomTheme, theme);
+  return true;
 }
 
-// ═══════════════════════════════════════
-// 【预设切换】选择内置主题，清除自定义颜色
-// ═══════════════════════════════════════
-
-export function setPreset(name) {
-  const presetId = normalizePresetId(name);
-  const presetTheme = getPresetById(presetId);
-
-  document.documentElement.setAttribute('data-theme', presetId);
-
-  const next = normalizeTheme({
-    preset: presetId,
-    mode: presetTheme.mode,
-    variables: {
-      ...BASE_VARIABLES,
-      ...presetTheme.variables
-    },
-    customVariables: {}
-  });
-
-  currentTheme = next;
-  writeTheme(next);
-  applyVariablesToDOM(next.variables);
-  setMetaColor(next.variables['bg-main'] || next.variables['bg-primary']);
-  return next;
+export function exportTheme(themeId) {
+  const t = themeId ? getPreset(themeId) || getData(KEYS.appCustomTheme, null) : getCurrentTheme();
+  if (!t) throw new Error('主题不存在嘛');
+  return JSON.stringify(t, null, 2);
 }
 
-// ═══════════════════════════════════════
-// 【模式切换】浅色 → 椰乳四季春 / 夜间 → 黑巧夜语
-// ═══════════════════════════════════════
-
-export function setThemeMode(mode) {
-  const safeMode = normalizeMode(mode);
-  const presetId = safeMode === 'dark' ? 'dark-chocolate' : 'coconut-spring';
-  const presetTheme = getPresetById(presetId);
-
-  document.documentElement.setAttribute('data-theme', presetId);
-
-  const next = normalizeTheme({
-    preset: presetId,
-    mode: safeMode,
-    variables: {
-      ...BASE_VARIABLES,
-      ...presetTheme.variables
-    },
-    customVariables: {}
-  });
-
-  currentTheme = next;
-  writeTheme(next);
-  applyVariablesToDOM(next.variables);
-  setMetaColor(next.variables['bg-main'] || next.variables['bg-primary']);
-  return next;
-}
-
-// ═══════════════════════════════════════
-// 【保存 / 加载】持久化到 localStorage
-// ═══════════════════════════════════════
-
-export function saveTheme() {
-  const theme = getCurrentTheme();
-  writeTheme(theme);
+export function importTheme(jsonText) {
+  // 修复：JSON.parse 加 try-catch
+  let theme;
+  try {
+    theme = typeof jsonText === 'string' ? JSON.parse(jsonText) : jsonText;
+  } catch (e) {
+    throw new Error('主题文件读不出来嘛');
+  }
+  if (!theme || !theme.id || !theme.vars) throw new Error('主题格式不对嘛');
+  saveCustomTheme(theme);
   return theme;
 }
 
 export function loadTheme() {
-  const saved = getData(THEME_KEY);
-  const preset = normalizePresetId(getData(PRESET_KEY) || saved?.preset || DEFAULT_PRESET);
-  const presetTheme = getPresetById(preset);
-  const mode = normalizeMode(getData(MODE_KEY) || saved?.mode || presetTheme.mode || DEFAULT_MODE);
-
-  const savedVars = normalizeVariables(saved?.variables || {});
-  const savedCustom = normalizeVariables(saved?.customVariables || {});
-
-  document.documentElement.setAttribute('data-theme', preset);
-
-  const next = normalizeTheme({
-    preset,
-    mode,
-    variables: {
-      ...BASE_VARIABLES,
-      ...presetTheme.variables,
-      ...savedVars,
-      ...savedCustom
-    },
-    customVariables: { ...savedCustom }
-  });
-
-  currentTheme = next;
-  applyVariablesToDOM(next.variables);
-  setMetaColor(next.variables['bg-main'] || next.variables['bg-primary']);
-  return next;
+  // 系统暗色偏好
+  const savedId = getCurrentThemeId();
+  if (savedId && savedId !== 'auto') {
+    applyTheme(getCurrentTheme());
+    return;
+  }
+  // auto 模式：跟随系统
+  const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  applyTheme(getPreset(prefersDark ? 'skyDark' : 'sky'));
 }
 
-// ═══════════════════════════════════════
-// 【查询】获取预设列表 / 当前主题
-// ═══════════════════════════════════════
-
-export function getThemePresets() {
-  return Object.values(PRESETS).map((preset) => ({
-    id: preset.id,
-    name: preset.name,
-    mode: preset.mode
-  }));
-}
-
-export function getCurrentTheme() {
-  if (currentTheme) return { ...currentTheme };
-  return readCurrentTheme();
-}
-
-// ═══════════════════════════════════════
-// 【内部工具】读写、归一化、DOM操作
-// ═══════════════════════════════════════
-
-function readCurrentTheme() {
-  if (currentTheme) return { ...currentTheme };
-
-  const saved = getData(THEME_KEY);
-  const preset = normalizePresetId(getData(PRESET_KEY) || saved?.preset || DEFAULT_PRESET);
-  const presetTheme = getPresetById(preset);
-  const mode = normalizeMode(getData(MODE_KEY) || saved?.mode || presetTheme.mode || DEFAULT_MODE);
-
-  return normalizeTheme({
-    preset,
-    mode,
-    variables: {
-      ...BASE_VARIABLES,
-      ...presetTheme.variables,
-      ...normalizeVariables(saved?.variables || {}),
-      ...normalizeVariables(saved?.customVariables || {})
-    },
-    customVariables: normalizeVariables(saved?.customVariables || {})
-  });
-}
-
-function writeTheme(theme) {
-  setData(THEME_KEY, {
-    preset: theme.preset,
-    mode: theme.mode,
-    variables: { ...theme.variables },
-    customVariables: { ...theme.customVariables }
-  });
-
-  setData(PRESET_KEY, theme.preset);
-  setData(MODE_KEY, theme.mode);
-}
-
-function applyVariablesToDOM(variables) {
-  const root = document.documentElement;
-
-  Object.entries(variables).forEach(([key, value]) => {
-    if (value === undefined || value === null || value === '') return;
-    root.style.setProperty(`--${key}`, String(value));
-  });
-}
-
-function setMetaColor(color) {
-  const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta && color) meta.setAttribute('content', String(color));
-}
-
-function normalizeTheme(raw) {
-  const obj = raw && typeof raw === 'object' ? raw : {};
-
-  return {
-    preset: normalizePresetId(obj.preset || DEFAULT_PRESET),
-    mode: normalizeMode(obj.mode || DEFAULT_MODE),
-    variables: {
-      ...BASE_VARIABLES,
-      ...normalizeVariables(obj.variables || {})
-    },
-    customVariables: normalizeVariables(obj.customVariables || {})
+export function followSystemDark() {
+  if (!window.matchMedia) return;
+  const mq = window.matchMedia('(prefers-color-scheme: dark)');
+  const handler = (e) => {
+    if (getCurrentThemeId() === 'auto') {
+      applyTheme(getPreset(e.matches ? 'skyDark' : 'sky'));
+    }
   };
+  if (mq.addEventListener) mq.addEventListener('change', handler);
+  else if (mq.addListener) mq.addListener(handler);
 }
 
-function normalizeVariables(vars) {
-  if (!vars || typeof vars !== 'object') return {};
-
-  const result = {};
-
-  Object.entries(vars).forEach(([key, value]) => {
-    if (value === undefined || value === null) return;
-    const cleanKey = String(key).replace(/^--/, '');
-    if (!cleanKey) return;
-    result[cleanKey] = String(value);
-  });
-
-  return result;
+// 系统字体应用
+export function applyFontFamily(fontFamily, blobUrl) {
+  if (blobUrl) {
+    const existing = document.getElementById('custom-font-face');
+    if (existing) existing.remove();
+    const style = document.createElement('style');
+    style.id = 'custom-font-face';
+    style.textContent = `@font-face { font-family: 'PopoCustom'; src: url('${blobUrl}'); }`;
+    document.head.appendChild(style);
+    document.documentElement.style.setProperty('--font-main', "'PopoCustom', 'PingFang SC', 'Microsoft YaHei', sans-serif");
+  } else if (fontFamily) {
+    document.documentElement.style.setProperty('--font-main', fontFamily);
+  }
 }
 
-function normalizePresetId(id) {
-  const cleanId = String(id || '').trim().toLowerCase();
-  if (PRESETS[cleanId]) return cleanId;
-  if (LEGACY_PRESET_ALIAS[cleanId]) return LEGACY_PRESET_ALIAS[cleanId];
-  return DEFAULT_PRESET;
+// 桌面缩放变量应用
+export function applyDesktopScale(iconScale, widgetScale, dockScale) {
+  const root = document.documentElement;
+  if (iconScale !== undefined) {
+    const size = 60 * iconScale;
+    root.style.setProperty('--icon-size', `${size}px`);
+  }
+  if (widgetScale !== undefined) root.style.setProperty('--widget-scale', String(widgetScale));
+  if (dockScale !== undefined) root.style.setProperty('--dock-base', `${84 * dockScale}px`);
+  root.style.setProperty('--desktop-icon-scale', String(iconScale ?? 1));
+  root.style.setProperty('--desktop-widget-scale', String(widgetScale ?? 1));
+  root.style.setProperty('--desktop-dock-scale', String(dockScale ?? 1));
 }
 
-function normalizeMode(mode) {
-  const clean = String(mode || '').trim().toLowerCase();
-  return clean === 'dark' ? 'dark' : 'light';
+export function listThemes() {
+  const presets = Object.values(getPresets()).map((t) => ({ id: t.id, name: t.name, mode: t.mode }));
+  const custom = getData(KEYS.appCustomTheme, null);
+  if (custom) presets.push({ id: custom.id, name: custom.name || '自定义', mode: custom.mode || 'light' });
+  return presets;
 }
-
-function getPresetById(id) {
-  return PRESETS[normalizePresetId(id)] || PRESETS[DEFAULT_PRESET];
-}
-
-function isPresetDark(id) {
-  const preset = PRESETS[normalizePresetId(id)];
-  return preset ? preset.mode === 'dark' : false;
-}
-
-// 依赖：./storage.js(getData, setData)
