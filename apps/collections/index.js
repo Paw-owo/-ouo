@@ -1,30 +1,34 @@
 // apps/collections/index.js
 // 收藏夹 App——软萌少女风 PWA「泡泡」。
 // 我帮主人把喜欢的东西都悄悄收起来：链接、文字、图片都行，还能用颜色分一分。
-// 数据：localStorage（KEYS.collectionsState），独立于备忘录避免互踩。
-//   {items: [{id, type('link'|'text'|'image'), title, content, color, createdAt}]}
+// 还有「聊天收藏」分类：从聊天里长按消息收藏的会进到这里，点一下能跳回原会话。
+// 数据：
+//   - 本地收藏：localStorage（KEYS.collectionsState），{items: [{id, type, title, content, color, createdAt}]}
+//   - 聊天收藏：IndexedDB STORES.favorites（由 chat/message-actions.js 的 starMessage 写入）
 // 红线：图标只准 SVG 线稿（createIcon），禁止任何 emoji / Unicode 符号。
-// 依赖：core/storage.js, core/storage-keys.js, core/ui.js, core/events.js, core/util.js
+// 依赖：core/storage.js, core/storage-keys.js, core/ui.js, core/events.js, core/util.js, core/router.js
 
-import { KEYS } from '../../core/storage-keys.js';
-import { getData, setData, generateId, getNow, compressImage } from '../../core/storage.js';
+import { KEYS, STORES } from '../../core/storage-keys.js';
+import { getData, setData, generateId, getNow, compressImage, getAllDB, deleteDB } from '../../core/storage.js';
 import { showToast, showConfirm, showBottomSheet, createIcon } from '../../core/ui.js';
 import bus from '../../core/events.js';
 import { injectStyle, pickImageFile, isUsableImage, formatRelative, debounce } from '../../core/util.js';
 import { applyAppBg } from '../../core/app-bg.js';
+import { openApp } from '../../core/router.js';
 
 let containerEl = null;
 let activeFilter = 'all';
 let searchKeyword = '';
 
 // 类型对应 SVG 线稿图标名（红线：禁止 emoji）
-const TYPE_ICON = { link: 'edit', text: 'memo', image: 'camera' };
-const TYPE_LABEL = { link: '链接', text: '文字', image: '图片' };
+const TYPE_ICON = { link: 'edit', text: 'memo', image: 'camera', chat: 'chat' };
+const TYPE_LABEL = { link: '链接', text: '文字', image: '图片', chat: '聊天' };
 const FILTERS = [
   { key: 'all',   label: '全部' },
   { key: 'link',  label: '链接' },
   { key: 'text',  label: '文字' },
-  { key: 'image', label: '图片' }
+  { key: 'image', label: '图片' },
+  { key: 'chat',  label: '聊天收藏' }
 ];
 
 // 5 个马卡龙色：用户给收藏打的颜色标签，属于内容数据（非主题色）
@@ -233,14 +237,30 @@ function saveAll(items) {
 // 列表渲染
 // ════════════════════════════════════════
 
-function render() {
+async function render() {
   const listEl = containerEl?.querySelector('#coll-list');
   if (!listEl) return;
-  let items = getAll();
-  // 类型筛选
-  if (activeFilter !== 'all') {
-    items = items.filter((it) => it.type === activeFilter);
+
+  // 本地收藏（链接/文字/图片）——打上 kind 标记，方便后面区分
+  const localItems = getAll().map((it) => ({ ...it, kind: 'local' }));
+  // 聊天收藏——从 IndexedDB favorites store 读
+  let chatFavs = [];
+  try {
+    chatFavs = await getChatFavorites();
+  } catch (e) {
+    console.warn('[collections] 读取聊天收藏失败', e);
   }
+
+  // 按筛选合并：all 时两边都显示，chat 只显示聊天收藏，其余只显示本地对应类型
+  let items;
+  if (activeFilter === 'all') {
+    items = [...localItems, ...chatFavs];
+  } else if (activeFilter === 'chat') {
+    items = chatFavs;
+  } else {
+    items = localItems.filter((it) => it.type === activeFilter);
+  }
+
   // 关键词过滤
   const kw = searchKeyword;
   if (kw) {
@@ -250,7 +270,7 @@ function render() {
       return t.includes(kw) || c.includes(kw);
     });
   }
-  // 按 createdAt 倒序
+  // 按时间倒序
   items.sort((a, b) => {
     const ta = new Date(a.createdAt || 0).getTime();
     const tb = new Date(b.createdAt || 0).getTime();
@@ -260,7 +280,7 @@ function render() {
   if (items.length === 0) {
     const filtering = kw || activeFilter !== 'all';
     const emptyText = filtering
-      ? '这里还没有东西呀，换一个看看嘛'
+      ? (activeFilter === 'chat' ? '还没有聊天收藏呀，在聊天里长按消息就能存进来嘛' : '这里还没有东西呀，换一个看看嘛')
       : '还没有收藏，把喜欢的东西存进来嘛';
     listEl.innerHTML = `
       <div class="empty-state">
@@ -275,18 +295,23 @@ function render() {
   items.forEach((it) => {
     const card = listEl.querySelector(`[data-id="${cssEscape(it.id)}"]`);
     if (!card) return;
+    const isChat = it.kind === 'chat';
+    // 点击主体：聊天收藏跳转到对应会话，本地收藏打开编辑器
     const main = card.querySelector('.coll-card-main');
-    if (main) main.addEventListener('click', () => openEditor(it));
+    if (main) main.addEventListener('click', () => { if (isChat) jumpToChatSession(it); else openEditor(it); });
     const openBtn = card.querySelector('.coll-open');
     if (openBtn) openBtn.addEventListener('click', (e) => { e.stopPropagation(); openLink(it); });
+    const jumpBtn = card.querySelector('.coll-jump');
+    if (jumpBtn) jumpBtn.addEventListener('click', (e) => { e.stopPropagation(); jumpToChatSession(it); });
     const editBtn = card.querySelector('.coll-edit');
     if (editBtn) editBtn.addEventListener('click', (e) => { e.stopPropagation(); openEditor(it); });
     const delBtn = card.querySelector('.coll-del');
-    if (delBtn) delBtn.addEventListener('click', (e) => { e.stopPropagation(); confirmDelete(it); });
+    if (delBtn) delBtn.addEventListener('click', (e) => { e.stopPropagation(); if (isChat) confirmDeleteChatFavorite(it); else confirmDelete(it); });
   });
 }
 
 function renderCard(it) {
+  const isChat = it.kind === 'chat';
   const colorHex = (MACARON_COLORS.find((c) => c.key === it.color) || DEFAULT_COLOR).hex;
   const title = it.title || '（没起名字呢）';
   const time = formatRelative(it.createdAt);
@@ -294,6 +319,7 @@ function renderCard(it) {
   const editIcon = createIcon('edit', 16).outerHTML;
   const trashIcon = createIcon('trash', 16).outerHTML;
   const openIcon = createIcon('next', 16).outerHTML;
+  const jumpIcon = createIcon('chat', 16).outerHTML;
 
   let contentHTML = '';
   if (it.type === 'image') {
@@ -310,13 +336,20 @@ function renderCard(it) {
   const openBtn = (it.type === 'link' && it.content)
     ? `<button class="coll-icon-btn coll-open" aria-label="打开链接" title="打开链接">${openIcon}</button>`
     : '';
+  // 聊天收藏：显示跳转按钮，不显示编辑按钮（聊天收藏是消息快照，不能编辑）
+  const jumpBtn = isChat
+    ? `<button class="coll-icon-btn coll-jump" aria-label="去聊天" title="去聊天">${jumpIcon}</button>`
+    : '';
+  const editBtn = isChat
+    ? ''
+    : `<button class="coll-icon-btn coll-edit" aria-label="编辑" title="编辑">${editIcon}</button>`;
 
   return `
     <div class="coll-card" data-id="${escapeAttr(it.id)}">
       <div class="coll-card-color" style="background:${colorHex}"></div>
       <div class="coll-card-row">
         <div class="coll-card-icon">${typeIcon}</div>
-        <div class="coll-card-main" role="button" tabindex="0" aria-label="编辑收藏">
+        <div class="coll-card-main" role="button" tabindex="0" aria-label="${isChat ? '跳转到聊天' : '编辑收藏'}">
           <div class="coll-card-title">${escapeHTML(title)}</div>
           ${contentHTML}
           <div class="coll-card-meta">
@@ -327,7 +360,8 @@ function renderCard(it) {
         </div>
         <div class="coll-card-actions">
           ${openBtn}
-          <button class="coll-icon-btn coll-edit" aria-label="编辑" title="编辑">${editIcon}</button>
+          ${jumpBtn}
+          ${editBtn}
           <button class="coll-icon-btn coll-del" aria-label="删除" title="删除">${trashIcon}</button>
         </div>
       </div>
@@ -366,6 +400,76 @@ function confirmDelete(it) {
       saveAll(list);
       showToast('删掉啦', 'default', 1200);
       render();
+    }
+  });
+}
+
+// ════════════════════════════════════════
+// 聊天收藏：读取 / 跳转 / 删除
+// ════════════════════════════════════════
+
+// 从 STORES.favorites 读全部聊天收藏，并批量解析角色名。
+// 返回的数组每项都打上 kind:'chat'，归一化成 renderCard 能直接吃的形状。
+async function getChatFavorites() {
+  let raws = [];
+  try {
+    raws = await getAllDB(STORES.favorites);
+  } catch (e) {
+    return [];
+  }
+  if (!raws.length) return [];
+
+  // 批量取角色名，避免 N+1
+  const charCache = new Map();
+  try {
+    const allChars = await getAllDB(STORES.characters);
+    allChars.forEach((c) => charCache.set(c.id, c));
+  } catch (e) { /* 角色读不到也不阻塞 */ }
+
+  return raws.map((f) => {
+    const c = charCache.get(f.characterId);
+    return {
+      id: f.id,
+      kind: 'chat',
+      type: 'chat',
+      title: c?.name || c?.nickname || '未知角色',
+      content: f.type === 'image' ? '[图片]' : (f.content || ''),
+      color: DEFAULT_COLOR.key,
+      createdAt: f.timestamp,
+      // 保留原始字段，跳转时用
+      sessionId: f.sessionId,
+      characterId: f.characterId,
+      messageId: f.messageId
+    };
+  });
+}
+
+// 跳转到对应聊天会话：通过 router 的 deepLink 把 sessionId 带过去
+function jumpToChatSession(it) {
+  if (!it || !it.sessionId) {
+    showToast('这条收藏找不到对应的聊天呀', 'error');
+    return;
+  }
+  openApp('chat', { deepLink: { sessionId: it.sessionId } });
+}
+
+// 删除聊天收藏（从 IndexedDB favorites store 删）
+function confirmDeleteChatFavorite(it) {
+  showConfirm({
+    title: '删掉这条收藏吗？',
+    body: '删掉就找不回来啦，确定的话就点确认嘛',
+    confirmText: '删掉吧',
+    cancelText: '再想想',
+    danger: true,
+    onConfirm: async () => {
+      try {
+        await deleteDB(STORES.favorites, it.id);
+        showToast('删掉啦', 'default', 1200);
+        await render();
+      } catch (e) {
+        console.warn('[collections] 删除聊天收藏失败', e);
+        showToast('没删掉，再试一下嘛', 'error');
+      }
     }
   });
 }

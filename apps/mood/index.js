@@ -6,22 +6,24 @@
 //   一天一条：用日期做 id，再写会覆盖旧的那条（保留原 createdAt）。
 // 依赖：core/storage.js, core/storage-keys.js, core/ui.js, core/events.js, core/util.js
 
-import { STORES } from '../../core/storage-keys.js';
-import { getDB, setDB, deleteDB, getAllDB, getNow } from '../../core/storage.js';
+import { STORES, KEYS } from '../../core/storage-keys.js';
+import { getDB, setDB, deleteDB, getAllDB, getNow, getData, setData } from '../../core/storage.js';
 import { showToast, showConfirm, showBottomSheet, createIcon } from '../../core/ui.js';
 import bus from '../../core/events.js';
 import { injectStyle } from '../../core/util.js';
 import { applyAppBg } from '../../core/app-bg.js';
+import { recordInteraction } from '../../core/memory.js';
 
 let containerEl = null;
 
 // 五档心情，从难过得想抱抱到开心得想转圈圈
+// key 用于写入记忆的 mood 字段（与 core/memory.js 的 moodLabel 表对齐）
 const MOODS = [
-  { score: 1, icon: 'moon',  label: '难过' },   // 月亮：暗淡
-  { score: 2, icon: 'dream', label: '低落' },   // 云：阴沉
-  { score: 3, icon: 'smile', label: '平静' },   // 微笑
-  { score: 4, icon: 'heart', label: '开心' },   // 爱心
-  { score: 5, icon: 'star',  label: '超开心' }  // 星星
+  { score: 1, icon: 'moon',  label: '难过',   key: 'sad' },     // 月亮：暗淡
+  { score: 2, icon: 'dream', label: '低落',   key: 'anxious' }, // 云：阴沉
+  { score: 3, icon: 'smile', label: '平静',   key: 'calm' },    // 微笑
+  { score: 4, icon: 'heart', label: '开心',   key: 'happy' },   // 爱心
+  { score: 5, icon: 'star',  label: '超开心', key: 'excited' }  // 星星
 ];
 
 // 把心情图标渲染成 SVG 线稿
@@ -304,6 +306,25 @@ function moodFor(score) {
   return MOODS.find((m) => m.score === score) || MOODS[2];
 }
 
+// 把「今天的心情」同步缓存到 localStorage（KEYS.moodState），
+// 让 ai-client.buildMessages 能同步读到主人当前心情，注入 AI 上下文
+// 只缓存今天的心情；非今天的写入不更新缓存
+function cacheTodayMood(entry) {
+  if (!entry || entry.date !== todayStr()) return;
+  try {
+    setData(KEYS.moodState, {
+      date: entry.date,
+      score: entry.score,
+      key: moodFor(entry.score).key,
+      label: moodFor(entry.score).label,
+      note: entry.note || '',
+      savedAt: Date.now()
+    });
+  } catch (e) {
+    console.warn('[mood] 缓存心情失败', e);
+  }
+}
+
 function dateKey(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
@@ -404,6 +425,22 @@ function wireTodayCard(body, entry) {
     await setDB(STORES.moodEntries, today, record);
     showToast(prev ? '改好啦，今天的心情我收着了' : '记下来啦，今天也要好好抱抱自己', 'success');
     bus.emit('mood:saved', { date: today, score: mood.score });
+    // 同步缓存到 localStorage，让 AI 上下文能读到当前心情
+    cacheTodayMood(record);
+    // 写入长期记忆，让 AI 知道主人今天心情怎么样
+    try {
+      await recordInteraction({
+        characterId: 'global',
+        role: 'user',
+        source: 'mood',
+        content: `今天心情：${mood.label}${note ? `，${note}` : ''}`,
+        mood: mood.key,
+        importance: 4,
+        relatedApp: 'mood'
+      });
+    } catch (e) {
+      console.warn('[mood] 记忆写入失败', e);
+    }
     render();
   });
 }
@@ -532,6 +569,22 @@ function openHistoryForm(entry) {
     await setDB(STORES.moodEntries, entry.id, record);
     sheet.close();
     showToast('改好啦', 'success');
+    // 如果改的是今天的心情，同步更新缓存
+    cacheTodayMood(record);
+    // 写入长期记忆，让 AI 同步主人的心情变化
+    try {
+      await recordInteraction({
+        characterId: 'global',
+        role: 'user',
+        source: 'mood',
+        content: `改了${prettyDate(entry.date)}的心情：${m.label}${note ? `，${note}` : ''}`,
+        mood: m.key,
+        importance: 4,
+        relatedApp: 'mood'
+      });
+    } catch (e) {
+      console.warn('[mood] 记忆写入失败', e);
+    }
     render();
   });
 
@@ -544,6 +597,10 @@ function openHistoryForm(entry) {
       danger: true,
       onConfirm: async () => {
         await deleteDB(STORES.moodEntries, entry.id);
+        // 如果删的是今天的心情，清掉缓存，AI 上下文不再读到旧心情
+        if (entry.date === todayStr()) {
+          try { setData(KEYS.moodState, null); } catch (e) {}
+        }
         sheet.close();
         showToast('删掉啦', 'default');
         render();

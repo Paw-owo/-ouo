@@ -94,6 +94,8 @@ export function unmount() {
   // 重要：离开页面一定清掉定时器，避免内存泄漏
   if (timer) { clearInterval(timer); timer = null; }
   state.running = false; // 离开就停住，回来再按开始嘛
+  // 离开前把剩余时间和模式存起来，回来能接着上次的进度
+  saveRuntimeState();
   containerEl = null;
 }
 
@@ -105,16 +107,49 @@ function todayStr() {
   return formatDate(new Date(), { full: true }); // YYYY-MM-DD
 }
 
-// 读取上次预设，恢复初始状态（重新挂载默认回到工作满时长）
+// 读取上次预设 + 未跑完的剩余时间，恢复初始状态
+// 重新挂载时不会自动跑（running=false），主人按开始才继续
 function loadState() {
   const raw = getData(KEYS.pomodoroState, null);
   if (raw && typeof raw === 'object') {
     if (typeof raw.workMinutes === 'number' && raw.workMinutes > 0) state.workMinutes = raw.workMinutes;
     if (typeof raw.breakMinutes === 'number' && raw.breakMinutes > 0) state.breakMinutes = raw.breakMinutes;
+    // 恢复上次的模式（work / break），默认 work
+    if (raw.mode === 'work' || raw.mode === 'break') {
+      state.mode = raw.mode;
+    } else {
+      state.mode = 'work';
+    }
+    // 恢复上次未跑完的剩余时间；不合法就回到当前模式满时长
+    const fullSec = (state.mode === 'work' ? state.workMinutes : state.breakMinutes) * 60;
+    if (typeof raw.remaining === 'number' && raw.remaining > 0 && raw.remaining <= fullSec) {
+      state.remaining = Math.floor(raw.remaining);
+    } else {
+      state.remaining = fullSec;
+    }
+  } else {
+    state.mode = 'work';
+    state.remaining = state.workMinutes * 60;
   }
-  state.mode = 'work';
-  state.remaining = state.workMinutes * 60;
   state.running = false;
+}
+
+// 把当前运行状态（模式 + 剩余时间 + 预设）合并进 pomodoroState
+// unmount / 切模式 / 重置 / 切预设时调用，保证回来能接着上次的进度
+function saveRuntimeState() {
+  try {
+    const cur = getData(KEYS.pomodoroState, null);
+    setData(KEYS.pomodoroState, {
+      ...(cur && typeof cur === 'object' ? cur : {}),
+      mode: state.mode,
+      remaining: state.remaining,
+      workMinutes: state.workMinutes,
+      breakMinutes: state.breakMinutes,
+      savedAt: Date.now()
+    });
+  } catch (e) {
+    console.warn('[pomodoro] 保存运行状态失败', e);
+  }
 }
 
 // 取今日统计（处理跨天重置）
@@ -351,6 +386,7 @@ function switchMode(mode, autoStart) {
   updateToggleIcon();
   if (state.running) startTicking();
   else stopTicking();
+  saveRuntimeState(); // 切模式后存一下，避免被 kill 丢进度
 }
 
 function resetSession() {
@@ -360,6 +396,7 @@ function resetSession() {
   updateRing(false);
   updateDisplay();
   updateToggleIcon();
+  saveRuntimeState(); // 重置后也存一下
   showToast('重置好啦，重新开始嘛', 'default', 1200);
 }
 
@@ -391,6 +428,7 @@ function applyPreset(work, brk) {
   updateRing(false);
   updateDisplay();
   updateToggleIcon();
+  saveRuntimeState(); // 切预设后存一下新的模式 + 剩余时间
   showToast(`换成 ${work} / ${brk} 啦`, 'default', 1200);
 }
 

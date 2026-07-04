@@ -10,6 +10,7 @@ import { getAllDB, setDB, deleteDB, generateId, getNow } from '../../core/storag
 import { createIcon } from '../../core/ui.js';
 import bus from '../../core/events.js';
 import { pick } from '../../core/util.js';
+import { recordInteraction } from '../../core/memory.js';
 import { TRUTH_QUESTIONS, DARE_QUESTIONS, TRUTH_COMMENTS, DARE_COMMENTS } from './data.js';
 import { escapeHTML, aiText, renderHistoryList, historyCardHTML } from './shared.js';
 
@@ -161,6 +162,19 @@ async function submitAnswer(content) {
     game: '真心话大冒险',
     result: `${label(currentType)}：${currentQuestion}`
   });
+  // 写入长期记忆，让 AI 知道主人玩过真心话大冒险
+  try {
+    await recordInteraction({
+      characterId: 'global',
+      role: 'user',
+      source: 'game',
+      content: `玩了真心话大冒险：${label(currentType)}：${currentQuestion}`,
+      importance: 3,
+      relatedApp: 'games'
+    });
+  } catch (e) {
+    console.warn('[games] 真心话记忆写入失败', e);
+  }
 }
 
 function label(type) {

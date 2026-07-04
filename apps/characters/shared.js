@@ -163,6 +163,28 @@ injectStyle('app-characters-style', `
   .char-actions-row { display: flex; gap: 8px; }
   .char-actions-row .btn { flex: 1; justify-content: center; }
 
+  /* 快速模板预设按钮组（新建角色时显示） */
+  .char-template-row {
+    display: flex; flex-wrap: wrap; gap: 8px;
+  }
+  .char-template-btn {
+    flex: 1 1 calc(50% - 4px); min-width: 120px;
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 12px; border-radius: var(--radius-md);
+    background: color-mix(in srgb, var(--bg-secondary) 50%, transparent);
+    border: 1px solid color-mix(in srgb, var(--text-hint) 18%, transparent);
+    color: var(--text-primary); cursor: pointer; transition: var(--motion);
+    font-size: var(--font-size-small); text-align: left;
+  }
+  .char-template-btn:active { transform: scale(var(--press-scale)); }
+  .char-template-btn .popo-icon-svg { color: var(--accent); flex-shrink: 0; }
+  .char-template-btn-text { display: flex; flex-direction: column; min-width: 0; }
+  .char-template-btn-name { font-weight: 600; color: var(--text-primary); }
+  .char-template-btn-desc {
+    font-size: var(--font-size-small); color: var(--text-hint);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+
   /* 多选清单（关联世界书 / 关联角色） */
   .char-multiselect {
     max-height: 180px; overflow-y: auto;
@@ -318,6 +340,43 @@ injectStyle('app-characters-style', `
     font-size: var(--font-size-small); color: var(--text-secondary);
     line-height: 1.4;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+
+  /* 详情页好感度展示 */
+  .char-detail-affection {
+    background: var(--bg-card);
+    border: 1px solid color-mix(in srgb, var(--text-hint) 14%, transparent);
+    border-radius: var(--radius-card);
+    padding: 14px; margin-bottom: 14px;
+    box-shadow: var(--shadow-sm);
+  }
+  .char-detail-affection-head {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 8px;
+  }
+  .char-detail-affection-title {
+    font-size: var(--font-size-base); font-weight: 600; color: var(--text-secondary);
+    display: flex; align-items: center; gap: 6px;
+  }
+  .char-detail-affection-title .popo-icon-svg { color: var(--accent); }
+  .char-detail-affection-value {
+    font-size: var(--font-size-base); font-weight: 700; color: var(--accent-dark);
+  }
+  .char-detail-affection-bar {
+    height: 8px; border-radius: 4px;
+    background: color-mix(in srgb, var(--text-hint) 24%, transparent);
+    overflow: hidden; margin-bottom: 8px;
+  }
+  .char-detail-affection-fill {
+    height: 100%; background: var(--accent); border-radius: 4px;
+    transition: width var(--motion) var(--motion-spring);
+  }
+  .char-detail-affection-label {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: var(--font-size-small); font-weight: 600;
+    color: var(--accent-dark);
+    background: color-mix(in srgb, var(--accent-light) 55%, transparent);
+    padding: 4px 12px; border-radius: 999px;
   }
 `);
 

@@ -19,15 +19,32 @@ injectStyle('popo-settings-notify-card', `
   .notify-section-label{font-size:var(--font-size-small);color:var(--text-secondary);margin:12px 0 2px;font-weight:500}
 `);
 
-// 任务要求里的分 App 列表
+// 分 App 通知列表：覆盖所有已注册的 App
 const PER_APP_LIST = [
   { id: 'chat', name: '聊天' },
+  { id: 'characters', name: '角色' },
   { id: 'moments', name: '朋友圈' },
-  { id: 'wallet', name: '钱包' },
-  { id: 'shop', name: '商店' },
-  { id: 'grudge', name: '记仇本' },
   { id: 'memo', name: '备忘录' },
-  { id: 'anniversary', name: '纪念日' }
+  { id: 'mood', name: '心情' },
+  { id: 'weather', name: '天气' },
+  { id: 'calculator', name: '计算器' },
+  { id: 'countdown', name: '倒计时' },
+  { id: 'anniversary', name: '纪念日' },
+  { id: 'pomodoro', name: '番茄钟' },
+  { id: 'flashcard', name: '记忆卡' },
+  { id: 'alarm', name: '闹钟' },
+  { id: 'astro', name: '星座' },
+  { id: 'health', name: '健康' },
+  { id: 'dream', name: '梦境' },
+  { id: 'avatar', name: '头像' },
+  { id: 'worldbook', name: '世界书' },
+  { id: 'games', name: '游戏' },
+  { id: 'music', name: '音乐' },
+  { id: 'shop', name: '商店' },
+  { id: 'wallet', name: '钱包' },
+  { id: 'collections', name: '收藏' },
+  { id: 'grudge', name: '记仇本' },
+  { id: 'memory-viewer', name: '记忆' }
 ];
 
 // 默认通知配置，没存过就用这套

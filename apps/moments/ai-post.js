@@ -6,13 +6,26 @@
 // 依赖：core/storage.js, core/storage-keys.js, core/ui.js, core/events.js, core/ai-client.js, core/util.js, ./shared.js, ./comments.js
 
 import { STORES } from '../../core/storage-keys.js';
-import { getDB, setDB, getAllDB, generateId, getNow } from '../../core/storage.js';
+import { getDB, setDB, getAllDB, generateId, getNow, getData, setData } from '../../core/storage.js';
 import { showToast } from '../../core/ui.js';
 import bus from '../../core/events.js';
 import { chatOnce, isAIConfigured } from '../../core/ai-client.js';
 import { pick } from '../../core/util.js';
+import { getMemories } from '../../core/memory.js';
 import { AI_POST_POOL, AI_COMMENT_POOL, normalizeMoment } from './shared.js';
 import { addCommentBy } from './comments.js';
+
+// 触发主动发动态的事件来源（送礼 / 转账 / 心情 / 游戏）
+const AUTO_POST_SOURCES = ['gift', 'transfer', 'mood', 'game'];
+// 各事件在 prompt 里的人话名称
+const EVENT_NAME_MAP = {
+  gift: '一份礼物',
+  transfer: '一笔转账',
+  mood: '一份心情分享',
+  game: '一起玩游戏'
+};
+// localStorage key 前缀：记录某角色上次主动发动态的时间戳，避免重复触发
+const LS_LAST_AUTO_POST_PREFIX = 'moments_last_auto_post_';
 
 // ════════════════════════════════════════
 // 初一发动态
@@ -84,6 +97,104 @@ export async function aiPost() {
     return null;
   }
 }
+
+// ════════════════════════════════════════
+// AI 主动发动态
+// 进入朋友圈 App 时调用：检查该角色 24h 内是否发生过送礼 / 转账 / 心情 / 游戏事件，
+// 命中则有 30% 概率主动发一条动态。同一事件 24h 内只触发一次。
+// @param {string} characterId  角色 id（默认 char_chuyi）
+// ════════════════════════════════════════
+
+export async function maybeAutoPost(characterId) {
+  const cid = characterId || 'char_chuyi';
+  try {
+    // 取该角色最近的所有记忆，挑出 source 在白名单里的最新一条
+    const all = await getMemories(cid, {});
+    const recent = (all || [])
+      .filter((m) => AUTO_POST_SOURCES.includes(m.source))
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0];
+    if (!recent) return null;
+    // 24h 外的不算
+    const ageMs = Date.now() - new Date(recent.timestamp).getTime();
+    if (isNaN(ageMs) || ageMs > 24 * 3600 * 1000) return null;
+    // 同一事件 24h 内只触发一次：用 source + relatedId（没有就用 content 前缀）做去重 key
+    const dedupKey = `${cid}:${recent.source}:${recent.relatedId || (recent.content || '').slice(0, 30)}`;
+    const lastKey = LS_LAST_AUTO_POST_PREFIX + dedupKey;
+    const lastTs = Number(getData(lastKey, 0)) || 0;
+    if (lastTs && Date.now() - lastTs < 24 * 3600 * 1000) return null;
+    // 30% 概率主动发
+    if (Math.random() >= 0.3) return null;
+
+    // 标记已触发，落盘时间戳
+    setData(lastKey, Date.now());
+
+    // 取角色名（拿不到就用「初一」兜底）
+    let author = '初一';
+    try {
+      const c = await getDB(STORES.characters, cid);
+      if (c && c.name) author = c.name;
+    } catch (e) {}
+
+    // 生成动态文案：有 AI 配置就走 AI，否则用预设池
+    const eventName = EVENT_NAME_MAP[recent.source] || '一件开心的事';
+    let content = '';
+    if (isAIConfigured()) {
+      content = await generateAutoPostText(eventName, author);
+    }
+    if (!content) content = pick(AUTO_POST_POOL_FALLBACK) || pick(AI_POST_POOL);
+
+    const id = generateId('moment');
+    const record = normalizeMoment({
+      id,
+      author,
+      content,
+      images: [],
+      likes: 0,
+      likedByMe: false,
+      comments: [],
+      pinned: false,
+      visibility: 'public',
+      createdAt: getNow()
+    });
+    await setDB(STORES.moments, id, record);
+    bus.emit('moments:new', { author, preview: content.slice(0, 30), momentId: id });
+    return record;
+  } catch (e) {
+    console.warn('[moments] AI 主动发动态失败', e);
+    return null;
+  }
+}
+
+// 调 AI 生成一条主动发的朋友圈文案
+async function generateAutoPostText(eventName, author) {
+  try {
+    const messages = [
+      {
+        role: 'system',
+        content: `你是${author}，软萌可爱的女孩子，第一人称。请用一句话发一条朋友圈动态，表达刚刚收到${eventName}的心情，30 字以内，不要用 emoji，不要加引号或前缀。`
+      },
+      { role: 'user', content: `刚刚收到了${eventName}，发条朋友圈吧` }
+    ];
+    const r = await chatOnce({ messages });
+    if (r && r.ok && r.text) {
+      let t = r.text.trim().replace(/\s+/g, ' ').replace(/^["'「『】」』]+|["'「『】」』]+$/g, '');
+      if (t.length > 40) t = t.slice(0, 40);
+      return t;
+    }
+    return '';
+  } catch (e) {
+    return '';
+  }
+}
+
+// 没配置 AI 时的预设文案池
+const AUTO_POST_POOL_FALLBACK = [
+  '今天好开心呀~',
+  '被宠到的感觉真好',
+  '哼哼，今天也是被照顾的一天',
+  '心情棒棒的！',
+  '今天的我也要元气满满'
+];
 
 // ════════════════════════════════════════
 // AI 自动点赞（用户新动态后 2-5 秒）

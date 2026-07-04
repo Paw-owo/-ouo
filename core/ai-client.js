@@ -53,6 +53,25 @@ export function isAIConfigured() {
 // 上下文构建
 // ════════════════════════════════════════
 
+// 读取主人当前心情（KEYS.moodState，由心情日记 App 写入），拼成提示词
+// 只读今天的；跨天的心情缓存会被忽略，避免 AI 误判情绪
+// 返回空串表示没有可用心情
+function buildMoodContextLine() {
+  let m = null;
+  try { m = getData(KEYS.moodState, null); } catch (e) { return ''; }
+  if (!m || typeof m !== 'object') return '';
+  // 校验是今天的（防止缓存跨天失效）
+  const today = (() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  })();
+  if (m.date !== today) return '';
+  const label = m.label || m.key || '';
+  if (!label) return '';
+  const note = m.note ? `，主人写的话：「${String(m.note).slice(0, 80)}」` : '';
+  return `主人当前的心情：${label}${note}（请用对应的语气陪伴ta，不要生硬复述）`;
+}
+
 /**
  * 构建发给 AI 的 messages 数组。
  * @param {object} opts { character, history, userText, memoryPrompt, recentEvents }
@@ -67,7 +86,7 @@ export function buildMessages(opts = {}) {
   const { character, history = [], userText = '', memoryPrompt = '', recentEvents = '' } = opts;
   const messages = [];
 
-  // 系统提示：角色人设 + 说话风格 + 记忆 + 事件
+  // 系统提示：角色人设 + 说话风格 + 记忆 + 事件 + 主人当前心情
   const parts = [];
   if (character) {
     if (character.name) parts.push(`你的名字是${character.name}。`);
@@ -76,6 +95,10 @@ export function buildMessages(opts = {}) {
   }
   parts.push(`说话风格：${cfg.style}`);
   if (memoryPrompt) parts.push(memoryPrompt);
+  // 注入主人当前心情（来自心情日记 App 缓存的 KEYS.moodState）
+  // 让 AI 能体察主人情绪，自然地给到对应语气
+  const moodLine = buildMoodContextLine();
+  if (moodLine) parts.push(moodLine);
   if (recentEvents) parts.push(`最近发生的事（可以自然提起，但不要生硬罗列）：\n${recentEvents}`);
   parts.push('要求：第一人称，软萌可爱，回复简短自然，不要复述用户的话，不要用 emoji。');
 
@@ -140,7 +163,13 @@ async function doFetch(cfg, messages, { onToken, signal }) {
     max_tokens: Number(cfg.maxTokens) || 800
   };
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), cfg.timeoutMs || 30000);
+  // 超时计时器：在每次读到 chunk 时重置，避免流式期间被误超时中断
+  const timeoutMs = cfg.timeoutMs || 30000;
+  let timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  const resetTimer = () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  };
   if (signal) {
     signal.addEventListener('abort', () => ctrl.abort(), { once: true });
   }
@@ -156,40 +185,53 @@ async function doFetch(cfg, messages, { onToken, signal }) {
   });
 
   if (!resp.ok) {
+    clearTimeout(timer);
     const txt = await safeReadText(resp);
     throw new Error(`AI 接口返回 ${resp.status}：${txt.slice(0, 200)}`);
   }
-  if (!resp.body) throw new Error('AI 接口没返回流');
+  if (!resp.body) {
+    clearTimeout(timer);
+    throw new Error('AI 接口没返回流');
+  }
 
-  clearTimeout(timer);
+  // 注意：不要在进入 reader 循环前 clearTimeout，否则流式期间无超时保护
+  // 改为每次读到 chunk 时重置计时器，等所有 chunk 读取完毕再 clearTimeout
   const reader = resp.body.getReader();
   const decoder = new TextDecoder('utf-8');
   let buffer = '';
   let fullText = '';
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    // SSE 按 \n\n 分块
-    const parts = buffer.split('\n\n');
-    buffer = parts.pop() || '';
-    for (const part of parts) {
-      const line = part.trim();
-      if (!line.startsWith('data:')) continue;
-      const data = line.slice(5).trim();
-      if (data === '[DONE]') continue;
-      try {
-        const json = JSON.parse(data);
-        const delta = json.choices?.[0]?.delta?.content || '';
-        if (delta) {
-          fullText += delta;
-          if (typeof onToken === 'function') onToken(delta);
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      // 收到 chunk 即重置超时计时器，避免长文本流式被误中断
+      resetTimer();
+      buffer += decoder.decode(value, { stream: true });
+      // SSE 按 \n\n 分块
+      const parts = buffer.split('\n\n');
+      buffer = parts.pop() || '';
+      for (const part of parts) {
+        const line = part.trim();
+        if (!line.startsWith('data:')) continue;
+        const data = line.slice(5).trim();
+        if (data === '[DONE]') continue;
+        try {
+          const json = JSON.parse(data);
+          const delta = json.choices?.[0]?.delta?.content || '';
+          if (delta) {
+            fullText += delta;
+            if (typeof onToken === 'function') onToken(delta);
+          }
+        } catch (e) {
+          // 单块解析失败跳过，不中断整体
         }
-      } catch (e) {
-        // 单块解析失败跳过，不中断整体
       }
     }
+  } finally {
+    // 所有 chunk 读取完毕（或异常退出），清理超时计时器
+    clearTimeout(timer);
+    try { reader.releaseLock(); } catch (e) {}
   }
   return { fullText };
 }

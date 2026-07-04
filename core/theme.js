@@ -30,7 +30,17 @@ const PRESETS = {
       '--bubble-user-text': '#FFFFFF',
       '--bubble-ai-bg': '#FFFFFF',
       '--bubble-ai-text': '#2A3A44',
-      '--shadow-glow': '0 0 20px rgba(126,196,224,0.40)'
+      '--shadow-glow': '0 0 20px rgba(126,196,224,0.40)',
+      // 语义色
+      '--success': '#5BB89E',
+      '--warning': '#F5C247',
+      '--info': '#7AA2D6',
+      '--danger': '#E8888C',
+      '--success-light': 'rgba(91,184,158,0.12)',
+      '--warning-light': 'rgba(245,194,71,0.12)',
+      '--danger-light': 'rgba(232,136,140,0.12)',
+      // 锁屏等壁纸上的文字色
+      '--text-on-wallpaper': '#fff'
     }
   },
   sakura: {
@@ -50,7 +60,17 @@ const PRESETS = {
       '--bubble-user-text': '#FFFFFF',
       '--bubble-ai-bg': '#FFFFFF',
       '--bubble-ai-text': '#3A2630',
-      '--shadow-glow': '0 0 20px rgba(245,160,176,0.40)'
+      '--shadow-glow': '0 0 20px rgba(245,160,176,0.40)',
+      // 语义色
+      '--success': '#5BB89E',
+      '--warning': '#F5C247',
+      '--info': '#7AA2D6',
+      '--danger': '#E8888C',
+      '--success-light': 'rgba(91,184,158,0.12)',
+      '--warning-light': 'rgba(245,194,71,0.12)',
+      '--danger-light': 'rgba(232,136,140,0.12)',
+      // 锁屏等壁纸上的文字色
+      '--text-on-wallpaper': '#fff'
     }
   },
   lavender: {
@@ -70,7 +90,17 @@ const PRESETS = {
       '--bubble-user-text': '#FFFFFF',
       '--bubble-ai-bg': '#FFFFFF',
       '--bubble-ai-text': '#3A2A1A',
-      '--shadow-glow': '0 0 20px rgba(212,168,122,0.40)'
+      '--shadow-glow': '0 0 20px rgba(212,168,122,0.40)',
+      // 语义色
+      '--success': '#5BB89E',
+      '--warning': '#F5C247',
+      '--info': '#7AA2D6',
+      '--danger': '#E8888C',
+      '--success-light': 'rgba(91,184,158,0.12)',
+      '--warning-light': 'rgba(245,194,71,0.12)',
+      '--danger-light': 'rgba(232,136,140,0.12)',
+      // 锁屏等壁纸上的文字色
+      '--text-on-wallpaper': '#fff'
     }
   },
   skyDark: {
@@ -88,9 +118,19 @@ const PRESETS = {
       '--text-hint': '#5C7080',
       '--bubble-user-bg': '#6AAEC8',
       '--bubble-user-text': '#FFFFFF',
-      '--bubble-ai-bg': '#2A3C4E',
+      '--bubble-ai-bg': '#36536B',
       '--bubble-ai-text': '#E8F0F6',
-      '--shadow-glow': '0 0 20px rgba(143,208,232,0.40)'
+      '--shadow-glow': '0 0 20px rgba(143,208,232,0.40)',
+      // 语义色（暗色提亮 +10% lightness）
+      '--success': '#7FC8B3',
+      '--warning': '#F8D277',
+      '--info': '#A1BDE2',
+      '--danger': '#F0B2B5',
+      '--success-light': 'rgba(127,200,179,0.20)',
+      '--warning-light': 'rgba(248,210,119,0.20)',
+      '--danger-light': 'rgba(240,178,181,0.20)',
+      // 锁屏等壁纸上的文字色
+      '--text-on-wallpaper': 'rgba(255,255,255,0.92)'
     }
   },
   sakuraDark: {
@@ -100,17 +140,27 @@ const PRESETS = {
       '--bg-secondary': '#2E2028',
       '--bg-card': '#3A2832',
       '--bg-overlay': 'rgba(0,0,0,0.55)',
-      '--accent': '#F5A0B0',
-      '--accent-light': '#3A2832',
+      '--accent': '#F5B5C2',
+      '--accent-light': 'rgba(245,165,176,0.18)',
       '--accent-dark': '#E07C90',
       '--text-primary': '#F6E4EA',
       '--text-secondary': '#B098A0',
       '--text-hint': '#6C5860',
       '--bubble-user-bg': '#E07C90',
       '--bubble-user-text': '#FFFFFF',
-      '--bubble-ai-bg': '#3A2832',
+      '--bubble-ai-bg': '#563A46',
       '--bubble-ai-text': '#F6E4EA',
-      '--shadow-glow': '0 0 20px rgba(245,160,176,0.40)'
+      '--shadow-glow': '0 0 20px rgba(245,160,176,0.40)',
+      // 语义色（暗色提亮 +10% lightness）
+      '--success': '#7FC8B3',
+      '--warning': '#F8D277',
+      '--info': '#A1BDE2',
+      '--danger': '#F0B2B5',
+      '--success-light': 'rgba(127,200,179,0.20)',
+      '--warning-light': 'rgba(248,210,119,0.20)',
+      '--danger-light': 'rgba(240,178,181,0.20)',
+      // 锁屏等壁纸上的文字色
+      '--text-on-wallpaper': 'rgba(255,255,255,0.92)'
     }
   },
   lavenderDark: {
@@ -128,9 +178,19 @@ const PRESETS = {
       '--text-hint': '#706048',
       '--bubble-user-bg': '#B88E58',
       '--bubble-user-text': '#FFFFFF',
-      '--bubble-ai-bg': '#382A1E',
+      '--bubble-ai-bg': '#564432',
       '--bubble-ai-text': '#F4E8D8',
-      '--shadow-glow': '0 0 20px rgba(224,184,136,0.40)'
+      '--shadow-glow': '0 0 20px rgba(224,184,136,0.40)',
+      // 语义色（暗色提亮 +10% lightness）
+      '--success': '#7FC8B3',
+      '--warning': '#F8D277',
+      '--info': '#A1BDE2',
+      '--danger': '#F0B2B5',
+      '--success-light': 'rgba(127,200,179,0.20)',
+      '--warning-light': 'rgba(248,210,119,0.20)',
+      '--danger-light': 'rgba(240,178,181,0.20)',
+      // 锁屏等壁纸上的文字色
+      '--text-on-wallpaper': 'rgba(255,255,255,0.92)'
     }
   }
 };
@@ -164,9 +224,20 @@ const SHARED_VARS = {
   '--glass-blur-strong': '20px',
   '--wallpaper-soft': '0.10',
   '--press-scale': '0.94',
-  '--motion': 'all 220ms ease',
+  // 修复性能反模式：避免 transition: all，显式列出常用属性
+  '--motion': 'transform 220ms ease, opacity 220ms ease, background 220ms ease, border-color 220ms ease, box-shadow 220ms ease',
   '--motion-spring': 'cubic-bezier(0.34, 1.56, 0.64, 1)',
-  '--motion-fast': 'all 140ms ease',
+  '--motion-fast': '120ms ease',
+  '--motion-slow': '400ms ease',
+  // 字号补充
+  '--font-size-display': '28px',
+  '--font-size-caption': '11px',
+  // 层级体系
+  '--z-base': '1',
+  '--z-dock': '50',
+  '--z-sheet': '200',
+  '--z-lock': '9999',
+  '--z-boot': '10000',
   '--icon-size': '60px',
   '--dock-base': '84px',
   '--status-bar-base': '44px',

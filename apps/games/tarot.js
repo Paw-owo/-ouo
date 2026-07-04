@@ -10,6 +10,7 @@ import { getAllDB, setDB, deleteDB, generateId, getNow } from '../../core/storag
 import { createIcon } from '../../core/ui.js';
 import bus from '../../core/events.js';
 import { shuffle, pick } from '../../core/util.js';
+import { recordInteraction } from '../../core/memory.js';
 import { TAROT_DECK, TAROT_READINGS, TAROT_SPREADS } from './data.js';
 import { escapeHTML, escapeAttr, aiText, renderHistoryList, historyCardHTML } from './shared.js';
 
@@ -99,6 +100,19 @@ async function drawTarot(content) {
   // 事件注入
   const summary = drawnCards.map((c) => `${c.name}${c.isReversed ? '·逆' : '·正'}`).join('、');
   bus.emit('games:result', { game: '塔罗牌占卜', result: summary });
+  // 写入长期记忆，让 AI 知道主人玩过塔罗
+  try {
+    await recordInteraction({
+      characterId: 'global',
+      role: 'user',
+      source: 'game',
+      content: `玩了塔罗牌占卜：${summary}`,
+      importance: 3,
+      relatedApp: 'games'
+    });
+  } catch (e) {
+    console.warn('[games] 塔罗记忆写入失败', e);
+  }
 }
 
 // 渲染牌面 + 牌义（loading=true 时综合解读显示加载中）

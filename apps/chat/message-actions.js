@@ -5,11 +5,12 @@
 // 红线：图标只准 SVG 线稿，禁止任何 emoji 字符。
 
 import { KEYS, STORES } from '../../core/storage-keys.js';
-import { getData, setData, getDB, setDB, deleteDB, getAllDB, getNow } from '../../core/storage.js';
+import { getData, setData, getDB, setDB, deleteDB, getAllDB, generateId, getNow } from '../../core/storage.js';
 import { showToast, showConfirm, showBottomSheet, createIcon } from '../../core/ui.js';
 import bus from '../../core/events.js';
 import { downloadBlob, isUsableImage, cssUrl, clamp } from '../../core/util.js';
 import { getState, render, applySessionWallpaper, setQuoteToInput } from './index.js';
+import { escapeHTML, escapeAttr } from './shared-utils.js';
 
 // 撤回时间窗（毫秒）：仅自己的消息 2 分钟内可撤回
 const RECALL_WINDOW_MS = 2 * 60 * 1000;
@@ -115,6 +116,7 @@ function quoteMessage(msg) {
 }
 
 // ── 撤回 ──
+// 不删除消息，改为标记 recalled=true，渲染时显示"你撤回了一条消息"占位
 function recallMessage(msg) {
   showConfirm({
     title: '撤回这条消息吗？',
@@ -123,7 +125,13 @@ function recallMessage(msg) {
     cancelText: '不要',
     onConfirm: async () => {
       try {
-        await deleteDB(STORES.messages, msg.id);
+        const cur = await getDB(STORES.messages, msg.id) || msg;
+        await setDB(STORES.messages, msg.id, {
+          ...cur,
+          recalled: true,
+          content: '',
+          recalledAt: Date.now()
+        });
         showToast('撤回啦', 'default', 1200);
         await render();
       } catch (e) {
@@ -134,10 +142,27 @@ function recallMessage(msg) {
   });
 }
 
-// ── 收藏（简化版：只 emit 事件 + toast，不真存） ──
-function starMessage(msg) {
-  bus.emit('chat:star-message', { id: msg.id, content: msg.content, characterId: msg.characterId });
-  showToast('收藏好啦（暂存到事件流，后续接入收藏 App）', 'success', 1600);
+// ── 收藏 ──
+// 存入 IndexedDB favorites store，并 emit 事件供其他 App 监听
+async function starMessage(msg) {
+  try {
+    const favId = generateId('fav');
+    await setDB(STORES.favorites, favId, {
+      id: favId,
+      messageId: msg.id,
+      sessionId: msg.sessionId,
+      characterId: msg.characterId,
+      content: msg.content || '',
+      type: msg.type || 'text',
+      mediaUrl: msg.mediaUrl || '',
+      timestamp: Date.now()
+    });
+    bus.emit('chat:starred', { id: msg.id, favId, content: msg.content, characterId: msg.characterId });
+    showToast('收藏成功啦', 'success', 1400);
+  } catch (e) {
+    console.warn('[chat] 收藏失败', e);
+    showToast('收藏失败了，再试一下嘛', 'error');
+  }
 }
 
 // ── 删除 ──
@@ -401,12 +426,6 @@ export function clearChatRecords(session) {
 }
 
 // ════════════════════════════════════════
-// 工具
+// 工具：escapeHTML / escapeAttr 已收拢到 ./shared-utils.js
 // ════════════════════════════════════════
 
-function escapeHTML(s) {
-  return String(s ?? '').replace(/[&<>"']/g, (c) => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-  }[c]));
-}
-function escapeAttr(s) { return escapeHTML(s); }

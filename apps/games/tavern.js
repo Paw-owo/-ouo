@@ -10,6 +10,7 @@ import { getAllDB, setDB, deleteDB, generateId, getNow } from '../../core/storag
 import { createIcon } from '../../core/ui.js';
 import bus from '../../core/events.js';
 import { pick } from '../../core/util.js';
+import { recordInteraction } from '../../core/memory.js';
 import { TAVERN_SCENES, TAVERN_ENDINGS, TAVERN_FLAVORS } from './data.js';
 import { escapeHTML, escapeAttr, aiText, renderHistoryList, historyCardHTML } from './shared.js';
 
@@ -166,6 +167,19 @@ async function finishGame(stage) {
   }
   // 事件注入
   bus.emit('games:result', { game: '骗子酒馆', result: TAVERN_ENDINGS[endingKey] });
+  // 写入长期记忆，让 AI 知道主人玩过骗子酒馆
+  try {
+    await recordInteraction({
+      characterId: 'global',
+      role: 'user',
+      source: 'game',
+      content: `玩了骗子酒馆：${TAVERN_ENDINGS[endingKey]}`,
+      importance: 3,
+      relatedApp: 'games'
+    });
+  } catch (e) {
+    console.warn('[games] 骗子酒馆记忆写入失败', e);
+  }
   renderStage(stage);
 }
 

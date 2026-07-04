@@ -10,6 +10,7 @@ import { getAllDB, setDB, deleteDB, generateId, getNow } from '../../core/storag
 import { createIcon } from '../../core/ui.js';
 import bus from '../../core/events.js';
 import { pick } from '../../core/util.js';
+import { recordInteraction } from '../../core/memory.js';
 import { WORD_PAIRS, UNDERCOVER_SPEECHES, AI_PLAYER_NAMES, UNDERCOVER_RESULTS } from './data.js';
 import { escapeHTML, escapeAttr, aiText, renderHistoryList, historyCardHTML, sleep } from './shared.js';
 
@@ -324,6 +325,19 @@ async function finishVote(stage, userVote) {
   }
   // 事件注入
   bus.emit('games:result', { game: '谁是卧底', result: resultText });
+  // 写入长期记忆，让 AI 知道主人玩过谁是卧底
+  try {
+    await recordInteraction({
+      characterId: 'global',
+      role: 'user',
+      source: 'game',
+      content: `玩了谁是卧底：${resultText}`,
+      importance: 3,
+      relatedApp: 'games'
+    });
+  } catch (e) {
+    console.warn('[games] 谁是卧底记忆写入失败', e);
+  }
   renderStage(stage);
 }
 

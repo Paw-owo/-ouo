@@ -6,10 +6,12 @@
 
 import { KEYS, STORES } from '../../core/storage-keys.js';
 import { getData, setData, getDB, setDB, deleteDB, getAllDB, generateId, getNow } from '../../core/storage.js';
-import { showToast, showConfirm, showBottomSheet, showAlert, createIcon } from '../../core/ui.js';
+import { showToast, showConfirm, showBottomSheet, createIcon } from '../../core/ui.js';
 import bus from '../../core/events.js';
 import { formatRelative, debounce, isUsableImage, cssUrl } from '../../core/util.js';
 import { getState, render, enterChat, refreshSessionList } from './index.js';
+import { escapeHTML, escapeAttr, attachLongPress } from './shared-utils.js';
+import { openApp } from '../../core/router.js';
 
 // ════════════════════════════════════════
 // 列表页渲染
@@ -124,10 +126,6 @@ export async function renderSessionListItems(keyword = '') {
 function renderSessionItem(session, character) {
   const avatarHTML = renderSessionAvatar(session, character);
   const title = escapeHTML(session.title || character?.name || character?.nickname || '未知');
-  const previewText = session.lastMessage
-    ? (session.lastMessage.length > 32 ? session.lastMessage.slice(0, 32) + '...' : session.lastMessage)
-    : '还没有消息呢';
-  const preview = escapeHTML(previewText);
   const time = formatRelative(session.lastAt || session.updatedAt || session.createdAt);
   const unread = Number(session.unread || 0);
   const unreadBadge = unread > 0
@@ -135,6 +133,19 @@ function renderSessionItem(session, character) {
     : '';
   const pinnedIcon = session.pinned ? `<span class="chat-pin-mark">${createIcon('star', 14).outerHTML}</span>` : '';
   const mutedIcon = session.muted ? `<span class="chat-mute-mark">${createIcon('moon', 14).outerHTML}</span>` : '';
+
+  // 草稿优先显示：有未发送草稿时，预览位显示 [草稿] xxx，[草稿] 前缀用 accent 色，正文用 hint 色
+  const draft = (session.draft || '').trim();
+  let previewHTML;
+  if (draft) {
+    const draftText = draft.length > 28 ? draft.slice(0, 28) + '...' : draft;
+    previewHTML = `<span class="chat-list-draft-tag">[草稿]</span><span class="chat-list-draft-text">${escapeHTML(draftText)}</span>`;
+  } else {
+    const previewText = session.lastMessage
+      ? (session.lastMessage.length > 32 ? session.lastMessage.slice(0, 32) + '...' : session.lastMessage)
+      : '还没有消息呢';
+    previewHTML = escapeHTML(previewText);
+  }
 
   return `
     <div class="chat-list-item" data-id="${escapeAttr(session.id)}" role="button" tabindex="0" aria-label="进入 ${title} 的聊天">
@@ -146,7 +157,7 @@ function renderSessionItem(session, character) {
           <span class="chat-list-time">${escapeHTML(time)}</span>
         </div>
         <div class="chat-list-row2">
-          <span class="chat-list-preview">${preview}</span>
+          <span class="chat-list-preview">${previewHTML}</span>
           ${unreadBadge}
         </div>
       </div>
@@ -287,7 +298,14 @@ export async function openNewChatSheet() {
     return;
   }
   if (!characters.length) {
-    showAlert({ title: '还没有角色呢', body: '先去角色 App 里创建一个嘛', okText: '知道啦' });
+    // 没有角色：确认后跳转到角色 App 创建
+    showConfirm({
+      title: '还没有角色呢',
+      body: '先去角色 App 里创建一个嘛，建好回来就能聊啦',
+      confirmText: '去创建',
+      cancelText: '再想想',
+      onConfirm: () => { openApp('characters'); }
+    });
     return;
   }
 
@@ -383,64 +401,10 @@ function renderCharAvatar(char, size) {
 }
 
 // ════════════════════════════════════════
-// 长按（轻量版，避免 pointer 事件冲突）
+// 工具：escapeHTML / escapeAttr / attachLongPress 已收拢到 ./shared-utils.js
 // ════════════════════════════════════════
 
-function attachLongPress(el, handler) {
-  let timer = null;
-  let startX = 0;
-  let startY = 0;
-  let moved = false;
-  const LONG_PRESS_MS = 500;
-  const MOVE_THRESHOLD = 10;
-
-  const onDown = (e) => {
-    if (e.pointerType === 'mouse' && e.button !== 0) return;
-    moved = false;
-    startX = e.clientX;
-    startY = e.clientY;
-    timer = setTimeout(() => {
-      timer = null;
-      try { handler(e); } catch (err) { console.warn('[chat] longpress 失败', err); }
-    }, LONG_PRESS_MS);
-  };
-  const onMove = (e) => {
-    if (!timer) return;
-    const dx = e.clientX - startX;
-    const dy = e.clientY - startY;
-    if (dx * dx + dy * dy > MOVE_THRESHOLD * MOVE_THRESHOLD) {
-      moved = true;
-      clearTimeout(timer);
-      timer = null;
-    }
-  };
-  const onUp = () => {
-    if (timer) { clearTimeout(timer); timer = null; }
-  };
-  // 长按已触发过的情况下，阻止后续 click 跳转
-  const on_click = (e) => {
-    if (moved) { e.preventDefault(); e.stopPropagation(); moved = false; }
-  };
-
-  el.addEventListener('pointerdown', onDown);
-  el.addEventListener('pointermove', onMove);
-  el.addEventListener('pointerup', onUp);
-  el.addEventListener('pointercancel', onUp);
-  el.addEventListener('pointerleave', onUp);
-  el.addEventListener('contextmenu', (e) => { if (!timer) e.preventDefault(); });
-  el.addEventListener('click', on_click, true);
-}
-
-// ════════════════════════════════════════
-// 工具
-// ════════════════════════════════════════
-
-function escapeHTML(s) {
-  return String(s ?? '').replace(/[&<>"']/g, (c) => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-  }[c]));
-}
-function escapeAttr(s) { return escapeHTML(s); }
+// escapeText 保留为 escapeHTML 别名（本模块历史调用点沿用）
 function escapeText(s) { return escapeHTML(s); }
 function cssEscape(s) {
   if (typeof CSS !== 'undefined' && CSS.escape) return CSS.escape(String(s));

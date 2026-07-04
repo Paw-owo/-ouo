@@ -18,11 +18,11 @@ import { createIcon } from '../../core/ui.js';
 import bus from '../../core/events.js';
 import { applyAppBg } from '../../core/app-bg.js';
 import { injectGameStyles } from './styles.js';
-import { renderTarot } from './tarot.js';
-import { renderTruth } from './truth.js';
-import { renderUndercover } from './undercover.js';
-import { renderTavern } from './tavern.js';
-import { renderDice } from './dice.js';
+import { renderTarot, resetTarotState } from './tarot.js';
+import { renderTruth, resetTruthState } from './truth.js';
+import { renderUndercover, resetUndercoverState } from './undercover.js';
+import { renderTavern, resetTavernState } from './tavern.js';
+import { renderDice, resetDiceState } from './dice.js';
 
 let containerEl = null;
 // 当前选中的小游戏 tab
@@ -83,8 +83,11 @@ function render() {
   `;
   body.querySelectorAll('.games-tab').forEach((btn) => {
     btn.addEventListener('click', () => {
-      if (currentTab === btn.dataset.tab) return;
-      currentTab = btn.dataset.tab;
+      const next = btn.dataset.tab;
+      if (currentTab === next) return;
+      // 切走前清掉当前 tab 的临时状态，避免回来时残留半截局
+      resetTabState(currentTab);
+      currentTab = next;
       render();
     });
   });
@@ -95,4 +98,18 @@ function render() {
   else if (currentTab === 'tavern') renderTavern(content);
   else if (currentTab === 'dice') renderDice(content);
   else renderTarot(content);
+}
+
+// 切换 tab 时调用对应游戏的 reset 函数，清掉临时状态
+// dice 没有需要清的状态，也保留调用以保持一致
+function resetTabState(tab) {
+  try {
+    if (tab === 'tarot') resetTarotState();
+    else if (tab === 'truth') resetTruthState();
+    else if (tab === 'undercover') resetUndercoverState();
+    else if (tab === 'tavern') resetTavernState();
+    else if (tab === 'dice') resetDiceState();
+  } catch (e) {
+    console.warn('[games] reset 状态失败', tab, e);
+  }
 }

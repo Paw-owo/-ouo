@@ -6,7 +6,7 @@
 
 import { STORES } from '../../core/storage-keys.js';
 import { getDB, setDB, getAllDB, generateId, getNow, compressImage } from '../../core/storage.js';
-import { showToast, createIcon } from '../../core/ui.js';
+import { showToast, createIcon, registerIcon } from '../../core/ui.js';
 import bus from '../../core/events.js';
 import { pickImageFile } from '../../core/util.js';
 import { streamChat, buildMessages, isAIConfigured } from '../../core/ai-client.js';
@@ -17,8 +17,13 @@ import { getState } from './index.js';
 import {
   appendMessageEl, updateChatHeader, scrollToBottom,
   showTypingIndicator, hideTypingIndicator,
-  clearQuote, autoResizeInput, flushDraft
+  clearQuote, autoResizeInput, flushDraft, updateMessageStatus
 } from './detail-view.js';
+import { renderMarkdown } from './markdown.js';
+import { escapeHTML } from './shared-utils.js';
+
+// 注册 refresh 图标（用于重试按钮）
+registerIcon('refresh', 'M23 4v6h-6 M1 20v-6h6 M3.51 9a9 9 0 0 1 14.85-3.36L23 10 M1 14l4.64 4.36A9 9 0 0 0 20.49 15');
 
 // ════════════════════════════════════════
 // 发送消息（文字）
@@ -53,20 +58,28 @@ export async function sendMessage() {
     content: text,
     type: 'text',
     quote,
+    status: 'sending',
     timestamp: getNow()
   };
-  try {
-    await setDB(STORES.messages, userMsg.id, userMsg);
-  } catch (e) {
-    console.warn('[chat] 保存用户消息失败', e);
-    showToast('消息没发出去，再试一下嘛', 'error');
-    return;
-  }
 
-  // 渲染用户消息
+  // 先渲染（status: sending）再写 DB；写完后更新状态图标
   appendMessageEl(userMsg);
   updateChatHeader(userMsg.timestamp);
   scrollToBottom();
+
+  try {
+    await setDB(STORES.messages, userMsg.id, userMsg);
+    userMsg.status = 'sent';
+    try { await setDB(STORES.messages, userMsg.id, userMsg); } catch (e) {}
+    updateMessageStatus(userMsg.id, 'sent');
+  } catch (e) {
+    console.warn('[chat] 保存用户消息失败', e);
+    userMsg.status = 'failed';
+    try { await setDB(STORES.messages, userMsg.id, userMsg); } catch (e2) {}
+    updateMessageStatus(userMsg.id, 'failed', userMsg);
+    showToast('消息没发出去，再试一下嘛', 'error');
+    return;
+  }
 
   // 更新会话 lastMessage/lastAt
   await bumpSession(session, text.slice(0, 60), userMsg.timestamp);
@@ -141,6 +154,34 @@ export async function sendImageMessage() {
   });
 
   await triggerAIReply(userMsg);
+}
+
+/**
+ * 重试发送失败的消息：把状态重置为 sent，并重新触发 AI 回复。
+ * 由 detail-view.js 中失败状态图标点击时调用。
+ * @param {object} msg 失败的消息对象
+ */
+export async function retrySendMessage(msg) {
+  if (!msg || !msg.id) return;
+  const state = getState();
+  if (state.isReplying) {
+    showToast('等她回完再重试嘛', 'default', 1400);
+    return;
+  }
+  try {
+    // 失败消息本身已存在 DB（或写不进去），重置状态为 sent
+    const cur = await getDB(STORES.messages, msg.id) || msg;
+    await setDB(STORES.messages, msg.id, { ...cur, status: 'sent' });
+    // 更新 UI 状态图标
+    updateMessageStatus(msg.id, 'sent', cur);
+    // 重新触发 AI 回复（如果原本没触发过的话）
+    if (msg.role === 'user') {
+      await triggerAIReply(cur);
+    }
+  } catch (e) {
+    console.warn('[chat] 重试失败', e);
+    showToast('重试出错了，再试一下嘛', 'error');
+  }
 }
 
 // ════════════════════════════════════════
@@ -261,7 +302,10 @@ async function triggerAIReply(userMsg) {
   }
 
   // ── 本地兜底 ──
-  const replyText = getLocalReply(userMsg.content, state.lastReply, { isImage: userMsg.type === 'image' });
+  const replyText = getLocalReply(userMsg.content, state.lastReply, {
+    isImage: userMsg.type === 'image',
+    characterId: sess.characterId
+  });
   state.lastReply = replyText;
   accText = await streamLocalReply(bubbleEl, replyText);
   await finishAIMessage(sess, character, aiMsg, msgEl, bubbleEl, accText, userMsg);
@@ -269,16 +313,18 @@ async function triggerAIReply(userMsg) {
 
 /**
  * 跑一次 AI 流式请求。失败时在气泡里显示重试按钮，等用户决定。
+ * 重试时保留已流式的内容，在已有内容基础上继续。
  * @returns {Promise<{ok:boolean, reason?:string}>}
  */
 async function runAIStream(bubbleEl, messages, sess, getAcc, setAcc) {
   const state = getState();
   while (true) {
     state.abortController = new AbortController();
-    let acc = '';
-    setAcc('');
+    // 重试时保留已流式内容（getAcc() 拿到上次累积的文本），不再清空
+    let acc = getAcc() || '';
+    // 首次进入时初始化气泡：显示已有内容 + 光标
     if (bubbleEl.isConnected) {
-      bubbleEl.innerHTML = '<span class="chat-cursor"></span>';
+      bubbleEl.innerHTML = escapeHTML(acc) + '<span class="chat-cursor"></span>';
     }
     const result = await streamChat({
       messages,
@@ -286,7 +332,10 @@ async function runAIStream(bubbleEl, messages, sess, getAcc, setAcc) {
         acc += delta;
         setAcc(acc);
         if (bubbleEl.isConnected) {
-          bubbleEl.innerHTML = escapeHTML(acc) + '<span class="chat-cursor"></span>';
+          // 流式性能优化：用 textContent 增量追加到 textNode，避免每次 innerHTML 重排
+          // 这里仍用 innerHTML 是因为要保留光标元素；但只重建文本部分，减少解析开销
+          // 更优做法：维护一个 textNode，仅 appendChild 新 delta
+          renderStreamToken(bubbleEl, acc);
           scrollToBottom();
         }
       },
@@ -307,9 +356,9 @@ async function runAIStream(bubbleEl, messages, sess, getAcc, setAcc) {
     if (result.reason === 'fetch_failed') {
       // 免打扰会话不弹 toast
       if (!sess.muted) showToast('AI 暂时联系不上，等会再试嘛', 'error');
-      // 在气泡里显示重试按钮，等用户决定
-      const choice = await showRetryAndWait(bubbleEl);
-      if (choice === 'retry') continue; // 再来一次
+      // 在气泡里显示重试按钮，等用户决定（保留已流式内容前缀）
+      const choice = await showRetryAndWait(bubbleEl, acc);
+      if (choice === 'retry') continue; // 再来一次，acc 会被保留
       return { ok: false, reason: 'cancelled' };
     }
     // 未知原因
@@ -317,11 +366,35 @@ async function runAIStream(bubbleEl, messages, sess, getAcc, setAcc) {
   }
 }
 
-/** 在空气泡里显示重试按钮，返回 Promise<'retry'|'dismiss'> */
-function showRetryAndWait(bubbleEl) {
+/**
+ * 流式渲染单个 token：维护一个 textNode，仅追加新内容，避免全量 innerHTML 重排。
+ * 兼容首次无 textNode 的情况。
+ */
+function renderStreamToken(bubbleEl, fullText) {
+  // 找到或创建文本节点（光标前）
+  let textNode = bubbleEl.firstChild;
+  if (!textNode || textNode.nodeType !== Node.TEXT_NODE) {
+    textNode = document.createTextNode('');
+    bubbleEl.insertBefore(textNode, bubbleEl.firstChild);
+  }
+  // 仅当内容变化时更新 textContent
+  if (textNode.textContent !== fullText) {
+    textNode.textContent = fullText;
+  }
+  // 确保光标元素存在
+  if (!bubbleEl.querySelector('.chat-cursor')) {
+    const cursor = document.createElement('span');
+    cursor.className = 'chat-cursor';
+    bubbleEl.appendChild(cursor);
+  }
+}
+
+/** 在气泡里显示重试按钮（保留已流式内容前缀），返回 Promise<'retry'|'dismiss'> */
+function showRetryAndWait(bubbleEl, accText) {
   return new Promise((resolve) => {
     if (!bubbleEl.isConnected) { resolve('dismiss'); return; }
-    bubbleEl.innerHTML = `<button class="chat-retry-btn" type="button">${createIcon('back', 16).outerHTML}<span>重新联系</span></button>`;
+    const prefix = accText ? escapeHTML(accText) + '<br>' : '';
+    bubbleEl.innerHTML = `${prefix}<button class="chat-retry-btn" type="button">${createIcon('refresh', 16).outerHTML}<span>重新联系</span></button>`;
     const btn = bubbleEl.querySelector('.chat-retry-btn');
     if (!btn) { resolve('dismiss'); return; }
     let done = false;
@@ -356,8 +429,9 @@ function streamLocalReply(bubbleEl, fullText) {
       }
       acc += chars[i];
       i++;
+      // 流式性能优化：用 textNode 增量追加，避免每次 innerHTML 重排
       if (bubbleEl.isConnected) {
-        bubbleEl.innerHTML = escapeHTML(acc) + '<span class="chat-cursor"></span>';
+        renderStreamToken(bubbleEl, acc);
         scrollToBottom();
       }
       state.typingTimer = setTimeout(tick, 50);
@@ -376,9 +450,9 @@ async function finishAIMessage(sess, character, aiMsg, msgEl, bubbleEl, finalTex
     state.streamCancelled = false;
     return;
   }
-  // 去掉光标，固定文本
+  // 去掉光标，固定文本（AI 消息用 markdown 渲染）
   if (bubbleEl.isConnected) {
-    bubbleEl.textContent = finalText;
+    bubbleEl.innerHTML = renderMarkdown(finalText);
   }
   aiMsg.content = finalText;
   try { await setDB(STORES.messages, aiMsg.id, aiMsg); } catch (e) {
@@ -462,11 +536,6 @@ function setReplying(replying) {
 }
 
 // ════════════════════════════════════════
-// 工具
+// 工具：escapeHTML 已收拢到 ./shared-utils.js
 // ════════════════════════════════════════
 
-function escapeHTML(s) {
-  return String(s ?? '').replace(/[&<>"']/g, (c) => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-  }[c]));
-}

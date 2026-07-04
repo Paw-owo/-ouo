@@ -9,8 +9,8 @@
 // 依赖：core/storage.js, core/storage-keys.js, core/ui.js, core/events.js, core/util.js,
 //       core/ai-client.js, ./shared.js, ./comments.js, ./ai-post.js, ./detail.js
 
-import { STORES } from '../../core/storage-keys.js';
-import { getAllDB, setDB, generateId, getNow, compressImage } from '../../core/storage.js';
+import { STORES, KEYS } from '../../core/storage-keys.js';
+import { getAllDB, setDB, generateId, getNow, compressImage, getData } from '../../core/storage.js';
 import { showToast, showBottomSheet, createIcon } from '../../core/ui.js';
 import bus from '../../core/events.js';
 import { pickImageFile } from '../../core/util.js';
@@ -20,7 +20,7 @@ import {
   canDelete, toggleLike, togglePin, deleteMomentWithConfirm, formatRelative
 } from './shared.js';
 import { renderCommentPreview, openCommentSheet } from './comments.js';
-import { aiPost, scheduleAIReactions } from './ai-post.js';
+import { aiPost, scheduleAIReactions, maybeAutoPost } from './ai-post.js';
 import { openDetail } from './detail.js';
 import { applyAppBg } from '../../core/app-bg.js';
 
@@ -55,6 +55,15 @@ export async function mount(container) {
   });
   await render();
   applyAppBg(container, 'moments');
+  // 进入朋友圈时尝试让当前角色主动发动态（24h 内同一事件只触发一次，30% 概率）
+  // 不阻塞渲染：失败 / 不触发都不影响列表
+  try {
+    const cid = getData(KEYS.chatCurrentCharacter, 'char_chuyi');
+    const posted = await maybeAutoPost(cid);
+    if (posted) await render();
+  } catch (e) {
+    console.warn('[moments] 主动发动态失败', e);
+  }
 }
 
 export function unmount() {

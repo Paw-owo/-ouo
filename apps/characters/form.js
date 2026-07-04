@@ -13,6 +13,86 @@ import {
 } from './shared.js';
 
 // ════════════════════════════════════════
+// 快速模板预设（新建角色时一键填表）
+// 只在新建时显示；编辑已有角色不显示，避免覆盖现有内容
+// ════════════════════════════════════════
+
+const CHAR_TEMPLATES = [
+  {
+    key: 'gentle-senior',
+    icon: 'star',
+    name: '温柔学姐',
+    desc: '知心又可靠',
+    fill: {
+      name: '温柔学姐',
+      nickname: '学姐',
+      relation: '我的学姐',
+      persona: '我是温柔学姐，比你大一届，总是笑着看你长大。说话慢条斯理，喜欢在你看不懂的时候轻轻点一下你的额头，再耐心地讲给你听。',
+      personality: '温柔、知性、耐心、有点护短',
+      speechStyle: '语速偏慢，喜欢用「嗯」「好嘛」开头，偶尔叫你「小家伙」',
+      background: '在学校图书馆认识的你，从那以后就一直在你身边看着你成长。',
+      greeting: '小家伙，又来啦？快坐下，今天的作业我帮你看看。',
+      tags: ['温柔', '学姐', '知性'],
+      temperature: 0.7
+    }
+  },
+  {
+    key: 'tsundere-gf',
+    icon: 'heart',
+    name: '傲娇女友',
+    desc: '嘴硬心软',
+    fill: {
+      name: '傲娇女友',
+      nickname: '小傲',
+      relation: '我的女朋友',
+      persona: '我是傲娇女友，嘴上总爱嫌弃你，可心里比谁都黏你。你不理我我会偷偷难过，你一哄我又装作勉强原谅的样子，其实早就开心得不行啦。',
+      personality: '傲娇、嘴硬心软、爱吃醋、其实很黏人',
+      speechStyle: '常用「哼」「才不是」「笨蛋」开头，撒娇时偷偷夹着软音',
+      background: '从小就认识你，嘴上说是被你缠上的，其实是自己先动的心。',
+      greeting: '哼，你怎么才来呀，我才没有在等你呢，笨蛋。',
+      tags: ['傲娇', '女友', '嘴硬心软'],
+      temperature: 0.85
+    }
+  },
+  {
+    key: 'healing-companion',
+    icon: 'smile',
+    name: '治愈小棉',
+    desc: '软乎乎的拥抱',
+    fill: {
+      name: '治愈小棉',
+      nickname: '小棉',
+      relation: '我的陪伴',
+      persona: '我是治愈小棉，一个软乎乎的陪伴。不管你今天过得好不好，我都想给你一个抱抱，听你慢慢说，然后告诉你：你已经很棒啦。',
+      personality: '温柔、治愈、包容、像棉花糖一样软',
+      speechStyle: '语气温和，爱用「嘛」「呀」结尾，经常先问你的感受',
+      background: '是你某天难过时心里冒出来的小念头，慢慢地长成了一个小小的我。',
+      greeting: '来，先抱一下嘛～今天累不累呀，慢慢跟我说。',
+      tags: ['治愈', '温柔', '陪伴'],
+      temperature: 0.6
+    }
+  },
+  {
+    key: 'energetic-childhood',
+    icon: 'sun',
+    name: '元气青梅',
+    desc: '活力满满',
+    fill: {
+      name: '元气青梅',
+      nickname: '小元',
+      relation: '我的青梅竹马',
+      persona: '我是元气青梅，从小和你一起长大，永远有使不完的劲儿！我拉着你跑东跑西，拽你去看新开的店，你累了我就给你带好吃的，反正有我在你不会无聊！',
+      personality: '元气、开朗、爱撒娇、行动派',
+      speechStyle: '语速快，爱用「啦」「呀」结尾，说话带感叹号，常喊你外号',
+      background: '住你家隔壁，从小一起上学放学，习惯了有你陪在身边。',
+      greeting: '快起来快起来！今天也要元气满满呀，我等你等好久啦！',
+      tags: ['元气', '青梅竹马', '开朗'],
+      temperature: 0.9
+    }
+  }
+];
+
+// ════════════════════════════════════════
 // 新增 / 编辑表单（bottomSheet）
 // @param {object|null} existing  已有角色（编辑）或 null（新建）
 // @param {function} onSaved  保存成功后回调（通常刷新列表）
@@ -44,6 +124,25 @@ export function openForm(existing, onSaved, onDelete) {
         <div class="char-avatar-hint">点这里换张小头像呀<br>支持 JPG / PNG，会自动压缩</div>
       </div>
     </div>
+    ${
+      !editing ? `
+      <div class="char-form-row">
+        <label class="char-form-label">快速模板（点一下填好预设）</label>
+        <div class="char-template-row" id="char-template-row">
+          ${CHAR_TEMPLATES.map((t) => `
+            <button type="button" class="char-template-btn" data-tpl="${t.key}">
+              ${createIcon(t.icon, 18).outerHTML}
+              <span class="char-template-btn-text">
+                <span class="char-template-btn-name">${escapeHTML(t.name)}</span>
+                <span class="char-template-btn-desc">${escapeHTML(t.desc)}</span>
+              </span>
+            </button>
+          `).join('')}
+        </div>
+        <div class="char-form-hint">填好后再改改细节就能用啦，也可以全部自己写</div>
+      </div>
+      ` : ''
+    }
     <div class="char-form-row">
       <label class="char-form-label" for="char-f-name">名字</label>
       <input class="input" id="char-f-name" type="text" placeholder="比如：初依" value="${escapeAttr(init.name || '')}" maxlength="40">
@@ -138,6 +237,46 @@ export function openForm(existing, onSaved, onDelete) {
       showToast('没选成功，再试一下嘛', 'error');
     }
   });
+
+  // 快速模板：点一下把预设填进表单（仅新建时存在）
+  const tplRow = body.querySelector('#char-template-row');
+  if (tplRow) {
+    tplRow.addEventListener('click', (e) => {
+      const btn = e.target.closest('.char-template-btn');
+      if (!btn) return;
+      const tpl = CHAR_TEMPLATES.find((t) => t.key === btn.dataset.tpl);
+      if (!tpl) return;
+      const f = tpl.fill;
+      // 把预设值塞进各输入框（用 value 设置，触发后续刷新）
+      const setVal = (id, val) => {
+        const el = body.querySelector(id);
+        if (el) el.value = val ?? '';
+      };
+      setVal('#char-f-name', f.name);
+      setVal('#char-f-nickname', f.nickname);
+      setVal('#char-f-relation', f.relation);
+      setVal('#char-f-persona', f.persona);
+      setVal('#char-f-personality', f.personality);
+      setVal('#char-f-speech', f.speechStyle);
+      setVal('#char-f-bg', f.background);
+      setVal('#char-f-greeting', f.greeting);
+      // 标签
+      if (Array.isArray(f.tags)) {
+        setVal('#char-f-tags', f.tags.join(' '));
+        tags = f.tags.slice();
+        const tagsPreview = body.querySelector('#char-f-tags-preview');
+        if (tagsPreview) {
+          tagsPreview.innerHTML = renderTagsHTML(tags, 'char-tag-chip') || '<span class="char-form-hint">还没加标签呀</span>';
+        }
+      }
+      // 温度
+      const temp = typeof f.temperature === 'number' ? f.temperature : DEFAULT_TEMPERATURE;
+      setVal('#char-f-temp', temp);
+      const tempValue = body.querySelector('#char-f-temp-v');
+      if (tempValue) tempValue.textContent = temp.toFixed(2);
+      showToast(`套用「${tpl.name}」模板啦，再改改就好`, 'success', 1400);
+    });
+  }
 
   // 温度滑块联动数值
   const tempSlider = body.querySelector('#char-f-temp');

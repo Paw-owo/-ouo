@@ -8,7 +8,7 @@ import { initDB, ensureDefaultSettings, getData, setData, removeData, getDB, set
 import { STORES, KEYS } from './core/storage-keys.js';
 import { loadTheme, applyTheme, getCurrentTheme, setTheme, applyFontFamily, applyDesktopScale, getPresets, restoreCustomColors } from './core/theme.js';
 import { createIcon, showToast, showConfirm, showBottomSheet, hideBottomSheet } from './core/ui.js';
-import { pickImageFile, clamp, debounce, cssUrl, isUsableImage } from './core/util.js';
+import { pickImageFile, clamp, debounce, throttle, cssUrl, isUsableImage } from './core/util.js';
 import { get as getConfig } from './core/config.js';
 import bus from './core/events.js';
 import { openApp, goHome } from './core/router.js';
@@ -43,6 +43,15 @@ let clockTimer = null;
 let weatherTimer = null;
 let vinylTimer = null;
 let currentCharacter = null;
+
+// 锁屏密码安全：默认密码 / 盐 / 哈希 / 失败锁定
+const DEFAULT_LOCK_PASSWORD = '0326';
+const LOCK_SALT = 'popo-salt-2024';
+const LOCK_MAX_FAILS = 5;
+const LOCK_LOCKOUT_MS = 30000;
+let lockFailCount = 0;
+let lockLockoutUntil = 0;
+let lockLockoutTicker = null;
 
 // 状态栏图标（8 个，纯装饰 + 时间）
 const STATUS_ICONS = ['heart', 'sun', 'weather', 'music', 'star', 'calendar', 'moon', 'bell'];
@@ -89,6 +98,7 @@ async function boot() {
     await applyCustomFont();
     await seedDefaultCharacter();
     currentCharacter = await getDefaultCharacter();
+    await ensureLockPasswordHashed(); // 密码哈希迁移（明文 → 哈希）
     renderLockDots();
     rebuildDesktopPages();
     await renderAll();
@@ -198,9 +208,21 @@ function getRegistrySync() {
   return registryCache || { APPS: [] };
 }
 
+// Dock 归属覆盖：用户在 Dock / 桌面间移动图标后，覆盖 registry 的 dock 字段（不修改冻结的 registry）
+function getDockOverrides() {
+  const v = getData(KEYS.appDockOverrides, null);
+  return (v && typeof v === 'object' && !Array.isArray(v)) ? v : {};
+}
+function saveDockOverrides(map) { setData(KEYS.appDockOverrides, map || {}); }
+function isDockApp(app) {
+  const overrides = getDockOverrides();
+  if (Object.prototype.hasOwnProperty.call(overrides, app.id)) return !!overrides[app.id];
+  return !!app.dock;
+}
+
 function getDockOrder(reg) {
   const r = reg || getRegistrySync();
-  const dockIds = r.APPS.filter((a) => a.dock).map((a) => a.id);
+  const dockIds = r.APPS.filter((a) => isDockApp(a)).map((a) => a.id);
   const saved = getData(KEYS.appDockOrder, null);
   const ordered = Array.isArray(saved) ? saved.filter((id) => dockIds.includes(id)) : [];
   const missing = dockIds.filter((id) => !ordered.includes(id));
@@ -214,7 +236,7 @@ async function renderDock() {
   const reg = await getRegistry();
   dockEl.innerHTML = '';
   getDockOrder(reg).forEach((appId) => {
-    const app = reg.APPS.find((a) => a.id === appId && a.dock);
+    const app = reg.APPS.find((a) => a.id === appId && isDockApp(a));
     if (app) dockEl.appendChild(createDockIcon(app));
   });
 }
@@ -306,10 +328,28 @@ async function renderIconGrids() {
   const reg = await getRegistry();
   const hidden = getHiddenIcons();
   document.querySelectorAll('[data-icon-grid]').forEach((g) => g.innerHTML = '');
-  const apps = reg.APPS.filter((a) => !a.dock && !hidden.includes(a.id));
+  const apps = reg.APPS.filter((a) => !isDockApp(a) && !hidden.includes(a.id));
+  // 按页面分组，按保存的顺序渲染（未在保存顺序中的 app 追加到末尾，按注册顺序）
+  const byPage = {};
   apps.forEach((app) => {
-    const grid = document.querySelector(`[data-icon-grid="${app.page || 0}"]`);
-    if (grid) grid.appendChild(createDesktopIcon(app));
+    const p = String(app.page || 0);
+    (byPage[p] = byPage[p] || []).push(app);
+  });
+  Object.keys(byPage).forEach((page) => {
+    const grid = document.querySelector(`[data-icon-grid="${page}"]`);
+    if (!grid) return;
+    const saved = getData(KEYS.appIconOrder(page), []);
+    let ordered;
+    if (Array.isArray(saved) && saved.length) {
+      const map = {};
+      byPage[page].forEach((a) => { map[a.id] = a; });
+      ordered = [];
+      saved.forEach((id) => { if (map[id]) { ordered.push(map[id]); delete map[id]; } });
+      byPage[page].forEach((a) => { if (map[a.id]) ordered.push(a); });
+    } else {
+      ordered = byPage[page];
+    }
+    ordered.forEach((app) => grid.appendChild(createDesktopIcon(app)));
   });
 }
 
@@ -447,14 +487,18 @@ function handleIconPointerDown(event, element) {
 
 function moveToDesktop(dockEl, grid) {
   const appId = dockEl.dataset.appId;
-  // 从 dock 移除
+  // 标记为桌面 app（覆盖 registry 的 dock 字段，不修改 registry 本身）
+  const overrides = getDockOverrides();
+  overrides[appId] = false;
+  saveDockOverrides(overrides);
+  // 从 dock 顺序移除
   const dockOrder = getDockOrder().filter((id) => id !== appId);
   saveDockOrderArr(dockOrder);
   // 加入桌面网格（插入到末尾）
   const reg = getRegistrySync();
   const app = reg?.APPS.find((a) => a.id === appId);
   if (app) {
-    const newIcon = createDesktopIcon({ ...app, dock: false });
+    const newIcon = createDesktopIcon(app);
     grid.appendChild(newIcon);
     saveIconOrder(grid);
   }
@@ -471,12 +515,16 @@ function moveToDock(desktopIconEl) {
     showToast('Dock 装满啦，先移走一个嘛', 'error');
     return;
   }
+  // 标记为 dock app（覆盖 registry 的 dock 字段，不修改 registry 本身）
+  const overrides = getDockOverrides();
+  overrides[appId] = true;
+  saveDockOverrides(overrides);
   // 从桌面移除
   const grid = desktopIconEl.parentElement;
   desktopIconEl.remove();
   if (grid) saveIconOrder(grid);
   // 加入 dock
-  const newIcon = createDockIcon({ ...app, dock: true });
+  const newIcon = createDockIcon(app);
   dockEl.appendChild(newIcon);
   const dockOrder = getDockOrder();
   dockOrder.push(appId);
@@ -606,10 +654,20 @@ function updatePageDots() {
 }
 
 function bindEvents() {
-  pagesEl.addEventListener('scroll', debounce(() => {
+  // 滚动指示点：用 throttle 实时更新（替代 debounce 延迟）
+  pagesEl.addEventListener('scroll', throttle(() => {
     currentPage = Math.round(pagesEl.scrollLeft / (pagesEl.clientWidth || 1));
     updatePageDots();
-  }, 80), { passive: true });
+  }, 60), { passive: true });
+
+  // 点击 page-dots 跳页
+  pageDotsEl.addEventListener('click', (e) => {
+    const dot = e.target.closest('.page-dot');
+    if (!dot) return;
+    const idx = [...pageDotsEl.children].indexOf(dot);
+    const target = pagesEl.children[idx];
+    if (target) pagesEl.scrollTo({ left: target.offsetLeft, behavior: 'smooth' });
+  });
 
   // 点空白退出编辑态
   desktopEl.addEventListener('click', (e) => {
@@ -628,22 +686,91 @@ function bindEvents() {
   window.addEventListener('storage', () => { applyAllImages(); refreshBadges(); });
 }
 
-function onLockKeyClick(e) {
+// 密码哈希（SHA-256 + 盐），避免明文存储
+async function hashPassword(pwd) {
+  const data = new TextEncoder().encode(String(pwd) + LOCK_SALT);
+  const buf = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+// 解析存储的密码：支持 sha256:<长度>:<hex> / 纯 hex / 明文（兼容设置 App 旧写入与 ensureDefaultSettings 的明文）
+function parseLockStored(raw) {
+  if (raw == null) return { hash: null, plain: null, length: 4 };
+  if (typeof raw === 'string') {
+    const m = /^sha256:(\d+):([0-9a-f]{64})$/.exec(raw);
+    if (m) return { hash: m[2], plain: null, length: Number(m[1]) || 4 };
+    if (/^[0-9a-f]{64}$/.test(raw)) return { hash: raw, plain: null, length: 4 };
+    return { hash: null, plain: raw, length: raw.length };
+  }
+  return { hash: null, plain: null, length: 4 };
+}
+
+function getLockPasswordLength() {
+  return parseLockStored(getData(KEYS.appLockPassword, null)).length;
+}
+
+// 启动时迁移：把明文密码哈希后存储（默认 '0326' 也会被哈希）
+async function ensureLockPasswordHashed() {
+  const parsed = parseLockStored(getData(KEYS.appLockPassword, null));
+  if (parsed.hash) return;
+  const plain = parsed.plain != null ? parsed.plain : DEFAULT_LOCK_PASSWORD;
+  const hash = await hashPassword(plain);
+  setData(KEYS.appLockPassword, `sha256:${plain.length}:${hash}`);
+}
+
+async function isLockPasswordDefault() {
+  const parsed = parseLockStored(getData(KEYS.appLockPassword, null));
+  if (parsed.hash) {
+    const defaultHash = await hashPassword(DEFAULT_LOCK_PASSWORD);
+    return parsed.hash === defaultHash;
+  }
+  return parsed.plain === DEFAULT_LOCK_PASSWORD;
+}
+
+function isLockLockedOut() { return Date.now() < lockLockoutUntil; }
+
+function startLockLockout() {
+  lockLockoutUntil = Date.now() + LOCK_LOCKOUT_MS;
+  lockFailCount = 0;
+  lockInput = '';
+  renderLockDots();
+  if (lockLockoutTicker) clearInterval(lockLockoutTicker);
+  lockLockoutTicker = setInterval(updateLockCountdown, 500);
+  updateLockCountdown();
+}
+
+function updateLockCountdown() {
+  const remainMs = lockLockoutUntil - Date.now();
+  if (remainMs > 0) {
+    const remain = Math.ceil(remainMs / 1000);
+    lockErrorEl.textContent = `输入错误太多啦，${remain} 秒后再试嘛`;
+    lockPadEl.style.pointerEvents = 'none';
+    lockPadEl.style.opacity = '0.5';
+  } else {
+    if (lockLockoutTicker) { clearInterval(lockLockoutTicker); lockLockoutTicker = null; }
+    lockLockoutUntil = 0;
+    lockErrorEl.textContent = '';
+    lockPadEl.style.pointerEvents = '';
+    lockPadEl.style.opacity = '';
+  }
+}
+
+async function onLockKeyClick(e) {
+  if (isLockLockedOut()) return; // 锁定中禁止输入
   const key = e.target.closest('[data-key]')?.dataset.key;
   if (!key) return;
   if (key === 'clear') { lockInput = ''; lockErrorEl.textContent = ''; renderLockDots(); return; }
   if (key === 'delete') { lockInput = lockInput.slice(0, -1); lockErrorEl.textContent = ''; renderLockDots(); return; }
-  const pwd = getData(KEYS.appLockPassword, '0326');
-  if (lockInput.length >= String(pwd).length) return;
+  const need = getLockPasswordLength();
+  if (lockInput.length >= need) return;
   lockInput += key;
   lockErrorEl.textContent = '';
   renderLockDots();
-  if (lockInput.length === String(pwd).length) setTimeout(checkLockPassword, 120);
+  if (lockInput.length === need) setTimeout(checkLockPassword, 120);
 }
 
 function renderLockDots() {
-  const pwd = String(getData(KEYS.appLockPassword, '0326'));
-  const need = pwd.length;
+  const need = getLockPasswordLength();
   // 动态生成 dot，数量跟随密码长度
   if (lockDotsEl.children.length !== need) {
     lockDotsEl.innerHTML = '';
@@ -656,9 +783,19 @@ function renderLockDots() {
   [...lockDotsEl.children].forEach((dot, i) => dot.classList.toggle('filled', i < lockInput.length));
 }
 
-function checkLockPassword() {
-  const pwd = getData(KEYS.appLockPassword, '0326');
-  if (lockInput === String(pwd)) {
+async function checkLockPassword() {
+  if (isLockLockedOut()) return;
+  const parsed = parseLockStored(getData(KEYS.appLockPassword, null));
+  let matched = false;
+  if (parsed.hash) {
+    const inputHash = await hashPassword(lockInput);
+    matched = (inputHash === parsed.hash);
+  } else if (parsed.plain != null) {
+    // 兼容旧版明文存储（设置 App 刚改完未迁移）
+    matched = (lockInput === parsed.plain);
+  }
+  if (matched) {
+    lockFailCount = 0;
     setData(KEYS.appLockUnlocked, true);
     lockScreenEl.classList.add('unlocked');
     setTimeout(() => lockScreenEl.classList.add('hidden'), 360);
@@ -666,6 +803,11 @@ function checkLockPassword() {
     return;
   }
   lockInput = '';
+  lockFailCount += 1;
+  if (lockFailCount >= LOCK_MAX_FAILS) {
+    startLockLockout();
+    return;
+  }
   lockErrorEl.textContent = '嘿嘿，不对哦';
   [...lockDotsEl.children].forEach((dot) => dot.classList.add('shake'));
   setTimeout(() => [...lockDotsEl.children].forEach((dot) => dot.classList.remove('shake')), 360);
@@ -680,8 +822,12 @@ async function refreshLockScreen() {
   } else {
     lockScreenEl.classList.remove('unlocked', 'hidden');
   }
-  // 显示角色名
-  if (currentCharacter?.name) {
+  // 显示角色名 / 默认密码提示
+  const isDefault = await isLockPasswordDefault();
+  if (isDefault) {
+    lockTitleEl.textContent = `嘘，输入密码`;
+    lockHintEl.textContent = '密码还是默认的哦，去设置里换一个更安全';
+  } else if (currentCharacter?.name) {
     lockTitleEl.textContent = `嘘，输入密码`;
     lockHintEl.textContent = `${currentCharacter.name} 在等你解锁哦`;
   }
@@ -716,8 +862,7 @@ function initWidgets() {
   weatherTimer = setInterval(updateWeather, 30 * 60 * 1000);
   updateAnniversaryWidget();
   updateVinylWidget();
-  clearInterval(vinylTimer);
-  vinylTimer = setInterval(updateVinylWidget, 1000);
+  // vinyl widget 由音频事件驱动（play/pause/timeupdate），不再每秒 setInterval 轮询
 }
 
 function updateClock() {
@@ -878,17 +1023,41 @@ async function pickLocalSong() {
   showToast('挑好啦，正在播放', 'success');
 }
 
+// 懒创建 vinylAudio 并绑定事件（play/pause/timeupdate 驱动 widget 更新，替代每秒轮询）
+function ensureVinylAudio() {
+  if (vinylAudio) return;
+  vinylAudio = new Audio();
+  vinylAudio.addEventListener('ended', () => playVinylAt(vinylIndex + 1));
+  vinylAudio.addEventListener('play', updateVinylWidget);
+  vinylAudio.addEventListener('pause', updateVinylWidget);
+  vinylAudio.addEventListener('timeupdate', updateVinylWidget);
+}
+
 function playVinylSong(song) {
   if (!song || !song.url) { showToast('这首歌的链接失效啦，重新挑一首嘛', 'error'); return; }
-  if (!vinylAudio) {
-    vinylAudio = new Audio();
-    vinylAudio.addEventListener('ended', () => playVinylAt(vinylIndex + 1));
+  ensureVinylAudio();
+  // 释放旧的 blob URL（仅当它不再被会话列表引用时，避免破坏切歌）
+  const oldSrc = vinylAudio.src;
+  if (oldSrc && oldSrc !== song.url && /^blob:/i.test(oldSrc) && !vinylSession.some((s) => s.url === oldSrc)) {
+    URL.revokeObjectURL(oldSrc);
   }
   vinylAudio.src = song.url;
   vinylAudio.play().catch(() => showToast('播放不出来嘛，换个格式试试', 'error'));
   // 在会话列表里定位索引
   vinylIndex = vinylSession.findIndex((s) => s.id === song.id);
   updateVinylWidget();
+}
+
+// 卸载时释放所有 blob URL，避免内存泄漏
+function revokeAllVinylBlobs() {
+  vinylSession.forEach((s) => {
+    if (s.url && /^blob:/i.test(s.url)) {
+      try { URL.revokeObjectURL(s.url); } catch (e) {}
+    }
+  });
+}
+if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+  window.addEventListener('beforeunload', revokeAllVinylBlobs);
 }
 
 function playVinylAt(idx) {

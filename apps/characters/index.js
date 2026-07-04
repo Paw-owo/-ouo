@@ -78,7 +78,7 @@ function getCurrentCharacterId() {
 function setCurrentCharacterId(id) {
   setData(KEYS.chatCurrentCharacter, id);
   // 通知聊天相关模块该换角色啦
-  bus.emit('character:switch', { characterId: id });
+  bus.emit('character:switched', { characterId: id });
 }
 
 // ════════════════════════════════════════

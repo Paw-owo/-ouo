@@ -6,12 +6,17 @@
 
 import { KEYS, STORES } from '../../core/storage-keys.js';
 import { getData, getDB, setDB, getAllDB } from '../../core/storage.js';
-import { showToast, showBottomSheet, createIcon } from '../../core/ui.js';
-import { formatTime, formatRelative, clamp } from '../../core/util.js';
+import { showToast, showBottomSheet, createIcon, registerIcon } from '../../core/ui.js';
+import { formatTime, formatRelative, clamp, throttle, isUsableImage, cssUrl } from '../../core/util.js';
 import { getState, render, backToSessionList } from './index.js';
 import { openChatMoreMenu, openMessageActionSheet } from './message-actions.js';
-import { sendMessage, sendImageMessage, cancelStreaming } from './sending.js';
+import { sendMessage, sendImageMessage, cancelStreaming, retrySendMessage } from './sending.js';
 import { applySessionWallpaper } from './wallpaper.js';
+import { renderMarkdown } from './markdown.js';
+import { escapeHTML, escapeAttr, attachLongPress } from './shared-utils.js';
+
+// 注册感叹号图标（用于消息发送失败状态）
+registerIcon('alert', 'M12 3v10 M12 17h.01');
 
 // ════════════════════════════════════════
 // 聊天详情页渲染
@@ -108,9 +113,48 @@ async function loadAndRenderMessages() {
     updateChatHeader(null);
     return;
   }
-  messages.forEach((msg) => appendMessageEl(msg));
+  // 时间分组：相邻消息间隔 >5 分钟插入时间分隔条
+  let lastTime = 0;
+  const GROUP_GAP_MS = 5 * 60 * 1000;
+  messages.forEach((msg) => {
+    const t = new Date(msg.timestamp || msg.createdAt || 0).getTime();
+    if (t - lastTime > GROUP_GAP_MS) {
+      appendTimeDivider(t);
+    }
+    appendMessageEl(msg);
+    lastTime = t;
+  });
   updateChatHeader(messages[messages.length - 1].timestamp || messages[messages.length - 1].createdAt);
   scrollToBottom();
+}
+
+/** 插入时间分隔条（居中灰色胶囊小字） */
+function appendTimeDivider(time) {
+  const state = getState();
+  if (!state.messageListEl) return;
+  const el = document.createElement('div');
+  el.className = 'chat-time-divider';
+  el.textContent = formatChatGroupTime(time);
+  state.messageListEl.appendChild(el);
+}
+
+/** 时间分组显示：今天显示 HH:mm，昨天显示"昨天 HH:mm"，更早显示完整日期 */
+function formatChatGroupTime(time) {
+  const d = new Date(time);
+  if (isNaN(d.getTime())) return '';
+  const now = new Date();
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  const sameDay = (a, b) => a.getFullYear() === b.getFullYear()
+    && a.getMonth() === b.getMonth()
+    && a.getDate() === b.getDate();
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  if (sameDay(d, now)) return `${hh}:${mm}`;
+  if (sameDay(d, yesterday)) return `昨天 ${hh}:${mm}`;
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${month}月${day}日 ${hh}:${mm}`;
 }
 
 function renderEmptyState() {
@@ -148,38 +192,125 @@ export function appendMessageEl(msg, opts = {}) {
   return el;
 }
 
+/**
+ * 更新已渲染消息的状态图标（sending/sent/failed）。
+ * 在 sending.js 中 DB 写入成功/失败后调用。
+ * @param {string} msgId
+ * @param {'sending'|'sent'|'failed'} status
+ * @param {object} [msg] 可选消息对象（失败时用于重试，避免 DB 读不到）
+ */
+export function updateMessageStatus(msgId, status, msg) {
+  const state = getState();
+  if (!state.messageListEl) return;
+  const row = state.messageListEl.querySelector(`.chat-msg-row[data-id="${cssEscape(msgId)}"]`);
+  if (!row) return;
+  const metaEl = row.querySelector('.chat-meta');
+  if (!metaEl) return;
+  // 用一条临时消息对象复用 renderStatusIndicator
+  const html = renderStatusIndicator({ status });
+  metaEl.innerHTML = html;
+  // 失败状态重新绑重试：优先用传入的 msg，否则从 DB 读
+  if (status === 'failed') {
+    const statusEl = metaEl.querySelector('.chat-status-failed');
+    if (statusEl) {
+      statusEl.addEventListener('click', async () => {
+        try {
+          const cur = msg || (await getDB(STORES.messages, msgId));
+          if (cur) await retrySendMessage(cur);
+        } catch (e) {
+          console.warn('[chat] 重试读取消息失败', e);
+        }
+      });
+    }
+  }
+}
+
+/** CSS.escape 兜底 */
+function cssEscape(s) {
+  if (typeof CSS !== 'undefined' && CSS.escape) return CSS.escape(String(s));
+  return String(s).replace(/["\\]/g, '\\$&');
+}
+
 function createMessageEl(msg, opts = {}) {
   const state = getState();
   const mode = getData(KEYS.chatMode, 'bubble');
   const isUser = msg.role === 'user';
   const isImage = msg.type === 'image';
+
+  // ── 撤回占位 ──
+  if (msg.recalled) {
+    const el = document.createElement('div');
+    el.className = 'chat-recalled-hint';
+    el.textContent = isUser ? '你撤回了一条消息' : '对方撤回了一条消息';
+    return el;
+  }
+
   const el = document.createElement('div');
 
   if (mode === 'dialog') {
-    // 对话模式：剧本式，每行"我：xxx" / "角色名：xxx"
-    el.className = `chat-msg dialog ${isUser ? 'user' : 'ai'}`;
+    // 对话模式：Kelivo 风格富文本卡片流
+    // AI 消息渲染为独立卡片（背景/圆角/阴影 + 头像昵称 + markdown 正文 + 时间）
+    // 用户消息保持简洁：只有名字 + 内容，无卡片背景
+    el.className = `chat-msg-row dialog ${isUser ? 'user' : 'ai'}`;
     el.dataset.id = msg.id;
     const name = isUser ? '我' : (state.currentCharacter?.name || state.currentCharacter?.nickname || '她');
+    const time = formatTime(msg.timestamp || msg.createdAt);
+
+    // 引用块（dialog 模式也要渲染）
+    const quoteHTML = msg.quote
+      ? `<div class="chat-quote">引用：${escapeHTML(msg.quote)}</div>`
+      : '';
+
+    // 正文内容
     let inner;
     if (isImage) {
       const safeUrl = String(msg.mediaUrl || '').replace(/"/g, '&quot;');
       inner = `<img class="chat-image" src="${safeUrl}" alt="图片" loading="lazy">`;
+    } else if (opts.stream) {
+      inner = '';
+    } else if (isUser) {
+      inner = escapeHTML(msg.content || '');
     } else {
-      inner = opts.stream ? '' : escapeHTML(msg.content || '');
+      inner = renderMarkdown(msg.content || '');
     }
-    el.innerHTML = `
-      <span class="chat-dialog-name">${escapeHTML(name)}：</span>
-      <span class="chat-bubble">${inner}</span>
-      <span class="chat-time">${escapeHTML(formatTime(msg.timestamp || msg.createdAt))}</span>
-    `;
-    // 长按操作
+
+    if (isUser) {
+      // 用户消息：简洁，无卡片背景，只有名字 + 内容
+      el.innerHTML = `
+        <div class="chat-dialog-user">
+          <div class="chat-dialog-user-name">${escapeHTML(name)}</div>
+          <div class="chat-bubble">${quoteHTML}${inner}</div>
+        </div>
+      `;
+    } else {
+      // AI 消息：独立卡片，头像 + 昵称 + 时间 + markdown 正文
+      const avatarHTML = renderCharacterAvatar(state.currentCharacter);
+      el.innerHTML = `
+        <div class="chat-dialog-card">
+          <div class="chat-dialog-card-header">
+            <div class="chat-dialog-card-avatar">${avatarHTML}</div>
+            <div class="chat-dialog-card-name">${escapeHTML(name)}</div>
+            <div class="chat-dialog-card-time">${escapeHTML(time)}</div>
+          </div>
+          <div class="chat-bubble chat-dialog-card-body">${quoteHTML}${inner}</div>
+        </div>
+      `;
+    }
     attachLongPress(el, () => openMessageActionSheet(msg));
     return el;
   }
 
   // 气泡模式（默认）
-  el.className = `chat-msg ${isUser ? 'user' : 'ai'}`;
+  el.className = `chat-msg-row ${isUser ? 'user' : 'ai'}`;
   el.dataset.id = msg.id;
+
+  // 头像：AI 用 character.avatar；用户用默认 smile icon
+  const avatarHTML = isUser ? renderUserAvatar() : renderCharacterAvatar(state.currentCharacter);
+  // 多角色昵称：仅在 AI 消息且有角色名时显示
+  const nicknameHTML = (!isUser && state.currentCharacter?.name)
+    ? `<div class="chat-nickname">${escapeHTML(state.currentCharacter.name)}</div>`
+    : '';
+
   const content = opts.stream ? '' : (msg.content || '');
   let bubbleInner = '';
   if (msg.quote) {
@@ -188,29 +319,185 @@ function createMessageEl(msg, opts = {}) {
   if (isImage) {
     const safeUrl = String(msg.mediaUrl || '').replace(/"/g, '&quot;');
     bubbleInner += `<img class="chat-image" src="${safeUrl}" alt="图片" loading="lazy">`;
-    if (content) bubbleInner += escapeHTML(content);
+    if (content) {
+      bubbleInner += isUser ? escapeHTML(content) : renderMarkdown(content);
+    }
+  } else if (opts.stream) {
+    bubbleInner += '';
   } else {
-    bubbleInner += escapeHTML(content);
+    bubbleInner += isUser ? escapeHTML(content) : renderMarkdown(content);
   }
+
+  // 状态图标（仅用户消息显示）
+  const statusHTML = isUser ? renderStatusIndicator(msg) : '';
+
   el.innerHTML = `
-    <div class="chat-bubble">${bubbleInner}</div>
-    <div class="chat-time">${escapeHTML(formatTime(msg.timestamp || msg.createdAt))}</div>
+    <div class="chat-avatar">${avatarHTML}</div>
+    <div class="chat-msg-main">
+      ${nicknameHTML}
+      <div class="chat-bubble">${bubbleInner}</div>
+      <div class="chat-meta">${statusHTML}</div>
+    </div>
   `;
-  // 图片点击查看大图（用 alert 简化）
+
+  // 图片点击查看大图（增强版：双击放大 / 拖动 / 保存）
   if (isImage) {
     const img = el.querySelector('.chat-image');
     if (img) img.addEventListener('click', () => openImagePreview(msg.mediaUrl));
+  }
+  // 失败状态点击重试
+  if (isUser && msg.status === 'failed') {
+    const statusEl = el.querySelector('.chat-status-failed');
+    if (statusEl) {
+      statusEl.addEventListener('click', () => {
+        if (typeof retrySendMessage === 'function') retrySendMessage(msg);
+      });
+    }
   }
   // 长按操作
   attachLongPress(el, () => openMessageActionSheet(msg));
   return el;
 }
 
+/** 渲染角色头像（36px 圆形） */
+function renderCharacterAvatar(character) {
+  const av = character?.avatar;
+  if (av && isUsableImage(av)) {
+    return `<div class="chat-avatar-img" style="background-image:${cssUrl(av)}"></div>`;
+  }
+  return `<div class="chat-avatar-fallback">${createIcon('smile', 22).outerHTML}</div>`;
+}
+
+/** 渲染用户头像（36px 圆形，从 settings.systemName 取首字，无则用 smile） */
+function renderUserAvatar() {
+  // 暂未提供用户头像字段，使用 smile 图标作为默认头像
+  return `<div class="chat-avatar-fallback">${createIcon('smile', 22).outerHTML}</div>`;
+}
+
+/** 渲染消息状态指示器：sending / sent / failed */
+function renderStatusIndicator(msg) {
+  const status = msg.status || 'sent';
+  if (status === 'sending') {
+    return `<span class="chat-status-sending" aria-label="发送中"></span>`;
+  }
+  if (status === 'failed') {
+    return `<span class="chat-status-failed" role="button" aria-label="发送失败，点击重试">${createIcon('alert', 14).outerHTML}</span>`;
+  }
+  // sent
+  return `<span class="chat-status-sent" aria-label="已发送">${createIcon('check', 14).outerHTML}</span>`;
+}
+
 function openImagePreview(url) {
   if (!url) return;
   const body = document.createElement('div');
-  body.style.cssText = 'display:flex;justify-content:center;padding:8px';
-  body.innerHTML = `<img src="${escapeAttr(url)}" alt="图片" style="max-width:100%;max-height:60vh;border-radius:var(--radius-md);">`;
+  body.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:12px;padding:8px';
+  // 图片容器：支持双击放大/缩小 + 拖动平移
+  const stage = document.createElement('div');
+  stage.className = 'chat-img-stage';
+  const img = document.createElement('img');
+  img.className = 'chat-img-preview';
+  img.src = url;
+  img.alt = '图片';
+  img.draggable = false;
+  stage.appendChild(img);
+  body.appendChild(stage);
+
+  // 状态
+  let scale = 1;
+  let translateX = 0;
+  let translateY = 0;
+  let lastTap = 0;
+  let dragging = false;
+  let dragStartX = 0;
+  let dragStartY = 0;
+  let startTX = 0;
+  let startTY = 0;
+
+  const applyTransform = () => {
+    img.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scale})`;
+  };
+
+  // 双击放大/缩小
+  img.addEventListener('click', () => {
+    const now = Date.now();
+    if (now - lastTap < 350) {
+      // 双击
+      if (scale > 1) {
+        scale = 1; translateX = 0; translateY = 0;
+      } else {
+        scale = 2;
+      }
+      applyTransform();
+      lastTap = 0;
+    } else {
+      lastTap = now;
+    }
+  });
+
+  // 拖动平移（仅在放大状态生效）
+  img.addEventListener('pointerdown', (e) => {
+    if (scale <= 1) return;
+    dragging = true;
+    dragStartX = e.clientX;
+    dragStartY = e.clientY;
+    startTX = translateX;
+    startTY = translateY;
+    img.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  });
+  img.addEventListener('pointermove', (e) => {
+    if (!dragging) return;
+    translateX = startTX + (e.clientX - dragStartX);
+    translateY = startTY + (e.clientY - dragStartY);
+    applyTransform();
+  });
+  const endDrag = (e) => {
+    if (!dragging) return;
+    dragging = false;
+    try { img.releasePointerCapture(e.pointerId); } catch (err) {}
+  };
+  img.addEventListener('pointerup', endDrag);
+  img.addEventListener('pointercancel', endDrag);
+
+  // 保存到本地按钮
+  const saveBtn = document.createElement('button');
+  saveBtn.className = 'btn ghost';
+  saveBtn.style.cssText = 'display:inline-flex;align-items:center;gap:6px';
+  saveBtn.innerHTML = `${createIcon('download', 18).outerHTML}<span>保存到本地</span>`;
+  saveBtn.addEventListener('click', async () => {
+    try {
+      const resp = await fetch(url);
+      const blob = await resp.blob();
+      const ext = (blob.type.split('/')[1] || 'png').split('+')[0];
+      const filename = `popo_${Date.now()}.${ext}`;
+      // 用 a 标签触发下载
+      const objUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = objUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(objUrl), 1000);
+      showToast('图片已保存', 'success', 1400);
+    } catch (e) {
+      // dataURL 直接走 a 下载兜底
+      try {
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `popo_${Date.now()}.png`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        showToast('图片已保存', 'success', 1400);
+      } catch (e2) {
+        console.warn('[chat] 图片保存失败', e2);
+        showToast('保存失败了，再试一下嘛', 'error');
+      }
+    }
+  });
+  body.appendChild(saveBtn);
+
   showBottomSheet({ title: '查看图片', bodyElement: body, dismissible: true });
 }
 
@@ -320,8 +607,12 @@ export function showTypingIndicator() {
   const state = getState();
   if (!state.messageListEl) return;
   hideTypingIndicator();
+  const mode = getData(KEYS.chatMode, 'bubble');
   state.typingIndicatorEl = document.createElement('div');
-  state.typingIndicatorEl.className = 'chat-typing';
+  // dialog 模式下呼吸气泡也走卡片背景，与 AI 消息卡片一致
+  state.typingIndicatorEl.className = mode === 'dialog'
+    ? 'chat-typing chat-typing-dialog'
+    : 'chat-typing';
   state.typingIndicatorEl.setAttribute('aria-label', '她正在打字');
   state.typingIndicatorEl.innerHTML = `
     <div class="chat-typing-dot"></div>
@@ -340,72 +631,20 @@ export function hideTypingIndicator() {
   state.typingIndicatorEl = null;
 }
 
+// scrollToBottom 节流 50ms：流式高频调用时避免重排风暴
+const _scrollThrottled = throttle(() => {
+  const state = getState();
+  if (state.messageListEl) state.messageListEl.scrollTop = state.messageListEl.scrollHeight;
+}, 50);
+
 export function scrollToBottom() {
   const state = getState();
   if (!state.messageListEl) return;
-  // rAF 确保渲染完再滚
-  requestAnimationFrame(() => {
-    if (state.messageListEl) state.messageListEl.scrollTop = state.messageListEl.scrollHeight;
-  });
+  // rAF 确保渲染完再滚；外层节流避免流式期间过频
+  requestAnimationFrame(_scrollThrottled);
 }
 
 // ════════════════════════════════════════
-// 长按（消息用，调 message-actions 弹操作菜单）
+// 长按 / 转义工具已收拢到 ./shared-utils.js
 // ════════════════════════════════════════
 
-function attachLongPress(el, handler) {
-  let timer = null;
-  let startX = 0;
-  let startY = 0;
-  let moved = false;
-  const LONG_PRESS_MS = 500;
-  const MOVE_THRESHOLD = 10;
-
-  const onDown = (e) => {
-    if (e.pointerType === 'mouse' && e.button !== 0) return;
-    moved = false;
-    startX = e.clientX;
-    startY = e.clientY;
-    timer = setTimeout(() => {
-      timer = null;
-      // 长按触发后阻止 click
-      moved = true;
-      try { handler(e); } catch (err) { console.warn('[chat] longpress 失败', err); }
-    }, LONG_PRESS_MS);
-  };
-  const onMove = (e) => {
-    if (!timer) return;
-    const dx = e.clientX - startX;
-    const dy = e.clientY - startY;
-    if (dx * dx + dy * dy > MOVE_THRESHOLD * MOVE_THRESHOLD) {
-      moved = true;
-      clearTimeout(timer);
-      timer = null;
-    }
-  };
-  const onUp = () => {
-    if (timer) { clearTimeout(timer); timer = null; }
-  };
-  const onClickCapture = (e) => {
-    if (moved) { e.preventDefault(); e.stopPropagation(); moved = false; }
-  };
-
-  el.addEventListener('pointerdown', onDown);
-  el.addEventListener('pointermove', onMove);
-  el.addEventListener('pointerup', onUp);
-  el.addEventListener('pointercancel', onUp);
-  el.addEventListener('pointerleave', onUp);
-  el.addEventListener('contextmenu', (e) => { if (!timer) e.preventDefault(); });
-  el.addEventListener('click', onClickCapture, true);
-}
-
-// ════════════════════════════════════════
-// 工具
-// ════════════════════════════════════════
-
-function escapeHTML(s) {
-  return String(s ?? '').replace(/[&<>"']/g, (c) => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-  }[c]));
-}
-function escapeAttr(s) { return escapeHTML(s); }

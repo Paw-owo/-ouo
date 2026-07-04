@@ -25,62 +25,21 @@ injectStyle('popo-settings-bg-card', `
   .bg-sheet-range-val{min-width:34px;text-align:right;color:var(--text-secondary);font-size:var(--font-size-small)}
 `);
 
-// 任务要求里点名的 App 列表，作为兜底（registry 还没注册的也覆盖到）
-const FALLBACK_APPS = [
-  { id: 'chat', name: '聊天' },
-  { id: 'moments', name: '朋友圈' },
-  { id: 'memo', name: '备忘录' },
-  { id: 'wallet', name: '钱包' },
-  { id: 'shop', name: '商店' },
-  { id: 'games', name: '游戏' },
-  { id: 'music', name: '音乐' },
-  { id: 'characters', name: '角色' },
-  { id: 'worldbook', name: '世界书' },
-  { id: 'grudge', name: '记仇本' },
-  { id: 'memory-viewer', name: '记忆查看' },
-  { id: 'inbox', name: '消息中心' },
-  { id: 'anniversary', name: '纪念日' },
-  { id: 'countdown', name: '倒计时' },
-  { id: 'mood', name: '心情' },
-  { id: 'pomodoro', name: '番茄钟' },
-  { id: 'flashcard', name: '记忆卡' },
-  { id: 'alarm', name: '闹钟' },
-  { id: 'astro', name: '星座' },
-  { id: 'weather', name: '天气' },
-  { id: 'health', name: '健康' },
-  { id: 'dream', name: '梦境' },
-  { id: 'avatar', name: '头像' },
-  { id: 'photos', name: '相册' },
-  { id: 'gallery', name: '画廊' },
-  { id: 'collections', name: '收藏' },
-  { id: 'widget-store', name: 'Widget 商店' }
-];
-
-// 优先从 apps-registry 读，没注册的用兜底列表补上，去重后按名字排序
+// 从 apps-registry 动态读取 App 列表（settings 自身不列，避免给背景设个背景）
 async function loadAppList() {
-  let registryApps = [];
   try {
     const reg = await import('../../apps-registry.js');
     if (reg && Array.isArray(reg.APPS)) {
-      registryApps = reg.APPS
+      const out = reg.APPS
         .filter((a) => a && a.id && a.id !== 'settings')
         .map((a) => ({ id: a.id, name: a.name || a.id }));
+      out.sort((a, b) => String(a.name).localeCompare(String(b.name), 'zh'));
+      return out;
     }
   } catch (e) {
-    // 静默兜底，不报错
+    console.warn('[card-bg] 读取注册表失败', e);
   }
-  const seen = new Set();
-  const out = [];
-  for (const a of registryApps) {
-    if (seen.has(a.id)) continue;
-    seen.add(a.id); out.push(a);
-  }
-  for (const a of FALLBACK_APPS) {
-    if (seen.has(a.id)) continue;
-    seen.add(a.id); out.push(a);
-  }
-  out.sort((a, b) => String(a.name).localeCompare(String(b.name), 'zh'));
-  return out;
+  return [];
 }
 
 function escapeAttr(s) {

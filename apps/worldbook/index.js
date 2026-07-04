@@ -295,7 +295,7 @@ async function toggleEnabled(e) {
     await setDB(STORES.worldbook, e.id, { ...e, enabled: next });
     showToast(next ? '启用啦' : '先停用啦，聊天不会带它了', 'default', 1200);
     // 通知聊天相关模块世界书有变动
-    bus.emit('worldbook:change', { id: e.id, enabled: next });
+    bus.emit('worldbook:changed', { id: e.id, enabled: next });
     await renderList();
   } catch (err) {
     console.warn('[worldbook] 切换启用失败', err);
@@ -319,7 +319,7 @@ function confirmDelete(e) {
       try {
         await deleteDB(STORES.worldbook, e.id);
         showToast('删掉啦', 'default', 1200);
-        bus.emit('worldbook:change', { id: e.id, deleted: true });
+        bus.emit('worldbook:changed', { id: e.id, deleted: true });
         await render();
       } catch (err) {
         console.warn('[worldbook] 删除失败', err);

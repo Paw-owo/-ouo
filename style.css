@@ -76,7 +76,7 @@ img { display: block; max-width: 100%; }
 }
 .lock-screen::before {
   content: ''; position: absolute; inset: 0;
-  background: linear-gradient(180deg, rgba(0,0,0,0.18) 0%, rgba(0,0,0,0.42) 100%);
+  background: var(--bg-overlay);
   pointer-events: none;
 }
 .lock-screen.unlocked { transform: translateY(-100%); opacity: 0; pointer-events: none; }
@@ -90,12 +90,12 @@ img { display: block; max-width: 100%; }
   box-shadow: var(--shadow-lg);
   background-size: cover; background-position: center;
   display: flex; align-items: center; justify-content: center;
-  color: #fff; font-size: var(--font-size-huge);
+  color: var(--text-on-wallpaper); font-size: var(--font-size-huge);
   animation: popoBreathe 3.2s ease-in-out infinite;
 }
 .lock-title {
   position: relative; z-index: 1;
-  margin-top: 16px; color: #fff;
+  margin-top: 16px; color: var(--text-on-wallpaper);
   font-size: var(--font-size-title); font-weight: 600;
   text-shadow: 0 1px 8px rgba(0,0,0,0.4);
 }
@@ -114,7 +114,7 @@ img { display: block; max-width: 100%; }
   border: 1.5px solid rgba(255,255,255,0.7);
   background: transparent; transition: var(--motion);
 }
-.lock-dot.filled { background: #fff; transform: scale(1.1); }
+.lock-dot.filled { background: var(--text-on-wallpaper); transform: scale(1.1); }
 .lock-dot.shake { animation: popoShake 360ms ease; }
 
 .lock-keypad {
@@ -130,7 +130,7 @@ img { display: block; max-width: 100%; }
   background: rgba(255,255,255,0.18);
   backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
   border: 1px solid rgba(255,255,255,0.25);
-  color: #fff; font-size: var(--font-size-large); font-weight: 500;
+  color: var(--text-on-wallpaper); font-size: var(--font-size-large); font-weight: 500;
   display: flex; align-items: center; justify-content: center;
   transition: var(--motion);
 }
@@ -177,9 +177,38 @@ img { display: block; max-width: 100%; }
 }
 .status-bar-icon svg { width: 18px; height: 18px; }
 .status-bar-time {
-  flex-shrink: 0; font-size: var(--font-size-small); font-weight: 600;
+  flex-shrink: 0; font-size: var(--font-size-small); font-weight: 700;
   color: var(--text-primary);
   font-variant-numeric: tabular-nums;
+  letter-spacing: 0.3px;
+}
+/* 状态栏真实感：信号 / 电池 */
+.status-bar-signal {
+  display: inline-flex; align-items: flex-end; gap: 2px; height: 12px;
+}
+.status-bar-signal span {
+  width: 3px; border-radius: 1px; background: var(--text-primary);
+}
+.status-bar-signal span:nth-child(1) { height: 4px; }
+.status-bar-signal span:nth-child(2) { height: 7px; }
+.status-bar-signal span:nth-child(3) { height: 10px; }
+.status-bar-signal span:nth-child(4) { height: 12px; opacity: 0.35; }
+.status-bar-battery {
+  display: inline-flex; align-items: center; gap: 3px; color: var(--text-primary);
+}
+.status-bar-battery-body {
+  width: 22px; height: 11px; border: 1.5px solid currentColor;
+  border-radius: 3px; position: relative; padding: 1.5px;
+}
+.status-bar-battery-body::after {
+  content: ''; position: absolute; right: -3px; top: 50%; transform: translateY(-50%);
+  width: 2px; height: 5px; border-radius: 0 2px 2px 0; background: currentColor;
+}
+.status-bar-battery-level {
+  height: 100%; border-radius: 1px; background: currentColor;
+}
+.status-bar-battery-percent {
+  font-size: var(--font-size-caption); font-weight: 600; font-variant-numeric: tabular-nums;
 }
 
 /* 桌面分页 */
@@ -217,10 +246,7 @@ img { display: block; max-width: 100%; }
   transition: var(--motion);
   transform: scale(var(--widget-scale, 1));
   transform-origin: top left;
-  animation: popoFloat 6s ease-in-out infinite;
 }
-.widget:nth-child(2n) { animation-delay: -2s; }
-.widget:nth-child(3n) { animation-delay: -4s; }
 .widget:active { transform: scale(calc(var(--widget-scale, 1) * 0.97)); }
 .widget.wide { grid-column: span 2; }
 .widget-title { font-size: var(--font-size-small); color: var(--text-secondary); margin-bottom: 4px; }
@@ -231,6 +257,9 @@ img { display: block; max-width: 100%; }
   background: linear-gradient(135deg, var(--accent) 0%, var(--accent-dark) 100%);
   border: none;
   color: var(--bubble-user-text);
+  /* 仅时间 widget 保留常驻浮动动画，其余 widget 不再常驻浮动以减少重绘 */
+  animation: popoFloat 6s ease-in-out infinite;
+  will-change: transform;
 }
 .widget-time .widget-title { color: color-mix(in srgb, var(--bubble-user-text) 75%, transparent); }
 .widget-time .widget-value {
@@ -244,7 +273,7 @@ img { display: block; max-width: 100%; }
 .widget-del {
   display: none; position: absolute; top: -8px; right: -8px;
   width: 22px; height: 22px; border-radius: 50%;
-  background: #E8888C; color: #fff;
+  background: var(--danger); color: #fff;
   align-items: center; justify-content: center;
   box-shadow: var(--shadow-sm); z-index: 2;
 }
@@ -256,7 +285,7 @@ img { display: block; max-width: 100%; }
 }
 .widget-vinyl-disc {
   width: 52px; height: 52px; border-radius: 50%;
-  background: radial-gradient(circle, var(--accent) 28%, #1a1a1a 30%, var(--accent-dark) 100%);
+  background: radial-gradient(circle, var(--accent) 28%, var(--text-primary) 30%, var(--accent-dark) 100%);
   position: relative; flex-shrink: 0;
   animation: popoSpin 6s linear infinite;
   animation-play-state: paused;
@@ -329,7 +358,7 @@ img { display: block; max-width: 100%; }
 .icon-delete {
   position: absolute; top: -4px; right: -4px;
   width: 22px; height: 22px; border-radius: 50%;
-  background: #E8888C; color: #fff;
+  background: var(--danger); color: #fff;
   display: flex; align-items: center; justify-content: center;
   font-size: 14px; font-weight: bold;
   opacity: 0; transform: scale(0.5);
@@ -339,7 +368,7 @@ img { display: block; max-width: 100%; }
 .icon-badge {
   position: absolute; top: -2px; right: -2px;
   min-width: 18px; height: 18px; border-radius: 9px;
-  background: #E8888C; color: #fff;
+  background: var(--danger); color: #fff;
   font-size: 11px; font-weight: 600;
   display: flex; align-items: center; justify-content: center;
   padding: 0 5px;
@@ -404,15 +433,15 @@ img { display: block; max-width: 100%; }
   display: flex; align-items: center; justify-content: center;
 }
 .app-header button svg { width: 20px; height: 20px; }
-.app-body { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 20px; }
+.app-body { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: var(--spacing-lg); }
 
 /* 通用卡片 */
 .card {
   background: var(--bg-card);
   border-radius: var(--radius-card);
-  padding: 20px;
+  padding: var(--spacing-lg);
   box-shadow: var(--shadow-sm);
-  margin-bottom: 18px;
+  margin-bottom: var(--spacing-md);
   border: none;
 }
 .card-title { font-size: var(--font-size-title); font-weight: 600; color: var(--text-primary); margin-bottom: 12px; letter-spacing: 0.3px; }
@@ -437,7 +466,7 @@ img { display: block; max-width: 100%; }
 }
 .btn:active { transform: scale(var(--press-scale)); }
 .btn.primary { background: var(--accent); color: var(--bubble-user-text); }
-.btn.danger { background: #E8888C; color: #fff; }
+.btn.danger { background: var(--danger); color: #fff; }
 .btn.ghost { background: transparent; color: var(--accent-dark); }
 .btn.block { width: 100%; justify-content: center; }
 
@@ -453,6 +482,7 @@ img { display: block; max-width: 100%; }
 .input:focus, .textarea:focus, .select:focus {
   border-color: var(--accent);
   background: var(--bg-card);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent);
 }
 .textarea { min-height: 80px; resize: vertical; }
 
@@ -580,4 +610,22 @@ button:focus-visible, .input:focus-visible, .textarea:focus-visible, .select:foc
   position: absolute; width: 1px; height: 1px;
   padding: 0; margin: -1px; overflow: hidden;
   clip: rect(0,0,0,0); white-space: nowrap; border: 0;
+}
+
+/* ════════════════════════════════════════ */
+/* 响应式断点 */
+/* ════════════════════════════════════════ */
+@media (max-width: 360px) {
+  .icon-grid { grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .widget-area { grid-template-columns: 1fr; }
+  .app-body { padding: 14px; }
+  .card { padding: 14px; }
+}
+@media (min-width: 768px) {
+  .icon-grid { grid-template-columns: repeat(6, 1fr); }
+  .widget-area { grid-template-columns: repeat(3, 1fr); }
+  .app-body { max-width: 520px; margin: 0 auto; }
+}
+@media (min-width: 1024px) {
+  .desktop-pages { max-width: 480px; margin: 0 auto; }
 }

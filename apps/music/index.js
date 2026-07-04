@@ -13,7 +13,7 @@
 // 红线：图标只准 SVG 线稿，禁止任何 emoji 字符；视觉值走 CSS 变量。
 
 import { STORES } from '../../core/storage-keys.js';
-import { setDB, deleteDB, getAllDB, generateId, getNow, compressImage } from '../../core/storage.js';
+import { setDB, deleteDB, getAllDB, generateId, getNow, compressImage, runRequest } from '../../core/storage.js';
 import { showToast, showConfirm, showBottomSheet, createIcon } from '../../core/ui.js';
 import bus from '../../core/events.js';
 import { pickImageFile } from '../../core/util.js';
@@ -67,7 +67,32 @@ export async function mount(container, context) {
   container.querySelector('#music-back').addEventListener('click', () => bus.emit('router:home'));
   container.querySelector('#music-add').addEventListener('click', () => pickFiles());
   await refresh();
+  // 从 IndexedDB 恢复每首歌的 blob URL（重启后内存里没了）
+  await restoreSessionBlobs();
   applyAppBg(container, 'music');
+}
+
+// 把 IndexedDB 里持久化的 Blob 读出来，转成 blob URL 放进 sessionBlobs
+async function restoreSessionBlobs() {
+  try {
+    const all = await getAllDB(STORES.blobs);
+    if (!Array.isArray(all)) return;
+    for (const rec of all) {
+      if (!rec || !rec.id || !rec.blob) continue;
+      // 只关心 music 歌曲的 blob（按 songId 命名空间）
+      if (typeof rec.id !== 'string' || !rec.id.startsWith('song_')) continue;
+      if (state.sessionBlobs.has(rec.id)) continue; // 已经有了不覆盖
+      try {
+        const url = URL.createObjectURL(rec.blob);
+        state.sessionBlobs.set(rec.id, url);
+      } catch (e) {
+        console.warn('[music] 恢复 blob URL 失败', rec.id, e);
+      }
+    }
+    render();
+  } catch (e) {
+    console.warn('[music] 读取 blobs 失败', e);
+  }
 }
 
 export function unmount() {
@@ -170,7 +195,7 @@ function render() {
 // ── 歌曲列表 ──
 
 function renderList(el) {
-  const { viewSongs, currentIndex, audioEl, sessionBlobs } = state;
+  const { viewSongs, currentIndex, audioEl } = state;
   if (viewSongs.length === 0) {
     el.innerHTML = `
       <div class="empty-state" style="padding:24px 0;">
@@ -181,7 +206,6 @@ function renderList(el) {
     return;
   }
   el.innerHTML = viewSongs.map((s, i) => {
-    const hasBlob = sessionBlobs.has(s.id);
     const active = i === currentIndex;
     const isPlaying = active && !!(audioEl && !audioEl.paused);
     const playIcon = createIcon(isPlaying ? 'pause' : 'play', 18).outerHTML;
@@ -198,7 +222,6 @@ function renderList(el) {
             <span>${escapeHTML(s.artist || '未知')}</span>
             <span>·</span>
             <span>${formatDur(s.duration || 0)}</span>
-            ${hasBlob ? '' : '<span class="music-item-hint">需重选</span>'}
           </div>
         </div>
         <div class="music-item-cover" data-action="cover" data-index="${i}" style="${cover}" aria-label="换封面">${coverInner}</div>
@@ -354,6 +377,9 @@ async function addFiles(files) {
         addedAt: getNow()
       };
       await setDB(STORES.songs, id, record);
+      // 把 Blob 持久化到 STORES.blobs，重启后能从 IDB 恢复
+      // 注意：setDB 会调 cleanForDB 把 Blob 拍成 {}，必须用 runRequest 直接写 IDB
+      await persistSongBlob(id, file);
       state.sessionBlobs.set(id, meta.url);
       ok++;
     } catch (e) {
@@ -373,6 +399,28 @@ async function addFiles(files) {
     // 全失败 —— 上传失败提示
     showToast(fail > 0 ? `${fail} 首歌都没加上，换个文件试试嘛` : '没加上歌，换个文件试试嘛', 'error');
   }
+}
+
+// 把音频 Blob 原样存入 STORES.blobs（绕过 cleanForDB，Blob 会被它拍成 {}）
+// key 用 songId，value 是 { id, blob, name, type, size, createdAt, updatedAt }
+async function persistSongBlob(songId, file) {
+  const blob = file instanceof Blob ? file : new Blob([file], { type: file.type || 'audio/*' });
+  const record = {
+    id: songId,
+    blob,
+    name: file.name || '',
+    type: file.type || '',
+    size: blob.size || file.size || 0,
+    createdAt: getNow(),
+    updatedAt: getNow()
+  };
+  return runRequest(STORES.blobs, 'readwrite', (store) => {
+    return new Promise((resolve, reject) => {
+      const req = store.put(record);
+      req.onsuccess = () => resolve(record);
+      req.onerror = () => reject(req.error);
+    });
+  });
 }
 
 // 读音频 metadata，返回 {duration, url}；url 是 blob URL，留给 session 用
@@ -450,6 +498,8 @@ function confirmDelete(idx) {
     onConfirm: async () => {
       try {
         await deleteDB(STORES.songs, song.id);
+        // 同步删掉持久化的 blob
+        try { await deleteDB(STORES.blobs, song.id); } catch (e) {}
         const url = state.sessionBlobs.get(song.id);
         if (url) {
           try { URL.revokeObjectURL(url); } catch (e) {}

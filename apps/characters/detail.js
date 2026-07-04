@@ -10,6 +10,7 @@ import { getData, getAllDB } from '../../core/storage.js';
 import { showToast, createIcon } from '../../core/ui.js';
 import { clamp, isUsableImage, cssUrl } from '../../core/util.js';
 import { getMemories } from '../../core/memory.js';
+import { getAffectionDisplay, onAffectionChanged } from '../../core/affection.js';
 import { openApp } from '../../core/router.js';
 import { exportCharacter } from './io.js';
 import {
@@ -41,6 +42,12 @@ export async function openDetail(container, character, hooks) {
   const body = container.querySelector('#char-body');
   if (!body || !character) return;
 
+  // 清理上一次详情页注册的好感度监听器，避免内存泄漏
+  if (typeof body._disposeAffection === 'function') {
+    try { body._disposeAffection(); } catch (e) {}
+    body._disposeAffection = null;
+  }
+
   const isCurrent = character.id === currentId;
   const temp = clamp(Number(character.temperature ?? 0.7), 0, 1);
 
@@ -59,6 +66,7 @@ export async function openDetail(container, character, hooks) {
       ${character.relation ? `<div class="char-detail-relation">${createIcon('heart', 14).outerHTML}${escapeHTML(character.relation)}</div>` : ''}
       ${renderTagsHTML(character.tags, 'char-tag-mini') ? `<div class="char-detail-tags">${renderTagsHTML(character.tags, 'char-tag-mini')}</div>` : ''}
     </div>
+    <div class="char-detail-affection" id="char-dt-affection"></div>
     ${renderSection('人设', character.persona, 'memo')}
     ${renderSection('性格设定', character.personality, 'smile')}
     ${renderSection('说话方式', character.speechStyle, 'chat')}
@@ -94,9 +102,46 @@ export async function openDetail(container, character, hooks) {
     if (typeof onDelete === 'function') onDelete(character);
   });
 
+  // 异步加载好感度展示（hero 卡片下方）
+  const affectionEl = body.querySelector('#char-dt-affection');
+  renderAffection(affectionEl, character.id);
+  // 监听好感度变化，实时刷新进度条（监听器挂在 body 上，下次进入会先 dispose）
+  if (affectionEl) {
+    body._disposeAffection = onAffectionChanged((payload) => {
+      if (!payload || payload.characterId !== character.id) return;
+      renderAffection(affectionEl, character.id);
+    });
+  }
+
   // 异步加载独立数据面板
   const dataEl = body.querySelector('#char-dt-data');
   await renderDataPanels(dataEl, character);
+}
+
+// ════════════════════════════════════════
+// 好感度展示：数值 + 等级标签 + 进度条
+// ════════════════════════════════════════
+
+async function renderAffection(el, characterId) {
+  if (!el || !characterId) return;
+  let display;
+  try {
+    display = await getAffectionDisplay(characterId);
+  } catch (e) {
+    console.warn('[characters] 读取好感度失败', e);
+    return;
+  }
+  const { value, label } = display;
+  el.innerHTML = `
+    <div class="char-detail-affection-head">
+      <div class="char-detail-affection-title">${createIcon('heart', 18).outerHTML}好感度</div>
+      <div class="char-detail-affection-value">${value}/100</div>
+    </div>
+    <div class="char-detail-affection-bar">
+      <div class="char-detail-affection-fill" style="width:${value}%"></div>
+    </div>
+    <span class="char-detail-affection-label">${createIcon('heart', 14).outerHTML}${escapeHTML(label)}</span>
+  `;
 }
 
 // ════════════════════════════════════════

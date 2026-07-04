@@ -9,7 +9,7 @@
 import { getPresets, getCurrentThemeId, setTheme, exportTheme, importTheme, applyDesktopScale, applyFontFamily, getCurrentTheme, applyCustomColors, clearCustomColors, getCustomColors, getThemeVar } from '../../core/theme.js';
 import { STORES, KEYS } from '../../core/storage-keys.js';
 import { compressImage, fileToDataURL, getDB, setDB, deleteDB, getData, setData, removeData } from '../../core/storage.js';
-import { pickImageFile, isUsableImage, cssUrl, clamp } from '../../core/util.js';
+import { pickImageFile, isUsableImage, cssUrl, clamp, injectStyle } from '../../core/util.js';
 import { exportToFile, importFromFile } from '../../core/storage-manager.js';
 import { showToast, showBottomSheet, showConfirm, createIcon } from '../../core/ui.js';
 import bus from '../../core/events.js';
@@ -22,6 +22,62 @@ import { renderAppBgCard } from './card-bg.js';
 import { applyAppBg } from '../../core/app-bg.js';
 
 let containerEl = null;
+// 当前激活的分组 Tab（外观 / ai / desktop / system），跨 renderSections 保留
+let activeTab = 'appearance';
+
+// ════════════════════════════════════════
+// 设置页分组样式：顶部胶囊形 Tab 横向滚动 + 分组卡片容器
+// ════════════════════════════════════════
+injectStyle('popo-settings-sections', `
+  .settings-tabs{
+    display:flex; gap:8px; padding:10px 14px;
+    overflow-x:auto; -webkit-overflow-scrolling:touch;
+    background:var(--bg-secondary);
+    border-bottom:1px solid color-mix(in srgb, var(--text-hint) 12%, transparent);
+    scrollbar-width:none;
+  }
+  .settings-tabs::-webkit-scrollbar{ display:none; width:0; height:0; }
+  .settings-tab{
+    flex-shrink:0; padding:8px 18px;
+    background:transparent;
+    border:1px solid color-mix(in srgb, var(--text-hint) 22%, transparent);
+    border-radius:999px;
+    color:var(--text-secondary);
+    font-size:var(--font-size-base);
+    cursor:pointer;
+    transition:var(--motion);
+    white-space:nowrap;
+  }
+  .settings-tab.active{
+    background:var(--accent);
+    border-color:var(--accent);
+    color:var(--bubble-user-text);
+    box-shadow:var(--shadow-sm);
+  }
+  .settings-tab:active{ transform:scale(var(--press-scale)); }
+  .settings-section{ display:none; }
+  .settings-section.active{ display:block; }
+`);
+
+// 锁屏密码哈希（与 desktop.js 的 hashPassword 保持一致：SHA-256 + 盐）
+// 避免明文存储密码，desktop.js 启动时会迁移旧明文，这里直接写哈希格式
+const LOCK_SALT = 'popo-salt-2024';
+async function hashPassword(pwd) {
+  const data = new TextEncoder().encode(String(pwd) + LOCK_SALT);
+  const buf = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+// 解析存储的密码：支持 sha256:<长度>:<hex> / 纯 hex / 明文（兼容旧版）
+function parseLockStored(raw) {
+  if (raw == null) return { hash: null, plain: null, length: 4 };
+  if (typeof raw === 'string') {
+    const m = /^sha256:(\d+):([0-9a-f]{64})$/.exec(raw);
+    if (m) return { hash: m[2], plain: null, length: Number(m[1]) || 4 };
+    if (/^[0-9a-f]{64}$/.test(raw)) return { hash: raw, plain: null, length: 4 };
+    return { hash: null, plain: raw, length: raw.length };
+  }
+  return { hash: null, plain: null, length: 4 };
+}
 
 export async function mount(container, context) {
   containerEl = container;
@@ -31,34 +87,83 @@ export async function mount(container, context) {
       <div class="app-header-title">设置</div>
       <span style="width:36px"></span>
     </div>
+    <div class="settings-tabs" id="settings-tabs" role="tablist" aria-label="设置分组">
+      <button class="settings-tab" data-tab="appearance" role="tab">外观</button>
+      <button class="settings-tab" data-tab="ai" role="tab">AI 与陪伴</button>
+      <button class="settings-tab" data-tab="desktop" role="tab">桌面与锁屏</button>
+      <button class="settings-tab" data-tab="system" role="tab">数据与系统</button>
+    </div>
     <div class="app-body" id="settings-body"></div>
   `;
   container.querySelector('#settings-back').addEventListener('click', () => bus.emit('router:home'));
+  // 分组 Tab 切换：点击后只显示该分组的卡片
+  container.querySelectorAll('.settings-tab').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      activeTab = btn.dataset.tab;
+      applyActiveTab();
+    });
+  });
   await renderSections();
   applyAppBg(container, 'settings');
+}
+
+/** 应用当前 activeTab：更新 Tab 按钮高亮 + 显示对应分组卡片 */
+function applyActiveTab() {
+  if (!containerEl) return;
+  // Tab 按钮高亮
+  containerEl.querySelectorAll('.settings-tab').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.tab === activeTab);
+  });
+  // 分组卡片显示
+  const body = containerEl.querySelector('#settings-body');
+  if (body) {
+    body.querySelectorAll('.settings-section').forEach((sec) => {
+      sec.classList.toggle('active', sec.dataset.section === activeTab);
+    });
+  }
 }
 
 async function renderSections() {
   const body = containerEl.querySelector('#settings-body');
   body.innerHTML = '';
-  body.appendChild(await renderThemeCard());
-  body.appendChild(renderCustomColorsCard());
-  body.appendChild(renderAICard());
-  body.appendChild(renderNotifyCard());
-  body.appendChild(renderWallpaperCard());
-  body.appendChild(await renderAppBgCard());
-  body.appendChild(renderLockCard());
-  body.appendChild(renderScaleCard());
-  body.appendChild(renderPagesCard());
-  body.appendChild(renderFontCard());
-  body.appendChild(renderIconCustomCard());
-  body.appendChild(renderFocusCard());
-  body.appendChild(renderWeatherCard());
-  body.appendChild(renderWidgetMgmtCard());
-  body.appendChild(await renderHiddenIconsCard());
-  body.appendChild(renderDataCard());
-  body.appendChild(renderDataMgmtCard());
-  body.appendChild(renderAboutCard());
+
+  // ── 外观：主题 / 自定义颜色 / 壁纸 / APP 背景 / 字体 / 桌面缩放 ──
+  body.appendChild(wrapCard(await renderThemeCard(), 'appearance'));
+  body.appendChild(wrapCard(renderCustomColorsCard(), 'appearance'));
+  body.appendChild(wrapCard(renderWallpaperCard(), 'appearance'));
+  body.appendChild(wrapCard(await renderAppBgCard(), 'appearance'));
+  body.appendChild(wrapCard(renderFontCard(), 'appearance'));
+  body.appendChild(wrapCard(renderScaleCard(), 'appearance'));
+
+  // ── AI 与陪伴：AI 配置 / 通知 / 自定义图标 ──
+  body.appendChild(wrapCard(renderAICard(), 'ai'));
+  body.appendChild(wrapCard(renderNotifyCard(), 'ai'));
+  body.appendChild(wrapCard(await renderIconCustomCard(), 'ai'));
+
+  // ── 桌面与锁屏：桌面分页 / Widget 管理 / 隐藏图标 / 锁屏 / 今日提示 ──
+  body.appendChild(wrapCard(renderPagesCard(), 'desktop'));
+  body.appendChild(wrapCard(renderWidgetMgmtCard(), 'desktop'));
+  body.appendChild(wrapCard(await renderHiddenIconsCard(), 'desktop'));
+  body.appendChild(wrapCard(renderLockCard(), 'desktop'));
+  body.appendChild(wrapCard(renderFocusCard(), 'desktop'));
+
+  // ── 数据与系统：数据备份 / 数据管理 / 天气 / 关于 ──
+  body.appendChild(wrapCard(renderDataCard(), 'system'));
+  body.appendChild(wrapCard(renderDataMgmtCard(), 'system'));
+  body.appendChild(wrapCard(renderWeatherCard(), 'system'));
+  body.appendChild(wrapCard(renderAboutCard(), 'system'));
+
+  // 应用当前激活的分组
+  applyActiveTab();
+}
+
+/** 把单个卡片包进一个带 data-section 的容器里，方便分组显隐 */
+function wrapCard(cardEl, section) {
+  const wrap = document.createElement('div');
+  wrap.className = 'settings-section';
+  wrap.dataset.section = section;
+  wrap.appendChild(cardEl);
+  return wrap;
 }
 
 // ════════════════════════════════════════
@@ -243,15 +348,25 @@ function renderLockCard() {
       <input class="input" id="pwd-confirm" type="password" placeholder="再输一次新密码" style="width:100%;margin-bottom:10px">
       <button class="btn primary block" id="pwd-ok">改掉</button>`;
     showBottomSheet({ title: '改锁屏密码', bodyElement: body, dismissible: true });
-    body.querySelector('#pwd-ok').addEventListener('click', () => {
+    body.querySelector('#pwd-ok').addEventListener('click', async () => {
       const oldP = body.querySelector('#pwd-old').value;
       const newP = body.querySelector('#pwd-new').value;
       const conP = body.querySelector('#pwd-confirm').value;
-      const cur = String(getData(KEYS.appLockPassword, '0326'));
-      if (oldP !== cur) { showToast('现在的密码不对哦', 'error'); return; }
       if (!/^\d{4,8}$/.test(newP)) { showToast('新密码要 4-8 位数字', 'error'); return; }
       if (newP !== conP) { showToast('两次新密码不一样', 'error'); return; }
-      setData(KEYS.appLockPassword, newP);
+      // 校验旧密码：支持哈希格式和明文格式（兼容旧版与 desktop.js 迁移后的状态）
+      const parsed = parseLockStored(getData(KEYS.appLockPassword, null));
+      let oldMatched = false;
+      if (parsed.hash) {
+        const oldHash = await hashPassword(oldP);
+        oldMatched = (oldHash === parsed.hash);
+      } else if (parsed.plain != null) {
+        oldMatched = (oldP === parsed.plain);
+      }
+      if (!oldMatched) { showToast('现在的密码不对哦', 'error'); return; }
+      // 写入哈希格式 sha256:<长度>:<hex>，与 desktop.js 一致
+      const newHash = await hashPassword(newP);
+      setData(KEYS.appLockPassword, `sha256:${newP.length}:${newHash}`);
       document.querySelector('.popo-sheet-close')?.click();
       showToast('密码改好啦，下次用新密码解锁哦', 'success');
     });

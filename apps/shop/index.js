@@ -17,6 +17,8 @@ import { getData, setData, setDB, deleteDB, generateId, getNow } from '../../cor
 import { showToast, showConfirm, createIcon, showAlert } from '../../core/ui.js';
 import bus from '../../core/events.js';
 import { applyAppBg } from '../../core/app-bg.js';
+import { recordInteraction } from '../../core/memory.js';
+import { addAffection } from '../../core/affection.js';
 import { injectShopStyles } from './styles.js';
 import {
   CATEGORIES,
@@ -276,6 +278,20 @@ async function handleGiveGift(item, character) {
     console.warn('[shop] 背包移除失败', e);
   }
   bus.emit('shop:gift-sent', { giftName: item.name, to: toName, itemId: item.itemId || item.id });
+  // 送礼加好感度 + 写入长期记忆
+  try {
+    await addAffection(character.id, 5, 'gift');
+    await recordInteraction({
+      characterId: character.id,
+      role: 'user',
+      source: 'gift',
+      content: `送了${item.name}`,
+      importance: 8,
+      relatedApp: 'shop'
+    });
+  } catch (e) {
+    console.warn('[shop] 记忆/好感度写入失败', e);
+  }
   showToast(`送好啦，${toName}会很开心的`, 'success', 1500);
 }
 

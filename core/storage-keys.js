@@ -35,7 +35,9 @@ export const STORES = Object.freeze({
   notes: 'notes',
   pomodoroStats: 'pomodoro_stats',
   chatSessions: 'chat_sessions',
-  inbox: 'inbox'
+  favorites: 'favorites',
+  inbox: 'inbox',
+  affections: 'affections'
 });
 
 export const KEYS = Object.freeze({
@@ -45,6 +47,7 @@ export const KEYS = Object.freeze({
   appIcons: 'app_icons',
   appWidgetPositions: 'app_widget_positions',
   appDockOrder: 'app_dock_order',
+  appDockOverrides: 'app_dock_overrides',
   appDesktopPages: 'app_desktop_pages',
   appWallpaper: 'app_wallpaper',
   appLockWallpaper: 'app_lock_wallpaper',
@@ -114,6 +117,9 @@ export const KEYS = Object.freeze({
   aiLastProactive: 'ai_last_proactive',
   aiNightSilent: 'ai_night_silent',
 
+  // 角色好感度缓存（IndexedDB STORES.affections 是真源，localStorage 用来快速读）
+  characterAffection: (characterId) => `character_${characterId}_affection`,
+
   // 调试
   eventsHistory: 'events_history',
 
@@ -126,4 +132,4 @@ export const KEYS = Object.freeze({
   notifySettings: 'notify_settings'
 });
 
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;

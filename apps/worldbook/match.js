@@ -89,6 +89,13 @@ export function openTestTrigger() {
   const body = document.createElement('div');
   body.innerHTML = `
     <div class="wb-form-row">
+      <label class="wb-form-label" for="wb-test-char">模拟哪个角色在聊</label>
+      <select class="input" id="wb-test-char">
+        <option value="">全局（所有角色）</option>
+      </select>
+      <div class="wb-form-hint">选了角色后，只匹配「全局」和「关联该角色」的词条</div>
+    </div>
+    <div class="wb-form-row">
       <label class="wb-form-label" for="wb-test-input">随便输一句话试试</label>
       <textarea class="textarea" id="wb-test-input" placeholder="比如：今天我去魔法学校上课啦" maxlength="500"></textarea>
       <div class="wb-form-hint">我会模拟聊天时的触发逻辑，看看会命中哪些词条</div>
@@ -103,9 +110,13 @@ export function openTestTrigger() {
     dismissible: true
   });
 
+  const charSelect = body.querySelector('#wb-test-char');
   const inputEl = body.querySelector('#wb-test-input');
   const resultEl = body.querySelector('#wb-test-result');
   const runBtn = body.querySelector('#wb-test-run');
+
+  // 异步加载角色清单填进下拉框
+  loadCharacterOptions(charSelect);
 
   runBtn.addEventListener('click', async () => {
     const text = inputEl.value.trim();
@@ -116,8 +127,9 @@ export function openTestTrigger() {
     runBtn.textContent = '正在测...';
     runBtn.disabled = true;
     try {
-      // 测试时不传 characterId（全局 + 关联任意角色的都算命中展示）
-      const hits = await matchWorldbook(text, null);
+      // 带上选中的角色 id（空字符串 = 全局，等同 null）
+      const characterId = charSelect.value || null;
+      const hits = await matchWorldbook(text, characterId);
       resultEl.innerHTML = renderTestResult(hits);
     } catch (e) {
       console.warn('[worldbook] 测试触发失败', e);
@@ -137,6 +149,33 @@ export function openTestTrigger() {
   });
 
   setTimeout(() => { try { inputEl?.focus(); } catch (e) {} }, 60);
+}
+
+// 把所有角色填进下拉框（失败就只保留「全局」选项）
+async function loadCharacterOptions(selectEl) {
+  if (!selectEl) return;
+  let chars = [];
+  try {
+    chars = await getAllDB(STORES.characters);
+  } catch (e) {
+    console.warn('[worldbook] 读取角色失败', e);
+    return;
+  }
+  if (!Array.isArray(chars) || chars.length === 0) return;
+  // 按昵称/名字排序，方便找
+  chars.sort((a, b) => {
+    const na = a.nickname || a.name || '';
+    const nb = b.nickname || b.name || '';
+    return na.localeCompare(nb, 'zh');
+  });
+  const frag = document.createDocumentFragment();
+  chars.forEach((c) => {
+    const opt = document.createElement('option');
+    opt.value = c.id;
+    opt.textContent = c.nickname || c.name || '未命名';
+    frag.appendChild(opt);
+  });
+  selectEl.appendChild(frag);
 }
 
 function renderTestResult(hits) {

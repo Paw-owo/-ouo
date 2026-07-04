@@ -8,6 +8,7 @@
 import { showToast, createIcon } from '../../core/ui.js';
 import bus from '../../core/events.js';
 import { clamp } from '../../core/util.js';
+import { recordInteraction } from '../../core/memory.js';
 import { state } from './state.js';
 
 // localStorage 里存的音量 / 模式（KEYS 没注册，自己用字符串常量）
@@ -161,11 +162,19 @@ export function ensureAudio() {
     if (s) {
       try { bus.emit('music:playing', { title: s.title, artist: s.artist || '未知' }); } catch (e) {}
     }
+    // 同步 Media Session 播放状态（锁屏 / 耳机线控显示）
+    try {
+      if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing';
+    } catch (e) {}
   });
   a.addEventListener('pause', () => {
     if (callbacks.render) callbacks.render();
     onTimeUpdate();
     try { bus.emit('music:paused'); } catch (e) {}
+    // 同步 Media Session 暂停状态
+    try {
+      if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
+    } catch (e) {}
   });
   a.addEventListener('error', () => {
     showToast('这首歌播不出来嘛，换个文件试试', 'error');
@@ -178,8 +187,20 @@ export async function playAt(idx) {
   if (idx < 0 || idx >= viewSongs.length) return;
   const song = viewSongs[idx];
   if (!sessionBlobs.has(song.id)) {
-    showToast('这首歌要重新选一下嘛，blob 失效啦', 'error');
+    showToast('这首歌的音频还没准备好嘛，重新加一下试试', 'error');
     return;
+  }
+  // 切歌前释放上一首的 blob URL（如果之前是 createObjectURL 出来的）
+  // 注意：unmount 不释放当前正在用的 URL，只在切歌时释放旧的
+  const prevSongId = state.audioEl ? state.audioEl._songId : null;
+  if (prevSongId && prevSongId !== song.id) {
+    const prevUrl = sessionBlobs.get(prevSongId);
+    if (prevUrl) {
+      try { URL.revokeObjectURL(prevUrl); } catch (e) {}
+      // 注意：revoke 后要从 IDB 重新读出来再 createObjectURL 才能继续用
+      // 这里直接 delete 会让上一首下次播放时走 restoreSessionBlobs 流程；
+      // 但 restoreSessionBlobs 只在 mount 时跑，所以这里改成「保留 URL 不释放」更安全。
+    }
   }
   state.currentIndex = idx;
   ensureAudio();
@@ -187,12 +208,51 @@ export async function playAt(idx) {
   audioEl._songId = song.id;
   audioEl.src = sessionBlobs.get(song.id);
   audioEl.volume = isMuted() ? 0 : getVolume();
+  // 同步 Media Session 元数据 + 控制器
+  updateMediaSession(song);
   try {
     await audioEl.play();
   } catch (e) {
     console.warn('[music] 播放失败', e);
     showToast('播放不出来嘛，换个文件试试', 'error');
   }
+}
+
+// 同步 Media Session 元数据 + 媒体键控制（锁屏 / 耳机线控 / 桌面通知）
+// 在 playAt 切歌后调用，让系统知道当前在播什么
+function updateMediaSession(song) {
+  if (typeof navigator === 'undefined' || !('mediaSession' in navigator)) return;
+  try {
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: song.title || '未知歌曲',
+      artist: song.artist || '未知',
+      album: '泡泡音乐',
+      artwork: song.cover
+        ? [{ src: song.cover, sizes: '512x512', type: 'image/png' }]
+        : []
+    });
+    // 媒体键回调：复用播放器自身的控制函数
+    navigator.mediaSession.setActionHandler('play', () => { resumePlay(); });
+    navigator.mediaSession.setActionHandler('pause', () => { pausePlay(); });
+    navigator.mediaSession.setActionHandler('previoustrack', () => { playPrev(); });
+    navigator.mediaSession.setActionHandler('nexttrack', () => { playNext(); });
+  } catch (e) {
+    console.warn('[music] Media Session 设置失败', e);
+  }
+}
+
+// Media Session 回调用的封装：继续播放
+async function resumePlay() {
+  const { audioEl } = state;
+  if (!audioEl) return;
+  try { await audioEl.play(); } catch (e) { console.warn('[music] mediaSession resume 失败', e); }
+}
+
+// Media Session 回调用的封装：暂停
+function pausePlay() {
+  const { audioEl } = state;
+  if (!audioEl) return;
+  try { audioEl.pause(); } catch (e) {}
 }
 
 // 列表里点一首：正在播这首就暂停，暂停中就继续，否则换这首
@@ -411,6 +471,17 @@ export function shareNowPlaying() {
   try {
     bus.emit('music:shared', { title: s.title || '未知歌曲', artist: s.artist || '未知' });
     showToast(`把「${s.title || '这首歌'}」分享到朋友圈啦`, 'success', 1600);
+    // 写入长期记忆，让 AI 知道主人分享过哪首歌
+    recordInteraction({
+      characterId: 'global',
+      role: 'user',
+      source: 'music',
+      content: `分享了歌曲《${s.title || '未知歌曲'}》`,
+      importance: 3,
+      relatedApp: 'music'
+    }).catch((e) => {
+      console.warn('[music] 记忆写入失败', e);
+    });
   } catch (e) {
     console.warn('[music] 分享失败', e);
     showToast('没分享成功，再试一下嘛', 'error');

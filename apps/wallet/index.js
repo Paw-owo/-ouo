@@ -19,6 +19,7 @@ import { getData, setData, getAllDB, generateId, getNow } from '../../core/stora
 import { showToast, createIcon } from '../../core/ui.js';
 import bus from '../../core/events.js';
 import { applyAppBg } from '../../core/app-bg.js';
+import { recordInteraction } from '../../core/memory.js';
 import { injectWalletStyles } from './styles.js';
 import {
   INITIAL_BALANCE,
@@ -340,5 +341,29 @@ function handleTransfer(character, { amount, note, fromUser }) {
     characterName: name,
     fromUser
   });
+  // 写入长期记忆：我转她记为 user，她转我记为 assistant
+  try {
+    if (fromUser) {
+      recordInteraction({
+        characterId: character.id,
+        role: 'user',
+        source: 'transfer',
+        content: `转了${amount}金币给${name}`,
+        importance: 6,
+        relatedApp: 'wallet'
+      });
+    } else {
+      recordInteraction({
+        characterId: character.id,
+        role: 'assistant',
+        source: 'transfer',
+        content: `收到${name}转的${amount}金币`,
+        importance: 6,
+        relatedApp: 'wallet'
+      });
+    }
+  } catch (e) {
+    console.warn('[wallet] 记忆写入失败', e);
+  }
   render();
 }
