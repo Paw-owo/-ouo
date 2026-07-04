@@ -266,13 +266,13 @@ function handleKeydown(e) {
 // 历史记录
 // ════════════════════════════════════════
 
-async function getHistory() {
-  const arr = await getData(KEYS.calculatorHistory, []);
+function getHistory() {
+  const arr = getData(KEYS.calculatorHistory, []);
   return Array.isArray(arr) ? arr : [];
 }
 
-async function appendHistory(entry) {
-  const hist = await getHistory();
+function appendHistory(entry) {
+  const hist = getHistory();
   hist.unshift({
     id: `calc_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
     expr: entry.expr,
@@ -280,11 +280,11 @@ async function appendHistory(entry) {
     timestamp: new Date().toISOString()
   });
   while (hist.length > MAX_HISTORY) hist.pop();
-  await setData(KEYS.calculatorHistory, hist);
+  setData(KEYS.calculatorHistory, hist);
 }
 
 async function openHistorySheet() {
-  const hist = await getHistory();
+  const hist = getHistory();
   const body = document.createElement('div');
   body.style.display = 'flex';
   body.style.flexDirection = 'column';
@@ -324,19 +324,19 @@ async function openHistorySheet() {
     clearBtn.className = 'btn danger';
     clearBtn.textContent = '把历史记录都清掉';
     clearBtn.style.marginTop = '12px';
-    clearBtn.addEventListener('click', async () => {
-      const ok = await ctxRef.showConfirm({
+    clearBtn.addEventListener('click', () => {
+      ctxRef.showConfirm({
         title: '真的要清掉吗？',
         body: '这些记录会全部不见啦，确定的话就点确认嘛',
-        okText: '嗯，清掉吧',
-        cancelText: '再想想'
+        confirmText: '嗯，清掉吧',
+        cancelText: '再想想',
+        onConfirm: () => {
+          setData(KEYS.calculatorHistory, []);
+          showToast('历史清空啦', 'default', 1200);
+          const closeBtn = document.querySelector('.popo-sheet-close');
+          if (closeBtn) closeBtn.click();
+        }
       });
-      if (ok) {
-        await setData(KEYS.calculatorHistory, []);
-        showToast('历史清空啦', 'default', 1200);
-        const closeBtn = document.querySelector('.popo-sheet-close');
-        if (closeBtn) closeBtn.click();
-      }
     });
     body.appendChild(clearBtn);
   }

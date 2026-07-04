@@ -10,6 +10,8 @@ import { KEYS } from './storage-keys.js';
 import { getData, setData } from './storage.js';
 import bus from './events.js';
 
+const CUSTOM_COLORS_KEY = KEYS.appCustomColors;
+
 const PRESETS = {
   sky: {
     id: 'sky', name: '天空蓝', mode: 'light',
@@ -52,23 +54,23 @@ const PRESETS = {
     }
   },
   lavender: {
-    id: 'lavender', name: '薰衣紫', mode: 'light',
+    id: 'lavender', name: '奶咖棕', mode: 'light',
     vars: {
-      '--bg-primary': '#F6F3FC',
-      '--bg-secondary': '#E7DEF2',
+      '--bg-primary': '#F7F2EC',
+      '--bg-secondary': '#EDE3D6',
       '--bg-card': '#FFFFFF',
       '--bg-overlay': 'rgba(0,0,0,0.26)',
-      '--accent': '#A88CC8',
-      '--accent-light': '#E0D2F0',
-      '--accent-dark': '#826BA0',
-      '--text-primary': '#1F1A2A',
-      '--text-secondary': '#8A82A0',
-      '--text-hint': '#C0B8CE',
-      '--bubble-user-bg': '#A88CC8',
+      '--accent': '#C9A47C',
+      '--accent-light': '#EAD9C2',
+      '--accent-dark': '#A8825A',
+      '--text-primary': '#2A2218',
+      '--text-secondary': '#8A7C68',
+      '--text-hint': '#C4B8A4',
+      '--bubble-user-bg': '#C9A47C',
       '--bubble-user-text': '#FFFFFF',
       '--bubble-ai-bg': '#FFFFFF',
-      '--bubble-ai-text': '#1F1A2A',
-      '--shadow-glow': '0 0 16px rgba(168,140,200,0.45)'
+      '--bubble-ai-text': '#2A2218',
+      '--shadow-glow': '0 0 16px rgba(201,164,124,0.45)'
     }
   },
   skyDark: {
@@ -112,23 +114,23 @@ const PRESETS = {
     }
   },
   lavenderDark: {
-    id: 'lavenderDark', name: '暮色紫', mode: 'dark',
+    id: 'lavenderDark', name: '夜咖棕', mode: 'dark',
     vars: {
-      '--bg-primary': '#161220',
-      '--bg-secondary': '#221C30',
-      '--bg-card': '#2A2440',
+      '--bg-primary': '#1F1812',
+      '--bg-secondary': '#2A2118',
+      '--bg-card': '#332820',
       '--bg-overlay': 'rgba(0,0,0,0.55)',
-      '--accent': '#A88CC8',
-      '--accent-light': '#2E2640',
-      '--accent-dark': '#826BA0',
-      '--text-primary': '#ECDEF8',
-      '--text-secondary': '#9A8FB0',
-      '--text-hint': '#5E5670',
-      '--bubble-user-bg': '#826BA0',
+      '--accent': '#D4B088',
+      '--accent-light': '#3A2E22',
+      '--accent-dark': '#A8825A',
+      '--text-primary': '#F2E6D8',
+      '--text-secondary': '#B0A088',
+      '--text-hint': '#6C5E48',
+      '--bubble-user-bg': '#A8825A',
       '--bubble-user-text': '#FFFFFF',
-      '--bubble-ai-bg': '#2A2440',
-      '--bubble-ai-text': '#ECDEF8',
-      '--shadow-glow': '0 0 16px rgba(168,140,200,0.45)'
+      '--bubble-ai-bg': '#332820',
+      '--bubble-ai-text': '#F2E6D8',
+      '--shadow-glow': '0 0 16px rgba(212,176,136,0.45)'
     }
   }
 };
@@ -155,11 +157,11 @@ const SHARED_VARS = {
   '--radius-dock': '28px',
   '--bubble-radius': '18px',
   '--bubble-radius-tail': '4px',
-  '--shadow-sm': '0 1px 4px rgba(0,0,0,0.06)',
-  '--shadow-md': '0 2px 12px rgba(0,0,0,0.10)',
-  '--shadow-lg': '0 8px 32px rgba(0,0,0,0.16)',
-  '--glass-blur': '20px',
-  '--glass-blur-strong': '32px',
+  '--shadow-sm': '0 1px 3px rgba(0,0,0,0.05)',
+  '--shadow-md': '0 2px 10px rgba(0,0,0,0.08)',
+  '--shadow-lg': '0 6px 24px rgba(0,0,0,0.12)',
+  '--glass-blur': '14px',
+  '--glass-blur-strong': '20px',
   '--wallpaper-soft': '0.10',
   '--press-scale': '0.96',
   '--motion': 'all 200ms ease',
@@ -319,4 +321,57 @@ export function listThemes() {
   const custom = getData(KEYS.appCustomTheme, null);
   if (custom) presets.push({ id: custom.id, name: custom.name || '自定义', mode: custom.mode || 'light' });
   return presets;
+}
+
+// ════════════════════════════════════════
+// 运行时自定义颜色（基于当前主题覆盖单个 CSS 变量）
+// ════════════════════════════════════════
+
+export function getCustomColors() {
+  return getData(CUSTOM_COLORS_KEY, {});
+}
+
+/**
+ * 应用一组颜色覆盖到根元素，并持久化。
+ * @param {Record<string,string>} colors  例：{ '--accent': '#FF0000' }
+ */
+export function applyCustomColors(colors) {
+  const root = document.documentElement;
+  const cleaned = {};
+  for (const [k, v] of Object.entries(colors || {})) {
+    if (typeof k === 'string' && k.startsWith('--') && typeof v === 'string' && v) {
+      root.style.setProperty(k, v);
+      cleaned[k] = v;
+    }
+  }
+  setData(CUSTOM_COLORS_KEY, cleaned);
+  bus.emit('theme:changed', { id: getCurrentThemeId(), custom: cleaned });
+  return cleaned;
+}
+
+export function clearCustomColors() {
+  const root = document.documentElement;
+  const saved = getData(CUSTOM_COLORS_KEY, {});
+  Object.keys(saved).forEach((k) => root.style.removeProperty(k));
+  setData(CUSTOM_COLORS_KEY, {});
+  // 重新应用当前主题，恢复 preset 原值
+  applyTheme(getCurrentTheme());
+  bus.emit('theme:changed', { id: getCurrentThemeId() });
+}
+
+/** 启动时恢复自定义颜色覆盖 */
+export function restoreCustomColors() {
+  const saved = getData(CUSTOM_COLORS_KEY, {});
+  const root = document.documentElement;
+  for (const [k, v] of Object.entries(saved)) {
+    root.style.setProperty(k, v);
+  }
+}
+
+/** 取某个主题某变量的当前值（用于颜色拾取器回填） */
+export function getThemeVar(themeId, varName) {
+  const t = getPreset(themeId) || getData(KEYS.appCustomTheme, null);
+  if (t && t.vars && t.vars[varName]) return t.vars[varName];
+  // 落到当前实际计算值
+  return getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
 }

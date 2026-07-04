@@ -10,6 +10,7 @@ export const APPS = [
     id: 'settings',
     name: '设置',
     icon: 'settings',
+    iconColor: '#7AA2D6',
     dock: true,
     page: 0,
     loader: () => import('./apps/settings/index.js')
@@ -18,6 +19,7 @@ export const APPS = [
     id: 'calculator',
     name: '计算器',
     icon: 'edit',
+    iconColor: '#E8A04A',
     dock: false,
     page: 0,
     loader: () => import('./apps/calculator/index.js')
