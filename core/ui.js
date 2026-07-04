@@ -1,783 +1,350 @@
-/* core/ui.js */
-/* imports: none */
+// core/ui.js
+// 统一 UI 组件：Toast / BottomSheet / Dialog / Confirm / Alert / Icon。
+// 必须满足：
+//  1) 所有弹窗继承 CSS 变量，6 套主题下都美观，对比度 ≥ 4.5:1
+//  2) 支持堆栈（多个 sheet 可叠加）
+//  3) 用 transitionend 事件而非固定 setTimeout
+//  4) focusInto 跳过隐藏元素
+//  5) createIcon 支持 SVG path 字符串 + icon font 便于扩展
+// 依赖：core/config.js, core/util.js
 
-let toastTimer = null;
-let activeOverlay = null;
-let activeSheet = null;
-let activeDialog = null;
-let lastFocusedElement = null;
-let activeSheetKeydownHandler = null;
-let dialogCloseToken = 0;
-let sheetCloseToken = 0;
+import { get as getConfig } from './config.js';
+import { injectStyle } from './util.js';
 
-const SVG_NS = "http://www.w3.org/2000/svg";
-const DEFAULT_TOAST_DURATION = 2200;
-const CLOSE_ANIMATION_DELAY = 220;
-
+// 内联 SVG 图标库（stroke-width: 1.5，手绘风）
 const ICON_PATHS = {
-  back: [["path", { d: "M15 18l-6-6 6-6" }]],
-  forward: [["path", { d: "M9 6l6 6-6 6" }]],
-  close: [
-    ["path", { d: "M6 6l12 12" }],
-    ["path", { d: "M18 6L6 18" }]
-  ],
-  more: [
-    ["circle", { cx: "12", cy: "6", r: "1.1" }],
-    ["circle", { cx: "12", cy: "12", r: "1.1" }],
-    ["circle", { cx: "12", cy: "18", r: "1.1" }]
-  ],
-  send: [
-    ["path", { d: "M4 11.5l15-7-5.5 15-2.6-6.4L4 11.5z" }],
-    ["path", { d: "M10.8 13.1l3.8-3.8" }]
-  ],
-  add: [
-    ["path", { d: "M12 5v14" }],
-    ["path", { d: "M5 12h14" }]
-  ],
-  search: [
-    ["circle", { cx: "11", cy: "11", r: "6" }],
-    ["path", { d: "M15.5 15.5L20 20" }]
-  ],
-  phone: [["path", { d: "M8.2 5.4l2 3.2-1.5 1.6c.9 1.8 2.3 3.2 4.1 4.1l1.6-1.5 3.2 2c.4.3.6.8.4 1.3-.5 1.5-1.7 2.7-3.2 2.9-5.1-.8-9-4.7-9.8-9.8.2-1.5 1.4-2.7 2.9-3.2.5-.2 1 .1 1.3.4z" }]],
-  mic: [
-    ["rect", { x: "9", y: "4", width: "6", height: "10", rx: "3" }],
-    ["path", { d: "M5.5 11.5a6.5 6.5 0 0013 0" }],
-    ["path", { d: "M12 18v3" }]
-  ],
-  image: [
-    ["rect", { x: "4", y: "5", width: "16", height: "14", rx: "3" }],
-    ["circle", { cx: "9", cy: "10", r: "1.5" }],
-    ["path", { d: "M6.5 17l4.2-4.2 3 3 1.8-1.8L19 17.5" }]
-  ],
-  smile: [
-    ["circle", { cx: "12", cy: "12", r: "8" }],
-    ["path", { d: "M8.8 14.2c1.6 1.5 4.8 1.5 6.4 0" }],
-    ["path", { d: "M9 10h.1" }],
-    ["path", { d: "M15 10h.1" }]
-  ],
-  settings: [
-    ["path", { d: "M12 8.5a3.5 3.5 0 100 7 3.5 3.5 0 000-7z" }],
-    ["path", { d: "M18.4 13.8l1.3 1-1.8 3.1-1.6-.6c-.5.4-1 .7-1.6.9l-.3 1.7h-3.6l-.3-1.7c-.6-.2-1.1-.5-1.6-.9l-1.6.6-1.8-3.1 1.3-1c-.1-.6-.1-1.2 0-1.8l-1.3-1 1.8-3.1 1.6.6c.5-.4 1-.7 1.6-.9l.3-1.7h3.6l.3 1.7c.6.2 1.1.5 1.6.9l1.6-.6 1.8 3.1-1.3 1c.1.6.1 1.2 0 1.8z" }]
-  ],
-  memory: [
-    ["path", { d: "M8 5.5h8a3 3 0 013 3v7a3 3 0 01-3 3H8a3 3 0 01-3-3v-7a3 3 0 013-3z" }],
-    ["path", { d: "M9 9h6" }],
-    ["path", { d: "M9 12h4" }],
-    ["path", { d: "M9 15h6" }]
-  ],
-  clear: [
-    ["path", { d: "M5 12a7 7 0 111.8 4.7" }],
-    ["path", { d: "M5 17h4v-4" }]
-  ],
-  transfer: [
-    ["path", { d: "M7 8h11" }],
-    ["path", { d: "M15 5l3 3-3 3" }],
-    ["path", { d: "M17 16H6" }],
-    ["path", { d: "M9 13l-3 3 3 3" }]
-  ],
-  mcp: [
-    ["rect", { x: "5", y: "5", width: "14", height: "14", rx: "4" }],
-    ["path", { d: "M9 9h6v6H9z" }],
-    ["path", { d: "M12 2.8v2.2" }],
-    ["path", { d: "M12 19v2.2" }],
-    ["path", { d: "M2.8 12h2.2" }],
-    ["path", { d: "M19 12h2.2" }]
-  ],
-  edit: [
-    ["path", { d: "M5 19l3.8-.8 9-9a2.1 2.1 0 00-3-3l-9 9L5 19z" }],
-    ["path", { d: "M13.5 7.5l3 3" }]
-  ],
-  delete: [
-    ["path", { d: "M6 7h12" }],
-    ["path", { d: "M10 7V5h4v2" }],
-    ["path", { d: "M8 7l.7 12h6.6L16 7" }],
-    ["path", { d: "M10.5 10.5v5" }],
-    ["path", { d: "M13.5 10.5v5" }]
-  ],
-  copy: [
-    ["rect", { x: "8", y: "8", width: "10", height: "10", rx: "2" }],
-    ["path", { d: "M6 14H5a2 2 0 01-2-2V6a2 2 0 012-2h6a2 2 0 012 2v1" }]
-  ],
-  refresh: [
-    ["path", { d: "M18 9a6.5 6.5 0 00-11.2-2.8L5 8" }],
-    ["path", { d: "M5 4v4h4" }],
-    ["path", { d: "M6 15a6.5 6.5 0 0011.2 2.8L19 16" }],
-    ["path", { d: "M19 20v-4h-4" }]
-  ],
-  expand: [
-    ["path", { d: "M8 4H4v4" }],
-    ["path", { d: "M4 4l6 6" }],
-    ["path", { d: "M16 20h4v-4" }],
-    ["path", { d: "M20 20l-6-6" }]
-  ],
-  collapse: [
-    ["path", { d: "M10 4v6H4" }],
-    ["path", { d: "M4 10l6-6" }],
-    ["path", { d: "M14 20v-6h6" }],
-    ["path", { d: "M20 14l-6 6" }]
-  ],
-  play: [["path", { d: "M8 6.5v11l9-5.5-9-5.5z" }]],
-  pause: [
-    ["rect", { x: "7", y: "6", width: "3.5", height: "12", rx: "1" }],
-    ["rect", { x: "13.5", y: "6", width: "3.5", height: "12", rx: "1" }]
-  ],
-  stop: [["rect", { x: "7", y: "7", width: "10", height: "10", rx: "2" }]],
-  check: [["path", { d: "M5 12.5l4 4L19 6.5" }]],
-  "arrow-right": [["path", { d: "M9 5l7 7-7 7" }]],
-  "arrow-down": [["path", { d: "M5 9l7 7 7-7" }]],
-  star: [["path", { d: "M12 4.5l2.2 4.5 5 .7-3.6 3.5.9 5-4.5-2.4-4.5 2.4.9-5-3.6-3.5 5-.7L12 4.5z" }]],
-  heart: [["path", { d: "M12 19s-7-4.4-7-9.4A3.7 3.7 0 018.8 6c1.3 0 2.5.7 3.2 1.8A3.8 3.8 0 0115.2 6 3.7 3.7 0 0119 9.6C19 14.6 12 19 12 19z" }]],
-  camera: [
-    ["path", { d: "M8.5 7l1.2-2h4.6l1.2 2H18a2 2 0 012 2v7.5a2 2 0 01-2 2H6a2 2 0 01-2-2V9a2 2 0 012-2h2.5z" }],
-    ["circle", { cx: "12", cy: "12.5", r: "3.5" }]
-  ],
-  download: [
-    ["path", { d: "M12 4v10" }],
-    ["path", { d: "M8 10l4 4 4-4" }],
-    ["path", { d: "M5 19h14" }]
-  ],
-  upload: [
-    ["path", { d: "M12 20V10" }],
-    ["path", { d: "M8 14l4-4 4 4" }],
-    ["path", { d: "M5 5h14" }]
-  ],
-  eye: [
-    ["path", { d: "M3.5 12s3-5.5 8.5-5.5S20.5 12 20.5 12s-3 5.5-8.5 5.5S3.5 12 3.5 12z" }],
-    ["circle", { cx: "12", cy: "12", r: "2.5" }]
-  ],
-  "eye-off": [
-    ["path", { d: "M4 4l16 16" }],
-    ["path", { d: "M9.4 6.9A8.8 8.8 0 0112 6.5c5.5 0 8.5 5.5 8.5 5.5a14 14 0 01-2.2 2.8" }],
-    ["path", { d: "M14.1 14.2A2.5 2.5 0 019.8 9.9" }],
-    ["path", { d: "M6.2 8.5A14.2 14.2 0 003.5 12s3 5.5 8.5 5.5c1 0 1.9-.2 2.7-.5" }]
-  ],
-  grudge: [
-    ["path", { d: "M7.5 4.5h9a2.5 2.5 0 012.5 2.5v10a2.5 2.5 0 01-2.5 2.5h-9A2.5 2.5 0 015 17V7a2.5 2.5 0 012.5-2.5z" }],
-    ["path", { d: "M9 8.5h6" }],
-    ["path", { d: "M9 12h4.8" }],
-    ["path", { d: "M9 15.5h3" }],
-    ["path", { d: "M15 14.8c.8-.9 2.3-.4 2.3.8 0 1.4-2.3 2.6-2.3 2.6s-2.3-1.2-2.3-2.6c0-1.2 1.5-1.7 2.3-.8z" }]
-  ],
-  lock: [
-    ["rect", { x: "5.5", y: "10", width: "13", height: "9", rx: "2.5" }],
-    ["path", { d: "M8.5 10V7.8a3.5 3.5 0 017 0V10" }],
-    ["path", { d: "M12 13.5v2" }]
-  ],
-  unlock: [
-    ["rect", { x: "5.5", y: "10", width: "13", height: "9", rx: "2.5" }],
-    ["path", { d: "M8.5 10V7.8a3.5 3.5 0 016.7-1.4" }],
-    ["path", { d: "M12 13.5v2" }]
-  ],
-  timer: [
-    ["circle", { cx: "12", cy: "13", r: "7" }],
-    ["path", { d: "M9.5 3.5h5" }],
-    ["path", { d: "M12 6v2" }],
-    ["path", { d: "M12 13l3-2" }]
-  ],
-  warning: [
-    ["path", { d: "M12 4.5l8 14H4l8-14z" }],
-    ["path", { d: "M12 9v4" }],
-    ["path", { d: "M12 16.5h.1" }]
-  ],
-  ban: [
-    ["circle", { cx: "12", cy: "12", r: "8" }],
-    ["path", { d: "M7 7l10 10" }]
-  ],
-  "message-off": [
-    ["path", { d: "M4 5l16 16" }],
-    ["path", { d: "M6.2 6.2A3 3 0 004 9v5a3 3 0 003 3h6l4 3v-3" }],
-    ["path", { d: "M9 5h8a3 3 0 013 3v6.5" }]
-  ],
-  music: [
-    ["circle", { cx: "8", cy: "17", r: "3" }],
-    ["circle", { cx: "17", cy: "15", r: "3" }],
-    ["path", { d: "M11 17V5l9-2v12" }]
-  ],
-  dream: [
-    ["circle", { cx: "12", cy: "12", r: "7" }],
-    ["path", { d: "M9 10h.1" }],
-    ["path", { d: "M15 10h.1" }],
-    ["path", { d: "M9.5 14c1.2 1.2 3.8 1.2 5 0" }],
-    ["path", { d: "M17.5 4.5a1.5 1.5 0 00-1 1" }],
-    ["path", { d: "M20 6.5a1.5 1.5 0 00-1 1" }]
-  ]
+  chat: 'M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z',
+  heart: 'M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z',
+  settings: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z',
+  close: 'M18 6L6 18 M6 6l12 12',
+  back: 'M19 12H5 M12 19l-7-7 7-7',
+  check: 'M20 6L9 17l-5-5',
+  trash: 'M3 6h18 M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2',
+  plus: 'M12 5v14 M5 12h14',
+  minus: 'M5 12h14',
+  search: 'M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16z M21 21l-4.35-4.35',
+  weather: 'M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z',
+  calendar: 'M19 4H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z M16 2v4 M8 2v4 M3 10h18',
+  music: 'M9 18V5l12-2v13 M9 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0z M21 16a3 3 0 1 1-6 0 3 3 0 0 1 6 0z',
+  wallet: 'M21 12V7H5a2 2 0 0 1 0-4h14v4 M3 5v14a2 2 0 0 0 2 2h16v-5 M18 12a2 2 0 0 0 0 4h4v-4z',
+  shop: 'M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z M3 6h18 M16 10a4 4 0 0 1-8 0',
+  memo: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6 M16 13H8 M16 17H8 M10 9H8',
+  star: 'M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z',
+  camera: 'M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z M12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8z',
+  dream: 'M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z',
+  games: 'M6 12h4 M8 10v4 M15 13h.01 M18 11h.01 M17.32 5H6.68a4 4 0 0 0-3.978 3.71c-.014.121-.014.27-.014.382V18a3 3 0 0 0 3 3c1.21 0 2.18-.73 2.7-1.7l.4-.8a2 2 0 0 1 1.79-1.11h2.84a2 2 0 0 1 1.79 1.11l.4.8c.52.97 1.49 1.7 2.7 1.7a3 3 0 0 0 3-3V9.092c0-.111 0-.261-.014-.382A4 4 0 0 0 17.32 5z',
+  smile: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z M8 14s1.5 2 4 2 4-2 4-2 M9 9h.01 M15 9h.01',
+  home: 'M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z M9 22V12h6v10',
+  bell: 'M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9 M13.73 21a2 2 0 0 1-3.46 0',
+  moon: 'M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z',
+  sun: 'M12 1v2 M12 21v2 M4.22 4.22l1.42 1.42 M18.36 18.36l1.42 1.42 M1 12h2 M21 12h2 M4.22 19.78l1.42-1.42 M18.36 5.64l1.42-1.42 M12 18a6 6 0 1 0 0-12 6 6 0 0 0 0 12z',
+  volume: 'M11 5L6 9H2v6h4l5 4V5z',
+  play: 'M5 3l14 9-14 9V3z',
+  pause: 'M6 4h4v16H6z M14 4h4v16h-4z',
+  next: 'M5 4l10 8-10 8V4z M19 5v14',
+  prev: 'M19 4l-10 8 10 8V4z M5 5v14',
+  phone: 'M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z',
+  dice: 'M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z',
+  gift: 'M20 12v10H4V12 M2 7h20v5H2z M12 22V7 M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z',
+  edit: 'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7 M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z',
+  more: 'M12 12h.01 M19 12h.01 M5 12h.01',
+  download: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M7 10l5 5 5-5 M12 15V3',
+  upload: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M17 8l-5-5-5 5 M12 3v12',
+  lock: 'M19 11H5a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2z M7 11V7a5 5 0 0 1 10 0v4',
+  unlock: 'M19 11H5a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2z M7 11V7a5 5 0 0 1 9.9-1'
 };
 
-function ensureCoreUiStyle() {
-  if (document.getElementById("core-ui-style")) return;
+// 注入全局 UI 样式（基于 CSS 变量，主题适配）
+let uiStyleInjected = false;
+function ensureUIStyle() {
+  if (uiStyleInjected) return;
+  injectStyle('popo-ui-style', `
+    .popo-toast-stack{position:fixed;top:calc(env(safe-area-inset-top,0px) + 12px);left:50%;transform:translateX(-50%);z-index:9999;display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:none;width:max-content;max-width:90vw}
+    .popo-toast{background:color-mix(in srgb,var(--bg-card) 92%,transparent);backdrop-filter:blur(var(--glass-blur));-webkit-backdrop-filter:blur(var(--glass-blur));color:var(--text-primary);padding:10px 18px;border-radius:var(--radius-md);box-shadow:var(--shadow-md);font-size:var(--font-size-small);line-height:1.4;pointer-events:auto;border:1px solid color-mix(in srgb,var(--accent-light) 60%,transparent);animation:popoToastIn var(--motion) var(--motion-spring);max-width:80vw;text-align:center}
+    .popo-toast.leaving{animation:popoToastOut 160ms ease forwards}
+    .popo-toast.error{background:color-mix(in srgb,#E8888C 92%,transparent);color:#fff;border-color:#E8888C}
+    .popo-toast.success{background:color-mix(in srgb,var(--accent) 92%,transparent);color:var(--bubble-user-text);border-color:var(--accent)}
+    @keyframes popoToastIn{from{opacity:0;transform:translateY(-12px) scale(.96)}to{opacity:1;transform:translateY(0) scale(1)}}
+    @keyframes popoToastOut{to{opacity:0;transform:translateY(-8px) scale(.96)}}
+    .popo-overlay{position:fixed;inset:0;background:var(--bg-overlay);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);z-index:9000;opacity:0;transition:opacity var(--motion)}
+    .popo-overlay.show{opacity:1}
+    .popo-sheet{position:fixed;left:0;right:0;bottom:0;background:color-mix(in srgb,var(--bg-card) 96%,transparent);backdrop-filter:blur(var(--glass-blur-strong));-webkit-backdrop-filter:blur(var(--glass-blur-strong));border-radius:var(--radius-sheet) var(--radius-sheet) 0 0;box-shadow:var(--shadow-lg);z-index:9001;transform:translateY(100%);transition:transform var(--motion) var(--motion-spring);max-height:88vh;display:flex;flex-direction:column;padding-bottom:env(safe-area-inset-bottom,0px)}
+    .popo-sheet.show{transform:translateY(0)}
+    .popo-sheet-handle{width:36px;height:5px;border-radius:3px;background:color-mix(in srgb,var(--text-hint) 70%,transparent);margin:10px auto 4px;flex-shrink:0}
+    .popo-sheet-header{padding:8px 20px 12px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid color-mix(in srgb,var(--text-hint) 20%,transparent)}
+    .popo-sheet-title{font-size:var(--font-size-title);font-weight:600;color:var(--text-primary)}
+    .popo-sheet-body{flex:1;overflow-y:auto;padding:16px 20px;-webkit-overflow-scrolling:touch}
+    .popo-dialog{position:fixed;left:50%;top:50%;transform:translate(-50%,-46%) scale(.94);background:color-mix(in srgb,var(--bg-card) 98%,transparent);backdrop-filter:blur(var(--glass-blur));-webkit-backdrop-filter:blur(var(--glass-blur));border-radius:var(--radius-card);box-shadow:var(--shadow-lg);z-index:9002;opacity:0;transition:opacity var(--motion),transform var(--motion) var(--motion-spring);min-width:280px;max-width:84vw;padding:22px 22px 16px}
+    .popo-dialog.show{opacity:1;transform:translate(-50%,-50%) scale(1)}
+    .popo-dialog-title{font-size:var(--font-size-title);font-weight:600;color:var(--text-primary);margin-bottom:8px;text-align:center}
+    .popo-dialog-body{font-size:var(--font-size-base);color:var(--text-secondary);text-align:center;margin-bottom:18px;line-height:1.5}
+    .popo-dialog-actions{display:flex;gap:10px}
+    .popo-dialog-actions button{flex:1;padding:11px 14px;border-radius:var(--radius-sm);font-size:var(--font-size-base);font-weight:500;background:color-mix(in srgb,var(--bg-secondary) 80%,transparent);color:var(--text-primary);transition:var(--motion)}
+    .popo-dialog-actions button:active{transform:scale(var(--press-scale))}
+    .popo-dialog-actions button.primary{background:var(--accent);color:var(--bubble-user-text)}
+    .popo-dialog-actions button.danger{background:#E8888C;color:#fff}
+    .popo-icon-svg{stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;fill:none;display:inline-block;vertical-align:middle}
+    .popo-loading{position:fixed;inset:0;z-index:9500;display:flex;align-items:center;justify-content:center;background:var(--bg-overlay);backdrop-filter:blur(4px)}
+    .popo-loading-dot{width:14px;height:14px;border-radius:50%;background:var(--accent);margin:0 5px;animation:popoPulse 1s ease-in-out infinite}
+    .popo-loading-dot:nth-child(2){animation-delay:.2s}
+    .popo-loading-dot:nth-child(3){animation-delay:.4s}
+    @keyframes popoPulse{0%,80%,100%{transform:scale(.6);opacity:.4}40%{transform:scale(1);opacity:1}}
+    @media (prefers-reduced-motion:reduce){.popo-toast,.popo-sheet,.popo-dialog,.popo-loading-dot{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+  `);
+  uiStyleInjected = true;
+}
 
-  const style = document.createElement("style");
-  style.id = "core-ui-style";
-  style.textContent = `
-    .toast {
-      position: fixed;
-      left: 50%;
-      bottom: calc(34px + env(safe-area-inset-bottom));
-      z-index: 10020;
-      max-width: min(360px, calc(100vw - 40px));
-      transform: translate3d(-50%, 16px, 0) scale(0.98);
-      opacity: 0;
-      pointer-events: none;
-      padding: 12px 16px;
-      border-radius: var(--radius-lg);
-      background: var(--bg-card);
-      color: var(--text-primary);
-      box-shadow: var(--shadow-md);
-      font-family: var(--font-main);
-      font-size: var(--font-size-base);
-      line-height: 1.6;
-      text-align: center;
-      transition: all 200ms ease;
-      word-break: break-word;
-      white-space: pre-wrap;
-    }
+// ════════════════════════════════════════
+// Toast
+// ════════════════════════════════════════
 
-    .toast.show {
-      opacity: 1;
-      transform: translate3d(-50%, 0, 0) scale(1);
-    }
+function getToastStack() {
+  let el = document.querySelector('.popo-toast-stack');
+  if (!el) {
+    el = document.createElement('div');
+    el.className = 'popo-toast-stack';
+    document.body.appendChild(el);
+  }
+  return el;
+}
 
-    .sheet-overlay,
-    .cute-dialog-backdrop {
-      position: fixed;
-      inset: 0;
-      z-index: 10000;
-      background: var(--bg-overlay);
-      opacity: 0;
-      pointer-events: none;
-      transition: all 200ms ease;
-    }
+export function showToast(message, type = 'default', durationMs) {
+  ensureUIStyle();
+  if (!message) return;
+  const stack = getToastStack();
+  const el = document.createElement('div');
+  el.className = `popo-toast ${type === 'error' ? 'error' : type === 'success' ? 'success' : ''}`;
+  el.textContent = message;
+  stack.appendChild(el);
+  const dur = durationMs || getConfig('ui.toastDurationMs', 2200);
+  const leave = () => {
+    el.classList.add('leaving');
+    const onEnd = () => { el.remove(); };
+    el.addEventListener('animationend', onEnd, { once: true });
+    // 兜底
+    setTimeout(onEnd, 250);
+  };
+  setTimeout(leave, dur);
+  // 点击提前关闭
+  el.addEventListener('click', leave, { once: true });
+  return () => leave();
+}
 
-    .sheet-overlay.open,
-    .cute-dialog-backdrop.open {
-      opacity: 1;
-      pointer-events: auto;
-    }
+// ════════════════════════════════════════
+// BottomSheet（支持堆栈）
+// ════════════════════════════════════════
 
-    .bottom-sheet {
-      position: fixed;
-      left: 12px;
-      right: 12px;
-      bottom: calc(12px + env(safe-area-inset-bottom));
-      z-index: 10010;
-      max-height: min(74vh, 680px);
-      overflow: hidden;
-      display: flex;
-      flex-direction: column;
-      padding: 10px 0 18px;
-      border-radius: 28px;
-      background: var(--bg-card);
-      color: var(--text-primary);
-      box-shadow: var(--shadow-lg);
-      font-family: var(--font-main);
-      transform: translate3d(0, calc(100% + 24px), 0) scale(0.98);
-      opacity: 0;
-      transition: all 200ms ease;
-      outline: transparent solid 2px;
-      outline-offset: 2px;
-    }
+const sheetStack = [];
 
-    .bottom-sheet.open {
-      transform: translate3d(0, 0, 0) scale(1);
-      opacity: 1;
-    }
+export function showBottomSheet(opts = {}) {
+  ensureUIStyle();
+  const { title = '', bodyHTML = '', bodyElement = null, onClose, dismissible = true } = opts;
 
-    .sheet-handle {
-      width: 42px;
-      height: 5px;
-      margin: 0 auto 12px;
-      border-radius: 999px;
-      background: var(--text-hint);
-      opacity: 0.55;
-      flex: 0 0 auto;
-    }
-
-    .bottom-sheet > :not(.sheet-handle) {
-      overflow: auto;
-      -webkit-overflow-scrolling: touch;
-      padding-left: 20px;
-      padding-right: 20px;
-      color: var(--text-primary);
-      font-family: var(--font-main);
-      font-size: var(--font-size-base);
-      line-height: 1.6;
-    }
-
-    .sheet-description {
-      color: var(--text-secondary);
-      font-size: var(--font-size-base);
-      line-height: 1.6;
-      padding-bottom: 8px;
-      white-space: pre-wrap;
-    }
-
-    .cute-dialog-layer,
-    .guide-overlay {
-      position: fixed;
-      inset: 0;
-      z-index: 10010;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 24px;
-      pointer-events: none;
-    }
-
-    .cute-dialog-card,
-    .guide-card {
-      width: min(360px, calc(100vw - 48px));
-      max-height: min(76vh, 560px);
-      overflow: auto;
-      padding: 22px 20px 18px;
-      border-radius: 28px;
-      background: var(--bg-card);
-      color: var(--text-primary);
-      box-shadow: var(--shadow-lg);
-      font-family: var(--font-main);
-      transform: translate3d(0, 12px, 0) scale(0.96);
-      opacity: 0;
-      pointer-events: auto;
-      outline: transparent solid 2px;
-      outline-offset: 2px;
-      transition: all 200ms ease;
-    }
-
-    .cute-dialog-card.open,
-    .guide-card.open {
-      transform: translate3d(0, 0, 0) scale(1);
-      opacity: 1;
-    }
-
-    .cute-dialog-card:focus-visible,
-    .guide-card:focus-visible,
-    .bottom-sheet:focus-visible {
-      box-shadow: var(--shadow-sm);
-    }
-
-    .cute-dialog-icon {
-      width: 44px;
-      height: 44px;
-      margin: 0 auto 14px;
-      display: grid;
-      place-items: center;
-      border-radius: 18px;
-      background: var(--accent-light);
-      color: var(--accent);
-    }
-
-    .cute-dialog-icon svg {
-      width: 23px;
-      height: 23px;
-    }
-
-    .cute-dialog-title,
-    .guide-title {
-      margin: 0;
-      color: var(--text-primary);
-      font-family: var(--font-main);
-      font-size: var(--font-size-title);
-      line-height: 1.45;
-      font-weight: 600;
-      text-align: center;
-    }
-
-    .cute-dialog-text,
-    .guide-text {
-      margin: 10px 0 0;
-      color: var(--text-secondary);
-      font-family: var(--font-main);
-      font-size: var(--font-size-base);
-      line-height: 1.6;
-      text-align: center;
-      white-space: pre-wrap;
-      word-break: break-word;
-    }
-
-    .cute-dialog-actions {
-      display: flex;
-      gap: 10px;
-      margin-top: 18px;
-    }
-
-    .cute-dialog-actions .btn-primary,
-    .cute-dialog-actions .btn-ghost,
-    .guide-card .btn-primary,
-    .guide-card .btn-ghost {
-      min-height: 44px;
-      flex: 1;
-      appearance: none;
-      -webkit-appearance: none;
-      padding: 11px 14px;
-      border-radius: 18px;
-      font-family: var(--font-main);
-      font-size: var(--font-size-base);
-      line-height: 1.4;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 200ms ease;
-      box-shadow: none;
-      outline: transparent solid 2px;
-      outline-offset: 2px;
-    }
-
-    .cute-dialog-actions .btn-primary,
-    .guide-card .btn-primary {
-      background: var(--accent);
-      color: var(--bubble-user-text);
-    }
-
-    .cute-dialog-actions .btn-ghost,
-    .guide-card .btn-ghost {
-      background: var(--bg-secondary);
-      color: var(--text-secondary);
-    }
-
-    .cute-dialog-actions .btn-primary:active,
-    .cute-dialog-actions .btn-ghost:active,
-    .guide-card .btn-primary:active,
-    .guide-card .btn-ghost:active {
-      transform: scale(0.96);
-    }
-
-    .cute-dialog-actions .btn-primary:focus-visible,
-    .cute-dialog-actions .btn-ghost:focus-visible,
-    .guide-card .btn-primary:focus-visible,
-    .guide-card .btn-ghost:focus-visible {
-      box-shadow: var(--shadow-sm);
-    }
-
-    @media (max-width: 420px) {
-      .cute-dialog-layer,
-      .guide-overlay {
-        align-items: flex-end;
-        padding: 14px 12px calc(14px + env(safe-area-inset-bottom));
-      }
-
-      .cute-dialog-card,
-      .guide-card {
-        width: 100%;
-        border-radius: 28px;
-      }
-
-      .bottom-sheet {
-        left: 8px;
-        right: 8px;
-        bottom: calc(8px + env(safe-area-inset-bottom));
-      }
-    }
+  const overlay = document.createElement('div');
+  overlay.className = 'popo-overlay';
+  const sheet = document.createElement('div');
+  sheet.className = 'popo-sheet';
+  sheet.innerHTML = `
+    <div class="popo-sheet-handle" aria-hidden="true"></div>
+    ${title ? `<div class="popo-sheet-header"><div class="popo-sheet-title"></div><button class="popo-sheet-close" aria-label="关闭">${iconHTML('close', 22)}</button></div>` : ''}
+    <div class="popo-sheet-body"></div>
   `;
+  if (title) sheet.querySelector('.popo-sheet-title').textContent = title;
+  const bodyEl = sheet.querySelector('.popo-sheet-body');
+  if (bodyElement) bodyEl.appendChild(bodyElement);
+  else bodyEl.innerHTML = bodyHTML || '';
 
-  document.head.appendChild(style);
-}
+  document.body.appendChild(overlay);
+  document.body.appendChild(sheet);
 
-function createSvgElement(tagName, attributes = {}) {
-  const element = document.createElementNS(SVG_NS, tagName);
+  const entry = { overlay, sheet, onClose };
+  sheetStack.push(entry);
 
-  Object.entries(attributes).forEach(([key, value]) => {
-    element.setAttribute(key, String(value));
-  });
-
-  return element;
-}
-
-function createElement(tagName, classNames = [], textContent) {
-  const element = document.createElement(tagName);
-  const normalizedClassNames = Array.isArray(classNames) ? classNames : [classNames];
-
-  normalizedClassNames.filter(Boolean).forEach((className) => {
-    element.classList.add(className);
-  });
-
-  if (textContent !== undefined && textContent !== null) {
-    element.textContent = String(textContent);
-  }
-
-  return element;
-}
-
-function rememberFocus() {
-  const activeElement = document.activeElement;
-
-  if (activeElement instanceof HTMLElement && activeElement !== document.body) {
-    lastFocusedElement = activeElement;
-  }
-}
-
-function restoreFocus() {
-  if (lastFocusedElement instanceof HTMLElement && document.contains(lastFocusedElement)) {
-    lastFocusedElement.focus({ preventScroll: true });
-  }
-
-  lastFocusedElement = null;
-}
-
-function getFocusableElement(container) {
-  return container.querySelector("button, [href], input, textarea, select, summary, [tabindex]:not([tabindex='-1'])");
-}
-
-function focusInto(container) {
-  const focusableElement = getFocusableElement(container);
-
-  if (focusableElement instanceof HTMLElement) {
-    focusableElement.focus({ preventScroll: true });
-    return;
-  }
-
-  if (container instanceof HTMLElement) {
-    container.focus({ preventScroll: true });
-  }
-}
-
-function ensureToast() {
-  ensureCoreUiStyle();
-
-  let toast = document.querySelector(".toast");
-
-  if (!toast) {
-    toast = createElement("div", "toast");
-    toast.setAttribute("role", "status");
-    toast.setAttribute("aria-live", "polite");
-    document.body.appendChild(toast);
-  }
-
-  return toast;
-}
-
-function normalizeSheetContent(contentEl) {
-  if (contentEl instanceof HTMLElement) {
-    return contentEl;
-  }
-
-  return createElement("div", "sheet-description", contentEl ?? "");
-}
-
-function clearActiveDialog(result, options = {}) {
-  if (!activeDialog) return;
-
-  const dialog = activeDialog;
-  const currentToken = ++dialogCloseToken;
-  const shouldRestoreFocus = options.restoreFocus !== false;
-
-  activeDialog = null;
-
-  document.removeEventListener("keydown", dialog.keydownHandler);
-
-  dialog.backdrop.classList.remove("open");
-  dialog.card.classList.remove("open");
-
-  window.setTimeout(() => {
-    dialog.backdrop.remove();
-    dialog.layer.remove();
-
-    if (shouldRestoreFocus && currentToken === dialogCloseToken && !activeDialog) {
-      restoreFocus();
-    }
-
-    dialog.resolve(result);
-  }, CLOSE_ANIMATION_DELAY);
-}
-
-function createDialog(message, resolve, cancelValue, options = {}) {
-  ensureCoreUiStyle();
-
-  if (activeDialog) {
-    clearActiveDialog(cancelValue, { restoreFocus: false });
-  }
-
-  dialogCloseToken++;
-  rememberFocus();
-
-  const backdrop = createElement("div", ["sheet-overlay", "cute-dialog-backdrop"]);
-  const layer = createElement("div", ["guide-overlay", "cute-dialog-layer"]);
-  const card = createElement("div", ["guide-card", "cute-dialog-card"]);
-  const iconWrap = createElement("div", "cute-dialog-icon");
-  const title = createElement("h2", ["guide-title", "cute-dialog-title"], options.title || "小提示");
-  const text = createElement("p", ["guide-text", "cute-dialog-text"], message ?? "");
-  const actions = createElement("div", "cute-dialog-actions");
-
-  card.setAttribute("role", "dialog");
-  card.setAttribute("aria-modal", "true");
-  card.tabIndex = -1;
-
-  iconWrap.append(createIcon(options.icon || "heart", 24));
-  card.append(iconWrap, title, text, actions);
-  layer.append(card);
-  document.body.append(backdrop, layer);
-
-  const keydownHandler = (event) => {
-    if (event.key !== "Escape") return;
-
-    event.preventDefault();
-    clearActiveDialog(cancelValue);
-  };
-
-  backdrop.addEventListener("click", () => clearActiveDialog(cancelValue));
-  document.addEventListener("keydown", keydownHandler);
-
-  activeDialog = {
-    backdrop,
-    layer,
-    card,
-    keydownHandler,
-    resolve
-  };
-
+  // 入场动画
   requestAnimationFrame(() => {
-    backdrop.classList.add("open");
-    card.classList.add("open");
+    overlay.classList.add('show');
+    sheet.classList.add('show');
   });
 
-  return { card, actions };
-}
-
-export function showToast(message, duration = DEFAULT_TOAST_DURATION) {
-  const toast = ensureToast();
-
-  window.clearTimeout(toastTimer);
-  toast.textContent = String(message ?? "");
-  toast.classList.add("show");
-
-  toastTimer = window.setTimeout(() => {
-    toast.classList.remove("show");
-  }, Number.isFinite(duration) ? duration : DEFAULT_TOAST_DURATION);
-}
-
-export function showBottomSheet(contentEl) {
-  ensureCoreUiStyle();
-  hideBottomSheet();
-  sheetCloseToken++;
-  rememberFocus();
-
-  activeOverlay = createElement("div", "sheet-overlay");
-  activeSheet = createElement("div", "bottom-sheet");
-
-  const handle = createElement("div", "sheet-handle");
-  const content = normalizeSheetContent(contentEl);
-
-  activeSheet.setAttribute("role", "dialog");
-  activeSheet.setAttribute("aria-modal", "true");
-  activeSheet.tabIndex = -1;
-
-  activeSheet.append(handle, content);
-  document.body.append(activeOverlay, activeSheet);
-
-  activeSheetKeydownHandler = (event) => {
-    if (event.key !== "Escape") return;
-
-    event.preventDefault();
-    hideBottomSheet();
+  const close = () => {
+    const idx = sheetStack.indexOf(entry);
+    if (idx === -1) return;
+    sheetStack.splice(idx, 1);
+    sheet.classList.remove('show');
+    overlay.classList.remove('show');
+    const cleanup = () => {
+      sheet.remove();
+      overlay.remove();
+      if (typeof onClose === 'function') {
+        try { onClose(); } catch (e) { console.warn('[ui] sheet onClose 失败', e); }
+      }
+    };
+    // 用 transitionend 而非固定 setTimeout
+    const onTransEnd = (e) => {
+      if (e.propertyName !== 'transform') return;
+      cleanup();
+    };
+    sheet.addEventListener('transitionend', onTransEnd, { once: true });
+    // 兜底
+    setTimeout(cleanup, getConfig('ui.sheetTransitionMs', 260) + 100);
   };
 
-  activeOverlay.addEventListener("click", hideBottomSheet);
-  document.addEventListener("keydown", activeSheetKeydownHandler);
+  if (dismissible) {
+    overlay.addEventListener('click', close);
+    const closeBtn = sheet.querySelector('.popo-sheet-close');
+    if (closeBtn) closeBtn.addEventListener('click', close);
+  }
 
-  requestAnimationFrame(() => {
-    activeOverlay?.classList.add("open");
-    activeSheet?.classList.add("open");
-
-    if (activeSheet) {
-      focusInto(activeSheet);
-    }
-  });
-
-  return activeSheet;
+  // 焦点跳过隐藏元素
+  focusInto(sheet);
+  return { close, sheet, bodyEl, overlay };
 }
 
 export function hideBottomSheet() {
-  if (!activeOverlay && !activeSheet) return;
+  // 关闭栈顶 sheet
+  const top = sheetStack[sheetStack.length - 1];
+  if (top && typeof top.sheet._close === 'function') top.sheet._close();
+}
 
-  const overlay = activeOverlay;
-  const sheet = activeSheet;
-  const keydownHandler = activeSheetKeydownHandler;
-  const currentToken = ++sheetCloseToken;
+// ════════════════════════════════════════
+// Dialog / Confirm / Alert
+// ════════════════════════════════════════
 
-  activeOverlay = null;
-  activeSheet = null;
-  activeSheetKeydownHandler = null;
+function showDialog({ title, body, buttons }) {
+  ensureUIStyle();
+  const overlay = document.createElement('div');
+  overlay.className = 'popo-overlay';
+  const dialog = document.createElement('div');
+  dialog.className = 'popo-dialog';
+  dialog.innerHTML = `
+    <div class="popo-dialog-title"></div>
+    <div class="popo-dialog-body"></div>
+    <div class="popo-dialog-actions"></div>
+  `;
+  dialog.querySelector('.popo-dialog-title').textContent = title || '';
+  dialog.querySelector('.popo-dialog-body').textContent = body || '';
+  const actions = dialog.querySelector('.popo-dialog-actions');
+  const overlayDialog = { overlay, dialog, closed: false };
 
-  if (keydownHandler) {
-    document.removeEventListener("keydown", keydownHandler);
+  const close = () => {
+    if (overlayDialog.closed) return;
+    overlayDialog.closed = true;
+    dialog.classList.remove('show');
+    overlay.classList.remove('show');
+    const cleanup = () => {
+      dialog.remove();
+      overlay.remove();
+    };
+    dialog.addEventListener('transitionend', cleanup, { once: true });
+    setTimeout(cleanup, 320);
+  };
+
+  buttons.forEach((b) => {
+    const btn = document.createElement('button');
+    btn.textContent = b.label;
+    if (b.type === 'primary') btn.classList.add('primary');
+    if (b.type === 'danger') btn.classList.add('danger');
+    btn.addEventListener('click', () => {
+      if (typeof b.onClick === 'function') {
+        const r = b.onClick();
+        if (r !== false) close();
+      } else close();
+    });
+    actions.appendChild(btn);
+  });
+
+  document.body.appendChild(overlay);
+  document.body.appendChild(dialog);
+  requestAnimationFrame(() => {
+    overlay.classList.add('show');
+    dialog.classList.add('show');
+  });
+  overlay.addEventListener('click', close);
+  return overlayDialog;
+}
+
+export function showConfirm({ title = '再想想嘛？', body = '', confirmText = '好哒', cancelText = '不要', danger = false, onConfirm, onCancel }) {
+  return showDialog({
+    title, body,
+    buttons: [
+      { label: cancelText, type: 'default', onClick: () => { if (typeof onCancel === 'function') onCancel(); } },
+      { label: confirmText, type: danger ? 'danger' : 'primary', onClick: () => { if (typeof onConfirm === 'function') onConfirm(); } }
+    ]
+  });
+}
+
+export function showAlert({ title = '哎呀', body = '', okText = '知道啦', onOk }) {
+  return showDialog({
+    title, body,
+    buttons: [
+      { label: okText, type: 'primary', onClick: () => { if (typeof onOk === 'function') onOk(); } }
+    ]
+  });
+}
+
+// ════════════════════════════════════════
+// Loading
+// ════════════════════════════════════════
+
+export function showLoading(text = '小手机正在醒来') {
+  ensureUIStyle();
+  let el = document.querySelector('.popo-loading');
+  if (el) el.remove();
+  el = document.createElement('div');
+  el.className = 'popo-loading';
+  el.innerHTML = `
+    <div style="display:flex;flex-direction:column;align-items:center;gap:14px">
+      <div style="display:flex">
+        <div class="popo-loading-dot"></div>
+        <div class="popo-loading-dot"></div>
+        <div class="popo-loading-dot"></div>
+      </div>
+      <div style="color:var(--text-primary);font-size:var(--font-size-small)">${text}</div>
+    </div>
+  `;
+  document.body.appendChild(el);
+  return () => el.remove();
+}
+
+// ════════════════════════════════════════
+// Icon
+// ════════════════════════════════════════
+
+export function iconHTML(name, size = 22, opts = {}) {
+  const path = ICON_PATHS[name];
+  if (!path) return '';
+  const extra = opts.fill ? `fill="${opts.fill}"` : '';
+  return `<svg class="popo-icon-svg" width="${size}" height="${size}" viewBox="0 0 24 24" ${extra}><path d="${path}"></path></svg>`;
+}
+
+export function createIcon(name, size = 22, opts = {}) {
+  const wrapper = document.createElement('span');
+  wrapper.className = 'popo-icon';
+  wrapper.style.display = 'inline-flex';
+  wrapper.innerHTML = iconHTML(name, size, opts);
+  return wrapper;
+}
+
+// ════════════════════════════════════════
+// 工具
+// ════════════════════════════════════════
+
+export function focusInto(container) {
+  if (!container) return;
+  const focusable = container.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+  for (const el of focusable) {
+    // 跳过隐藏元素
+    if (el.offsetParent === null && el.tagName !== 'INPUT') continue;
+    if (el.disabled) continue;
+    if (el.getAttribute('aria-hidden') === 'true') continue;
+    try { el.focus(); break; } catch (e) {}
   }
-
-  overlay?.classList.remove("open");
-  sheet?.classList.remove("open");
-
-  window.setTimeout(() => {
-    overlay?.remove();
-    sheet?.remove();
-
-    if (currentToken === sheetCloseToken && !activeOverlay && !activeSheet && !activeDialog) {
-      restoreFocus();
-    }
-  }, CLOSE_ANIMATION_DELAY);
 }
 
-export function showConfirm(message) {
-  return new Promise((resolve) => {
-    const { card, actions } = createDialog(message, resolve, false, {
-      title: "要确认一下嘛",
-      icon: "heart"
-    });
-
-    const cancelButton = createElement("button", "btn-ghost", "先不要");
-    const confirmButton = createElement("button", "btn-primary", "好呀");
-
-    cancelButton.type = "button";
-    confirmButton.type = "button";
-
-    cancelButton.addEventListener("click", () => clearActiveDialog(false));
-    confirmButton.addEventListener("click", () => clearActiveDialog(true));
-
-    actions.append(cancelButton, confirmButton);
-    confirmButton.focus({ preventScroll: true });
-
-    if (document.activeElement !== confirmButton) {
-      focusInto(card);
-    }
-  });
+export function registerIcon(name, path) {
+  if (name && path) ICON_PATHS[name] = path;
 }
 
-export function showAlert(message) {
-  return new Promise((resolve) => {
-    const { card, actions } = createDialog(message, resolve, undefined, {
-      title: "收到啦",
-      icon: "star"
-    });
-
-    const confirmButton = createElement("button", "btn-primary", "知道啦");
-    confirmButton.type = "button";
-
-    confirmButton.addEventListener("click", () => clearActiveDialog(undefined));
-
-    actions.append(confirmButton);
-    focusInto(card);
-  });
+export function getIconNames() {
+  return Object.keys(ICON_PATHS);
 }
-
-export function createIcon(name, size = 24) {
-  const iconName = Object.prototype.hasOwnProperty.call(ICON_PATHS, name) ? name : "more";
-  const svg = createSvgElement("svg", {
-    width: size,
-    height: size,
-    viewBox: "0 0 24 24",
-    fill: "none",
-    stroke: "currentColor",
-    "stroke-width": "1.5",
-    "stroke-linecap": "round",
-    "stroke-linejoin": "round",
-    "aria-hidden": "true",
-    focusable: "false"
-  });
-
-  ICON_PATHS[iconName].forEach(([tagName, attributes]) => {
-    svg.appendChild(createSvgElement(tagName, attributes));
-  });
-
-  return svg;
-}
-
-ensureCoreUiStyle();
-
-window.showToast = showToast;
-
-/* 依赖：无import；挂载 window.showToast；动态注入 core-ui-style；新增 forward 图标 */

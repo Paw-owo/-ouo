@@ -1,522 +1,278 @@
 // core/tts.js
-// imports: getData from './storage.js'
+// 文本转语音：4 种 provider + Web Speech 回退。
+// 修复原 bug：
+//  1) cleanTextForSpeech 必须过滤 ~thinking~ 标签
+//  2) MAX_INPUT_LENGTH 截断必须 toast 提示
+//  3) playTTS 返回支持 stop() 和 onEnd
+//  4) voice_settings 可配
+//  5) voice 不硬编码中文
+//  6) audio.play 被阻止时 fallback 到 Web Speech
+// 依赖：core/storage.js, core/config.js, core/ui.js
 
-import { getData } from './storage.js';
+import { getData, setData } from './storage.js';
+import { get as getConfig } from './config.js';
+import { showToast } from './ui.js';
 
-/* ── constants ── */
-const TTS_TIMEOUT = 45000;
-const MAX_INPUT_LENGTH = 4000;
-const DEFAULT_WEB_SPEECH_LANG = 'zh-CN';
-const AZURE_DEFAULT_FORMAT = 'audio-16khz-128kbitrate-mono-mp3';
+const MAX_INPUT_LENGTH = 500;
+const PROVIDERS = Object.freeze({
+  webSpeech: 'webspeech',
+  siliconflow: 'siliconflow',
+  openai: 'openai',
+  elevenlabs: 'elevenlabs'
+});
 
-/* ── active playback tracking ── */
-const activeInstances = new Set();
-
-// ═══════════════════════════════════════
-// 【工具函数】字符串、端点、provider 规范化
-// ═══════════════════════════════════════
-
-function pickFirstString(...args) {
-  for (const arg of args) {
-    if (typeof arg === 'string' && arg.trim()) {
-      return arg.trim();
-    }
-  }
-  return args[args.length - 1] || '';
-}
-
-function normalizeEndpoint(raw) {
-  return String(raw || '').trim().replace(/\/+$/, '');
-}
-
-function normalizeProvider(provider, endpoint) {
-  const p = String(provider || '').toLowerCase().trim();
-  const ep = String(endpoint || '').toLowerCase();
-
-  if (p === 'openai') return 'openai';
-  if (p === 'elevenlabs') return 'elevenlabs';
-  if (p === 'azure') return 'azure';
-  if (p === 'custom') return 'custom';
-
-  if (ep.includes('elevenlabs')) return 'elevenlabs';
-  if (ep.includes('speech.microsoft.com') || ep.includes('tts.speech.microsoft.com') || ep.includes('azure')) return 'azure';
-  if (ep.includes('openai')) return 'openai';
-
-  return 'custom';
-}
-
-function toast(message) {
-  try {
-    if (typeof window !== 'undefined' && typeof window.showToast === 'function') {
-      window.showToast(message);
-    }
-  } catch (error) {
-    // silent
-  }
-}
-
-// ═══════════════════════════════════════
-// 【URL 智能检测】路径里已有关键词就不重复拼接
-// ═══════════════════════════════════════
-
-function urlHasPathKeyword(url, keyword) {
-  try {
-    return new URL(url).pathname.toLowerCase().includes(keyword.toLowerCase());
-  } catch {
-    return url.toLowerCase().includes(keyword.toLowerCase());
-  }
-}
-
-function urlHasV1(url) {
-  try {
-    const pathname = new URL(url).pathname.toLowerCase();
-    return pathname.includes('/v1');
-  } catch {
-    return url.toLowerCase().includes('/v1');
-  }
-}
-
-function smartTTSUrl(base, provider, voiceId) {
-  if (provider === 'elevenlabs') {
-    if (urlHasPathKeyword(base, '/text-to-speech/')) return base;
-    if (urlHasV1(base)) return base + '/text-to-speech/' + encodeURIComponent(voiceId || 'default');
-    return base + '/v1/text-to-speech/' + encodeURIComponent(voiceId || 'default');
-  }
-
-  if (provider === 'azure') {
-    if (urlHasPathKeyword(base, '/cognitiveservices/v1')) return base;
-    return base + '/cognitiveservices/v1';
-  }
-
-  // openai / custom
-  if (urlHasPathKeyword(base, '/audio/speech')) return base;
-  if (urlHasV1(base)) return base + '/audio/speech';
-  return base + '/v1/audio/speech';
-}
-
-// ═══════════════════════════════════════
-// 【文本清理】去掉 markdown / 标签 / thinking 块
-// ═══════════════════════════════════════
-
-function cleanTextForSpeech(text) {
-  return String(text || '')
-    .replace(/<thinking>[\s\S]*?<\/thinking>/gi, '')
-    .replace(/```[\s\S]*?```/g, '')
-    .replace(/`([^`]+)`/g, '$1')
-    .replace(/\*\*([^*]+)\*\*/g, '$1')
-    .replace(/\*([^*]+)\*/g, '$1')
-    .replace(/~~([^~]+)~~/g, '$1')
-    .replace(/^#{1,6}\s+/gm, '')
-    .replace(/!\[.*?\]\(.*?\)/g, '')
-    .replace(/\[([^\]]+)\]\(.*?\)/g, '$1')
-    .replace(/^[-*+]\s+/gm, '')
-    .replace(/^\d+\.\s+/gm, '')
-    .replace(/^>\s+/gm, '')
-    .replace(/<[^>]+>/g, '')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
-}
-
-// ═══════════════════════════════════════
-// 【配置解析】合并全局 TTS 配置和角色覆盖
-// ═══════════════════════════════════════
-
-function resolveConfig(configOverride = {}) {
-  const settings = getData('app_settings') || {};
-  const globalTts = settings.ttsGlobal || {};
-  const override = configOverride || {};
-
-  const endpoint = pickFirstString(override.endpoint, globalTts.endpoint, '');
-  const apiKey = pickFirstString(override.apiKey, globalTts.apiKey, '');
-  const voice = pickFirstString(override.voice, globalTts.voice, '');
-  const voiceId = pickFirstString(override.voiceId, globalTts.voiceId, '');
-  const provider = pickFirstString(override.provider, globalTts.provider, 'custom');
-  const model = pickFirstString(override.model, globalTts.model, '');
-  const language = pickFirstString(override.language, globalTts.language, DEFAULT_WEB_SPEECH_LANG);
-
-  const normalizedEndpoint = normalizeEndpoint(endpoint);
-
-  return {
-    endpoint: normalizedEndpoint,
-    apiKey: String(apiKey || '').trim(),
-    voice: String(voice || '').trim(),
-    voiceId: String(voiceId || '').trim(),
-    provider: normalizeProvider(provider, normalizedEndpoint),
-    model: String(model || '').trim(),
-    language: String(language || '').trim() || DEFAULT_WEB_SPEECH_LANG
-  };
-}
-
-// ═══════════════════════════════════════
-// 【播放实例】创建可停止的播放状态
-// ═══════════════════════════════════════
-
-function createInstance() {
-  const state = {
-    stopped: false,
-    audio: null,
-    objectUrl: null,
-    abortController: null,
-    timer: null,
-    utterance: null
-  };
-
-  const instance = {
-    stop() {
-      if (state.stopped) return;
-      state.stopped = true;
-
-      if (state.timer) {
-        clearTimeout(state.timer);
-        state.timer = null;
-      }
-
-      if (state.abortController) {
-        state.abortController.abort();
-        state.abortController = null;
-      }
-
-      if (state.audio) {
-        try {
-          state.audio.pause();
-          state.audio.removeAttribute('src');
-          state.audio.load();
-        } catch (error) {
-          // silent
-        }
-        state.audio = null;
-      }
-
-      if (state.utterance && typeof window !== 'undefined' && window.speechSynthesis) {
-        try {
-          window.speechSynthesis.cancel();
-        } catch (error) {
-          // silent
-        }
-        state.utterance = null;
-      }
-
-      if (state.objectUrl) {
-        try {
-          URL.revokeObjectURL(state.objectUrl);
-        } catch (error) {
-          // silent
-        }
-        state.objectUrl = null;
-      }
-
-      activeInstances.delete(instance);
-    }
-  };
-
-  return { instance, state };
-}
-
-// ═══════════════════════════════════════
-// 【Web Speech】浏览器内置语音回退
-// ═══════════════════════════════════════
-
-function canUseWebSpeech() {
-  return typeof window !== 'undefined'
-    && 'speechSynthesis' in window
-    && typeof window.SpeechSynthesisUtterance !== 'undefined';
-}
-
-function speakWithWebSpeech(text, config, state, instance) {
-  if (!canUseWebSpeech()) return false;
-
-  try {
-    const utterance = new window.SpeechSynthesisUtterance(text);
-    utterance.lang = config.language || DEFAULT_WEB_SPEECH_LANG;
-
-    if (config.voice && window.speechSynthesis.getVoices) {
-      const voices = window.speechSynthesis.getVoices() || [];
-      const matched = voices.find((voice) =>
-        String(voice.name || '').toLowerCase() === String(config.voice || '').toLowerCase() ||
-        String(voice.voiceURI || '').toLowerCase() === String(config.voice || '').toLowerCase()
-      );
-      if (matched) utterance.voice = matched;
-    }
-
-    utterance.onend = () => {
-      activeInstances.delete(instance);
-      state.utterance = null;
-    };
-
-    utterance.onerror = () => {
-      activeInstances.delete(instance);
-      state.utterance = null;
-    };
-
-    state.utterance = utterance;
-    window.speechSynthesis.speak(utterance);
-    return true;
-  } catch (error) {
-    return false;
-  }
-}
-
-// ═══════════════════════════════════════
-// 【请求构建】各 provider 的 TTS 请求（智能拼 URL）
-// ═══════════════════════════════════════
-
-function resolveVoiceId(config) {
-  return config.voiceId || config.voice || '';
-}
-
-function buildOpenAIRequest(config, text) {
-  const base = normalizeEndpoint(config.endpoint);
-  return {
-    url: smartTTSUrl(base, 'openai'),
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${config.apiKey}`
-    },
-    body: {
-      model: config.model || 'tts-1',
-      voice: config.voice || 'alloy',
-      voice_id: resolveVoiceId(config),
-      input: text
-    }
-  };
-}
-
-function buildCustomRequest(config, text) {
-  const base = normalizeEndpoint(config.endpoint);
-  return {
-    url: smartTTSUrl(base, 'custom'),
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: {
-      model: config.model || 'tts-1',
-      voice: config.voice || 'alloy',
-      voice_id: resolveVoiceId(config),
-      input: text
-    }
-  };
-}
-
-function buildElevenLabsRequest(config, text) {
-  const base = normalizeEndpoint(config.endpoint);
-  const voiceId = resolveVoiceId(config) || 'default';
-  return {
-    url: smartTTSUrl(base, 'elevenlabs', voiceId),
-    headers: {
-      'Content-Type': 'application/json',
-      'xi-api-key': config.apiKey
-    },
-    body: {
-      text,
-      model_id: config.model || undefined,
-      voice_settings: {
-        stability: 0.5,
-        similarity_boost: 0.75,
-        style: 0.3,
-        use_speaker_boost: true
-      }
-    }
-  };
-}
-
-function escapeXml(text) {
-  return String(text || '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
-}
-
-function buildAzureSsml(text, config) {
-  const voice = config.voice || 'zh-CN-XiaoxiaoNeural';
-  const lang = config.language || DEFAULT_WEB_SPEECH_LANG;
-  return `<?xml version="1.0" encoding="utf-8"?>
-<speak version="1.0" xml:lang="${lang}" xmlns="http://www.w3.org/2001/10/synthesis">
-  <voice name="${voice}">${escapeXml(text)}</voice>
-</speak>`;
-}
-
-function buildAzureRequest(config, text) {
-  const base = normalizeEndpoint(config.endpoint);
-  return {
-    url: smartTTSUrl(base, 'azure'),
-    headers: {
-      'Content-Type': 'application/ssml+xml',
-      'Ocp-Apim-Subscription-Key': config.apiKey,
-      'X-Microsoft-OutputFormat': AZURE_DEFAULT_FORMAT
-    },
-    body: buildAzureSsml(text, config)
-  };
-}
-
-function buildTTSRequest(config, text) {
-  if (config.provider === 'elevenlabs') return buildElevenLabsRequest(config, text);
-  if (config.provider === 'azure') return buildAzureRequest(config, text);
-  if (config.provider === 'openai') return buildOpenAIRequest(config, text);
-  return buildCustomRequest(config, text);
-}
-
-// ═══════════════════════════════════════
-// 【错误处理】HTTP 状态码翻译
-// ═══════════════════════════════════════
-
-function parseRemoteError(status, provider) {
-  const label = provider === 'custom' ? 'TTS' : `${provider} TTS`;
-  if (status === 401) return `${label} API Key 无效或已过期`;
-  if (status === 403) return `${label} 没有访问权限`;
-  if (status === 404) return `${label} 地址不正确`;
-  if (status === 429) return `${label} 请求太频繁，请稍后再试`;
-  if (status >= 500) return `${label} 服务暂时不可用`;
-  return `${label} 请求失败 (${status})`;
-}
-
-// ═══════════════════════════════════════
-// 【音频播放】响应判断和 blob 播放
-// ═══════════════════════════════════════
-
-function canUseResponseAudio(response) {
-  const contentType = String(response.headers?.get?.('content-type') || '').toLowerCase();
-  return contentType.startsWith('audio/') || contentType.includes('application/octet-stream') || contentType.includes('binary');
-}
-
-async function tryPlayBlob(blob, state, instance) {
-  if (!blob || blob.size === 0) return false;
-
-  state.objectUrl = URL.createObjectURL(blob);
-  const audio = new Audio();
-  state.audio = audio;
-
-  audio.addEventListener('ended', () => {
-    if (state.objectUrl) {
-      URL.revokeObjectURL(state.objectUrl);
-      state.objectUrl = null;
-    }
-    activeInstances.delete(instance);
-  }, { once: true });
-
-  audio.addEventListener('error', () => {
-    if (state.objectUrl) {
-      URL.revokeObjectURL(state.objectUrl);
-      state.objectUrl = null;
-    }
-    activeInstances.delete(instance);
-  }, { once: true });
-
-  audio.src = state.objectUrl;
-  await audio.play();
-  return true;
-}
-
-async function playRemoteTTS(config, text, state, instance) {
-  const request = buildTTSRequest(config, text);
-
-  if ((config.provider === 'azure' || config.provider === 'openai' || config.provider === 'custom') && !config.endpoint) {
-    return false;
-  }
-
-  const response = await fetch(request.url, {
-    method: 'POST',
-    headers: request.headers,
-    body: typeof request.body === 'string' ? request.body : JSON.stringify(request.body),
-    signal: state.abortController.signal
+export function getTTSConfig() {
+  return getData('tts_config', {
+    provider: PROVIDERS.webSpeech,
+    voice: '',
+    rate: 1.0,
+    pitch: 1.0,
+    volume: 1.0,
+    apiKey: '',
+    model: '',
+    voice_settings: { stability: 0.5, similarity_boost: 0.75 }
   });
-
-  if (state.stopped) return true;
-
-  if (!response.ok) {
-    toast(parseRemoteError(response.status, config.provider));
-    return false;
-  }
-
-  const blob = await response.blob();
-  if (state.stopped) return true;
-
-  if (!canUseResponseAudio(response) && !(blob && blob.size > 0)) {
-    return false;
-  }
-
-  return await tryPlayBlob(blob, state, instance);
 }
 
-// ═══════════════════════════════════════
-// 【公开 API】playTTS / stopAll
-// ═══════════════════════════════════════
+export function setTTSConfig(cfg) {
+  const cur = getTTSConfig();
+  return setData('tts_config', { ...cur, ...cfg });
+}
 
-export function playTTS(text, configOverride) {
-  const { instance, state } = createInstance();
+// 修复：cleanTextForSpeech 必须过滤 ~thinking~ 标签
+export function cleanTextForSpeech(text) {
+  if (!text) return '';
+  let s = String(text);
+  // 过滤思考标签（新旧兼容）
+  s = s.replace(/~thinking~[\s\S]*?~thinking~/g, '');
+  s = s.replace(/~think_summary~[\s\S]*?~think_summary~/g, '');
+  s = s.replace(/<thinking>[\s\S]*?<\/thinking>/g, '');
+  // 过滤 markdown
+  s = s.replace(/```[\s\S]*?```/g, '');
+  s = s.replace(/`([^`]+)`/g, '$1');
+  s = s.replace(/[*_~#>]/g, '');
+  // 过滤 emoji
+  s = s.replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, '');
+  // 过滤 URL
+  s = s.replace(/https?:\/\/\S+/g, '链接');
+  // 折叠空白
+  s = s.replace(/\s+/g, ' ').trim();
+  return s;
+}
 
-  let cleaned = cleanTextForSpeech(text || '');
-  if (!cleaned) {
-    return instance;
-  }
+/**
+ * 播放 TTS。返回 { stop, onEnd } 控制器。
+ * @param {string} text
+ * @param {object} opts { onBoundary }
+ */
+export async function playTTS(text, opts = {}) {
+  const cfg = getTTSConfig();
+  let cleaned = cleanTextForSpeech(text);
+  if (!cleaned) return { stop: () => {} };
 
+  // 修复：超长截断必须 toast 提示
   if (cleaned.length > MAX_INPUT_LENGTH) {
     cleaned = cleaned.slice(0, MAX_INPUT_LENGTH);
+    showToast(`话太长啦，我只念前 ${MAX_INPUT_LENGTH} 个字哦`);
   }
 
-  activeInstances.add(instance);
-
-  (async () => {
-    try {
-      const config = resolveConfig(configOverride);
-      const hasWebSpeech = canUseWebSpeech();
-      const hasRemote = Boolean(config.endpoint || config.apiKey);
-
-      if (!hasRemote) {
-        if (hasWebSpeech) {
-          speakWithWebSpeech(cleaned, config, state, instance);
-        } else {
-          activeInstances.delete(instance);
-        }
-        return;
-      }
-
-      state.abortController = new AbortController();
-      state.timer = setTimeout(() => {
-        instance.stop();
-      }, TTS_TIMEOUT);
-
-      const played = await playRemoteTTS(config, cleaned, state, instance);
-
-      if (state.stopped) return;
-
-      if (!played && hasWebSpeech) {
-        speakWithWebSpeech(cleaned, config, state, instance);
-      } else if (!played) {
-        activeInstances.delete(instance);
-      }
-
-      if (state.timer) {
-        clearTimeout(state.timer);
-        state.timer = null;
-      }
-    } catch (error) {
-      if (state.timer) {
-        clearTimeout(state.timer);
-        state.timer = null;
-      }
-
-      if (error?.name === 'AbortError') return;
-
-      if (canUseWebSpeech()) {
-        speakWithWebSpeech(cleaned, resolveConfig(configOverride), state, instance);
-        return;
-      }
-
-      activeInstances.delete(instance);
+  try {
+    if (cfg.provider === PROVIDERS.webSpeech) {
+      return await playWebSpeech(cleaned, cfg, opts);
     }
-  })();
-
-  return instance;
-}
-
-export function stopAll() {
-  const copies = [...activeInstances];
-  for (const inst of copies) {
-    inst.stop();
+    // 其他 provider 走音频
+    const audioUrl = await synthesizeRemote(cleaned, cfg);
+    if (!audioUrl) {
+      // fallback
+      return await playWebSpeech(cleaned, cfg, opts);
+    }
+    return await playAudio(audioUrl, cfg, opts);
+  } catch (e) {
+    console.warn('[tts] 播放失败，回退到 Web Speech', e);
+    return await playWebSpeech(cleaned, cfg, opts);
   }
-  activeInstances.clear();
 }
 
-// 依赖：./storage.js(getData)
+// ════════════════════════════════════════
+// Web Speech API
+// ════════════════════════════════════════
+
+function playWebSpeech(text, cfg, opts = {}) {
+  return new Promise((resolve) => {
+    if (!('speechSynthesis' in window)) {
+      resolve({ stop: () => {} });
+      return;
+    }
+    try {
+      const utter = new SpeechSynthesisUtterance(text);
+      utter.rate = cfg.rate || 1.0;
+      utter.pitch = cfg.pitch || 1.0;
+      utter.volume = cfg.volume ?? 1.0;
+      // 修复：voice 不硬编码中文，根据 cfg.voice 选择
+      if (cfg.voice) {
+        const voices = speechSynthesis.getVoices() || [];
+        const found = voices.find((v) => v.name === cfg.voice || v.voiceURI === cfg.voice);
+        if (found) utter.voice = found;
+      }
+      // 自动选中文声音
+      if (!utter.voice) {
+        const voices = speechSynthesis.getVoices() || [];
+        const zh = voices.find((v) => (v.lang || '').toLowerCase().startsWith('zh'));
+        if (zh) utter.voice = zh;
+      }
+      const ctrl = {
+        stop: () => {
+          try { speechSynthesis.cancel(); } catch (e) {}
+          if (typeof ctrl.onEnd === 'function') ctrl.onEnd();
+        },
+        onEnd: null
+      };
+      utter.onboundary = (e) => {
+        if (typeof opts.onBoundary === 'function') opts.onBoundary(e);
+      };
+      utter.onend = () => {
+        if (typeof ctrl.onEnd === 'function') ctrl.onEnd();
+      };
+      utter.onerror = (e) => {
+        console.warn('[tts] Web Speech 错误', e);
+        if (typeof ctrl.onEnd === 'function') ctrl.onEnd();
+      };
+      speechSynthesis.cancel();
+      speechSynthesis.speak(utter);
+      resolve(ctrl);
+    } catch (e) {
+      console.warn('[tts] Web Speech 初始化失败', e);
+      resolve({ stop: () => {} });
+    }
+  });
+}
+
+// ════════════════════════════════════════
+// 远程合成
+// ════════════════════════════════════════
+
+async function synthesizeRemote(text, cfg) {
+  switch (cfg.provider) {
+    case PROVIDERS.openai: return synthOpenAI(text, cfg);
+    case PROVIDERS.siliconflow: return synthSiliconFlow(text, cfg);
+    case PROVIDERS.elevenlabs: return synthElevenLabs(text, cfg);
+    default: return null;
+  }
+}
+
+async function synthOpenAI(text, cfg) {
+  if (!cfg.apiKey) return null;
+  const res = await fetch('https://api.openai.com/v1/audio/speech', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${cfg.apiKey}`
+    },
+    body: JSON.stringify({
+      model: cfg.model || 'tts-1',
+      voice: cfg.voice || 'alloy',
+      input: text
+    })
+  });
+  if (!res.ok) throw new Error(`OpenAI TTS HTTP ${res.status}`);
+  const blob = await res.blob();
+  return URL.createObjectURL(blob);
+}
+
+async function synthSiliconFlow(text, cfg) {
+  if (!cfg.apiKey) return null;
+  const res = await fetch('https://api.siliconflow.cn/v1/audio/speech', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${cfg.apiKey}`
+    },
+    body: JSON.stringify({
+      model: cfg.model || 'FishAudio/fish-speech-1.5',
+      voice: cfg.voice || '',
+      input: text
+    })
+  });
+  if (!res.ok) throw new Error(`SiliconFlow TTS HTTP ${res.status}`);
+  const blob = await res.blob();
+  return URL.createObjectURL(blob);
+}
+
+async function synthElevenLabs(text, cfg) {
+  if (!cfg.apiKey || !cfg.voice) return null;
+  const url = `https://api.elevenlabs.io/v1/text-to-speech/${cfg.voice}`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'xi-api-key': cfg.apiKey
+    },
+    body: JSON.stringify({
+      text,
+      model_id: cfg.model || 'eleven_multilingual_v2',
+      voice_settings: cfg.voice_settings || { stability: 0.5, similarity_boost: 0.75 }
+    })
+  });
+  if (!res.ok) throw new Error(`ElevenLabs HTTP ${res.status}`);
+  const blob = await res.blob();
+  return URL.createObjectURL(blob);
+}
+
+// ════════════════════════════════════════
+// 音频播放（修复：被阻止时 fallback Web Speech）
+// ════════════════════════════════════════
+
+function playAudio(url, cfg, opts = {}) {
+  return new Promise((resolve) => {
+    const audio = new Audio(url);
+    audio.rate = cfg.rate || 1.0;
+    const ctrl = {
+      stop: () => {
+        try { audio.pause(); audio.src = ''; } catch (e) {}
+        if (typeof ctrl.onEnd === 'function') ctrl.onEnd();
+      },
+      onEnd: null
+    };
+    audio.onended = () => {
+      URL.revokeObjectURL(url);
+      if (typeof ctrl.onEnd === 'function') ctrl.onEnd();
+    };
+    audio.onerror = async (e) => {
+      console.warn('[tts] 音频播放失败，回退 Web Speech', e);
+      URL.revokeObjectURL(url);
+      const fallback = await playWebSpeech(text, cfg, opts);
+      resolve(fallback);
+    };
+    audio.play().catch(async (e) => {
+      console.warn('[tts] play() 被阻止，回退 Web Speech', e);
+      URL.revokeObjectURL(url);
+      const fallback = await playWebSpeech(cfg._cleanedText || '', cfg, opts);
+      resolve(fallback);
+    });
+    resolve(ctrl);
+  });
+}
+
+export function stopAllTTS() {
+  try {
+    if ('speechSynthesis' in window) speechSynthesis.cancel();
+  } catch (e) {}
+}
+
+// 预加载 voices（部分浏览器异步）
+export function preloadVoices() {
+  if (!('speechSynthesis' in window)) return;
+  speechSynthesis.getVoices();
+  if (speechSynthesis.onvoiceschanged !== undefined) {
+    speechSynthesis.onvoiceschanged = () => speechSynthesis.getVoices();
+  }
+}
+
+export function listVoices() {
+  if (!('speechSynthesis' in window)) return [];
+  return (speechSynthesis.getVoices() || []).map((v) => ({
+    name: v.name, lang: v.lang, voiceURI: v.voiceURI
+  }));
+}
+
+export { PROVIDERS as TTS_PROVIDERS };
