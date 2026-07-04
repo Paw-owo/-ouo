@@ -33,7 +33,9 @@ export const STORES = Object.freeze({
   flashcards: 'flashcards',
   alarms: 'alarms',
   notes: 'notes',
-  pomodoroStats: 'pomodoro_stats'
+  pomodoroStats: 'pomodoro_stats',
+  chatSessions: 'chat_sessions',
+  inbox: 'inbox'
 });
 
 export const KEYS = Object.freeze({
@@ -113,7 +115,15 @@ export const KEYS = Object.freeze({
   aiNightSilent: 'ai_night_silent',
 
   // 调试
-  eventsHistory: 'events_history'
+  eventsHistory: 'events_history',
+
+  // 第 0 步新增：AI / 消息中心 / APP 背景 / 系统
+  aiConfig: 'ai_config',
+  appAppBackgrounds: 'app_app_backgrounds',
+  inboxMessages: 'inbox_messages',
+  systemName: 'system_name',
+  chatMode: 'chat_mode',           // 'bubble' | 'dialog'
+  notifySettings: 'notify_settings'
 });
 
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;

@@ -13,6 +13,7 @@ import { get as getConfig } from './core/config.js';
 import bus from './core/events.js';
 import { openApp, goHome } from './core/router.js';
 import { seedDefaultCharacter, getDefaultCharacter } from './core/seed.js';
+import { initInbox } from './core/inbox.js';
 
 // ════════════════════════════════════════
 // DOM 引用
@@ -97,6 +98,7 @@ async function boot() {
     refreshLockScreen();
     refreshBadges();
     subscribeBus();
+    initInbox();
     setupPwaInstallPrompt();
   } catch (e) {
     console.error('[boot]', e);

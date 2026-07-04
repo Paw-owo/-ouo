@@ -1,141 +1,38 @@
 // apps/moments/index.js
 // 朋友圈 App——软萌少女风 PWA「泡泡」。
-// 我和初一一起发动态、互相点赞，把每天的小心情都记下来。
+// 我和初一（还有其他角色）一起发动态、互相点赞、留言回复，把每天的小心情都记下来。
 // 数据：IndexedDB（STORES.moments）
-//   字段 {id, author('初一'|'我'), content, images[], likes{liked,count}, createdAt, updatedAt}
-// 依赖：core/storage.js, core/storage-keys.js, core/ui.js, core/events.js, core/util.js
+//   字段 {id, author('初一'|'我'|角色名), content, images[], likes(number),
+//        likedByMe(bool), comments[{id,author,text,replyTo,createdAt}],
+//        pinned(bool), visibility('public'|'private'), createdAt, updatedAt}
+// 旧版 likes:{liked,count} 会在读取时自动迁移成新格式（见 shared.normalizeMoment）。
+// 依赖：core/storage.js, core/storage-keys.js, core/ui.js, core/events.js, core/util.js,
+//       core/ai-client.js, ./shared.js, ./comments.js, ./ai-post.js, ./detail.js
 
-import { STORES, KEYS } from '../../core/storage-keys.js';
-import { deleteDB, getAllDB, setDB, getData, generateId, getNow, compressImage } from '../../core/storage.js';
-import { showToast, showConfirm, showBottomSheet, createIcon } from '../../core/ui.js';
+import { STORES } from '../../core/storage-keys.js';
+import { getAllDB, setDB, generateId, getNow, compressImage } from '../../core/storage.js';
+import { showToast, showBottomSheet, createIcon } from '../../core/ui.js';
 import bus from '../../core/events.js';
-import { injectStyle, pickImageFile, formatRelative, pick } from '../../core/util.js';
+import { pickImageFile } from '../../core/util.js';
+import {
+  MAX_IMAGES, escapeHTML, escapeAttr, cssEscape, normalizeMoment,
+  renderAvatar, renderImages, buildCharAvatarMap, bindLongPress,
+  canDelete, toggleLike, togglePin, deleteMomentWithConfirm, formatRelative
+} from './shared.js';
+import { renderCommentPreview, openCommentSheet } from './comments.js';
+import { aiPost, scheduleAIReactions } from './ai-post.js';
+import { openDetail } from './detail.js';
 
 let containerEl = null;
-
-// 初一的预设文案池——她随时会偷偷发一条
-const AI_POST_POOL = [
-  '今天看到一朵云好像你',
-  '偷偷想你了一下',
-  '吃了好吃的好想分你一口',
-  '晚安，梦里见',
-  '今天也辛苦啦，抱抱'
-];
-
-const MAX_IMAGES = 9;
-
-// 头像渲染：初一用心形图标，我读 avatarState（如果主人设过的话）
-function renderAvatar(author) {
-  if (author === '初一') {
-    return `<div class="mom-avatar mom-avatar-ai">${createIcon('heart', 22).outerHTML}</div>`;
-  }
-  const avatarState = getData(KEYS.avatarState, null);
-  const img = avatarState && avatarState.image;
-  if (img) {
-    return `<div class="mom-avatar mom-avatar-me" style="background-image:url('${escapeAttr(img)}')"></div>`;
-  }
-  return `<div class="mom-avatar mom-avatar-default">${createIcon('smile', 22).outerHTML}</div>`;
-}
-
-injectStyle('app-moments-style', `
-  .mom-ai-post{
-    display:flex; align-items:center; gap:6px;
-    margin:0 auto 18px;
-    padding:9px 18px; border-radius:999px;
-    background:color-mix(in srgb, var(--accent-light) 60%, transparent);
-    color:var(--accent-dark);
-    font-size:var(--font-size-base); font-weight:500;
-    transition:var(--motion);
-  }
-  .mom-ai-post:active{ transform:scale(var(--press-scale)); }
-  .mom-ai-post .popo-icon-svg{ color:var(--accent); }
-  .mom-card{
-    background:var(--bg-card);
-    border-radius:var(--radius-card);
-    padding:14px 16px;
-    box-shadow:var(--shadow-sm);
-    margin-bottom:14px;
-    transition:var(--motion);
-    -webkit-user-select:none; user-select:none;
-  }
-  .mom-card-head{ display:flex; align-items:center; gap:10px; margin-bottom:10px; }
-  .mom-avatar{
-    width:40px; height:40px; border-radius:50%;
-    background:var(--bg-secondary);
-    background-size:cover; background-position:center;
-    display:flex; align-items:center; justify-content:center;
-    flex-shrink:0;
-  }
-  .mom-avatar-ai{
-    background:linear-gradient(135deg, var(--accent) 0%, var(--accent-dark) 100%);
-    color:var(--bubble-user-text);
-  }
-  .mom-avatar-default{ color:var(--text-hint); }
-  .mom-avatar-me{ background-color:var(--accent-light); }
-  .mom-card-meta{ flex:1; min-width:0; }
-  .mom-author{
-    font-size:var(--font-size-base); font-weight:600; color:var(--text-primary);
-  }
-  .mom-author.ai{ color:var(--accent-dark); }
-  .mom-time{ font-size:var(--font-size-small); color:var(--text-hint); margin-top:2px; }
-  .mom-content{
-    font-size:var(--font-size-base); color:var(--text-primary);
-    line-height:1.55; word-break:break-word; white-space:pre-wrap;
-    margin-bottom:10px;
-  }
-  .mom-imgs{ display:grid; gap:6px; margin-bottom:10px; }
-  .mom-imgs-1{ grid-template-columns:minmax(0,1fr); max-width:240px; }
-  .mom-imgs-2{ grid-template-columns:repeat(2,1fr); max-width:240px; }
-  .mom-imgs-3{ grid-template-columns:repeat(3,1fr); }
-  .mom-imgs-grid{ grid-template-columns:repeat(3,1fr); }
-  .mom-img{
-    background-size:cover; background-position:center;
-    background-color:var(--bg-secondary);
-    border-radius:var(--radius-sm);
-    padding-bottom:100%;
-  }
-  .mom-imgs-1 .mom-img{ padding-bottom:75%; }
-  .mom-actions{ display:flex; align-items:center; gap:8px; }
-  .mom-like{
-    display:inline-flex; align-items:center; gap:5px;
-    padding:6px 12px; border-radius:999px;
-    background:color-mix(in srgb, var(--bg-secondary) 60%, transparent);
-    color:var(--text-secondary); font-size:var(--font-size-small);
-    transition:var(--motion);
-  }
-  .mom-like:active{ transform:scale(var(--press-scale)); }
-  .mom-like.liked{
-    color:var(--accent);
-    background:color-mix(in srgb, var(--accent-light) 40%, transparent);
-  }
-  .mom-empty-icon{ color:var(--text-hint); opacity:0.5; margin-bottom:12px; }
-  .mom-form-row{ margin-bottom:14px; }
-  .mom-thumbs{ display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px; }
-  .mom-thumb{
-    position:relative; width:72px; height:72px;
-    border-radius:var(--radius-sm);
-    background-size:cover; background-position:center;
-    background-color:var(--bg-secondary);
-    overflow:hidden;
-  }
-  .mom-thumb-del{
-    position:absolute; right:2px; top:2px;
-    width:22px; height:22px; border-radius:50%;
-    background:rgba(0,0,0,0.55); color:#fff;
-    display:flex; align-items:center; justify-content:center;
-  }
-  .mom-add-img{
-    display:inline-flex; align-items:center; gap:6px;
-    font-size:var(--font-size-small);
-  }
-  .mom-add-img:disabled{ opacity:0.4; }
-`);
+let activeFilter = '全部';     // 当前角色筛选：'全部' | '我' | 角色名
+let charAvatarMap = {};         // {name: avatarDataURL}，每次 render 前刷新
+let characterNames = [];        // 所有角色名，给筛选条用
 
 // ════════════════════════════════════════
 // mount / unmount
 // ════════════════════════════════════════
 
-export async function mount(container, context) {
+export async function mount(container) {
   containerEl = container;
   container.innerHTML = `
     <div class="app-header">
@@ -144,13 +41,17 @@ export async function mount(container, context) {
       <button class="app-add" id="mom-add" aria-label="发动态">${createIcon('plus', 20).outerHTML}</button>
     </div>
     <div class="app-body" id="mom-body">
+      <div class="mom-filter-bar" id="mom-filter-bar"></div>
       <button class="mom-ai-post" id="mom-ai-post">${createIcon('smile', 18).outerHTML}让她发一条</button>
       <div id="mom-list"></div>
     </div>
   `;
   container.querySelector('#mom-back').addEventListener('click', () => bus.emit('router:home'));
   container.querySelector('#mom-add').addEventListener('click', () => openEditor());
-  container.querySelector('#mom-ai-post').addEventListener('click', () => aiPost());
+  container.querySelector('#mom-ai-post').addEventListener('click', async () => {
+    await aiPost();
+    await render();
+  });
   await render();
 }
 
@@ -163,8 +64,29 @@ export function unmount() {
 // ════════════════════════════════════════
 
 async function render() {
-  const listEl = containerEl?.querySelector('#mom-list');
-  if (!listEl) return;
+  const bodyEl = containerEl?.querySelector('#mom-body');
+  if (!bodyEl) return;
+  const listEl = bodyEl.querySelector('#mom-list');
+  const filterBarEl = bodyEl.querySelector('#mom-filter-bar');
+  if (!listEl || !filterBarEl) return;
+
+  // 预读角色（头像 + 名字）——筛选条要用名字，卡片要用头像
+  charAvatarMap = await buildCharAvatarMap();
+  characterNames = Object.keys(charAvatarMap);
+
+  // 渲染筛选条：全部 / 我 / 各角色
+  const tabs = ['全部', '我', ...characterNames];
+  filterBarEl.innerHTML = tabs.map((name) => `
+    <button class="mom-filter ${name === activeFilter ? 'active' : ''}" data-filter="${escapeAttr(name)}">${escapeHTML(name)}</button>
+  `).join('');
+  filterBarEl.querySelectorAll('.mom-filter').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      activeFilter = btn.dataset.filter;
+      render();
+    });
+  });
+
+  // 读动态
   let moments = [];
   try {
     moments = await getAllDB(STORES.moments);
@@ -173,141 +95,167 @@ async function render() {
     showToast('动态读不出来嘛，等一下再试试', 'error');
   }
   if (!Array.isArray(moments)) moments = [];
-  // 按 createdAt 倒序
+  moments = moments.map(normalizeMoment);
+
+  // 角色筛选
+  if (activeFilter === '我') {
+    moments = moments.filter((m) => m.author === '我');
+  } else if (activeFilter !== '全部') {
+    moments = moments.filter((m) => m.author === activeFilter);
+  }
+
+  // 排序：置顶在前，再按 createdAt 倒序
   moments.sort((a, b) => {
+    if (!!a.pinned !== !!b.pinned) return a.pinned ? -1 : 1;
     const ta = new Date(a.createdAt || 0).getTime();
     const tb = new Date(b.createdAt || 0).getTime();
     return tb - ta;
   });
+
   if (moments.length === 0) {
     listEl.innerHTML = `
       <div class="empty-state">
         <div class="mom-empty-icon">${createIcon('chat', 48).outerHTML}</div>
-        <div class="empty-state-text">还没有动态，发一条或者让她发一条嘛</div>
+        <div class="empty-state-text">${activeFilter === '全部' ? '还没有动态，发一条或者让她发一条嘛' : '这里还没有动态哦'}</div>
       </div>
     `;
     return;
   }
+
   listEl.innerHTML = moments.map(renderCard).join('');
   // 绑定每条事件
   moments.forEach((m) => {
     const card = listEl.querySelector(`[data-id="${cssEscape(m.id)}"]`);
     if (!card) return;
-    const likeBtn = card.querySelector('.mom-like');
-    if (likeBtn) likeBtn.addEventListener('click', () => toggleLike(m));
-    // 长按自己的帖子可删除
-    if (m.author === '我') {
-      bindLongPress(card, () => confirmDelete(m));
-    }
+    bindCardEvents(card, m);
   });
 }
 
 function renderCard(m) {
-  const avatar = renderAvatar(m.author);
-  const time = formatRelative(m.createdAt);
-  const likeIcon = createIcon('heart', 18).outerHTML;
-  const likes = m.likes || { liked: false, count: 0 };
-  const liked = !!likes.liked;
-  const likeCount = likes.count || 0;
+  const avatar = renderAvatar(m.author, charAvatarMap);
+  const relTime = formatRelative(m.createdAt);
+  const likeCount = m.likes || 0;
   const likeLabel = likeCount > 0 ? String(likeCount) : '赞';
+  const commentCount = (m.comments || []).length;
+  const commentLabel = commentCount > 0 ? String(commentCount) : '评论';
   const imagesHTML = renderImages(m.images || []);
+  const commentsPreviewHTML = renderCommentPreview(m, charAvatarMap);
+  const pinBadge = m.pinned
+    ? `<span class="mom-pin-badge">${createIcon('pin', 12).outerHTML}置顶</span>`
+    : '';
+  const visBadge = m.visibility === 'private'
+    ? `<span class="mom-vis-badge">${createIcon('lock', 12).outerHTML}仅自己</span>`
+    : '';
   return `
-    <div class="mom-card" data-id="${escapeAttr(m.id)}">
+    <div class="mom-card ${m.pinned ? 'pinned' : ''}" data-id="${escapeAttr(m.id)}">
       <div class="mom-card-head">
         ${avatar}
         <div class="mom-card-meta">
-          <div class="mom-author ${m.author === '初一' ? 'ai' : 'me'}">${escapeHTML(m.author)}</div>
-          <div class="mom-time">${escapeHTML(time)}</div>
+          <div class="mom-author ${m.author === '初一' ? 'ai' : ''}">${escapeHTML(m.author)}</div>
+          <div class="mom-time">${escapeHTML(relTime)}</div>
+          ${pinBadge}
+          ${visBadge}
         </div>
       </div>
       ${m.content ? `<div class="mom-content">${escapeHTML(m.content)}</div>` : ''}
       ${imagesHTML}
       <div class="mom-actions">
-        <button class="mom-like ${liked ? 'liked' : ''}" aria-label="${liked ? '取消赞' : '点赞'}">${likeIcon}<span>${escapeHTML(likeLabel)}</span></button>
+        <button class="mom-action-btn mom-like ${m.likedByMe ? 'liked' : ''}" data-act="like" aria-label="${m.likedByMe ? '取消赞' : '点赞'}">
+          ${createIcon('heart', 18).outerHTML}<span>${escapeHTML(likeLabel)}</span>
+        </button>
+        <button class="mom-action-btn mom-comment-btn" data-act="comment" aria-label="评论">
+          ${createIcon('chat', 18).outerHTML}<span>${escapeHTML(commentLabel)}</span>
+        </button>
+        <button class="mom-action-btn more" data-act="more" aria-label="更多">
+          ${createIcon('more', 18).outerHTML}
+        </button>
       </div>
+      ${commentsPreviewHTML}
     </div>
   `;
 }
 
-function renderImages(images) {
-  if (!images || images.length === 0) return '';
-  const n = images.length;
-  let cls;
-  if (n === 1) cls = 'mom-imgs-1';
-  else if (n === 2) cls = 'mom-imgs-2';
-  else if (n === 3) cls = 'mom-imgs-3';
-  else cls = 'mom-imgs-grid';
-  const items = images
-    .map((src) => `<div class="mom-img" style="background-image:url('${escapeAttr(src)}')"></div>`)
-    .join('');
-  return `<div class="mom-imgs ${cls}">${items}</div>`;
-}
+// formatRelative 直接从 shared 引入，卡片时间用它显示「刚刚 / N 分钟前」
 
-// ════════════════════════════════════════
-// 点赞 / 删除
-// ════════════════════════════════════════
-
-async function toggleLike(m) {
-  try {
-    const likes = m.likes || { liked: false, count: 0 };
-    const newLiked = !likes.liked;
-    const newCount = newLiked
-      ? (likes.count || 0) + 1
-      : Math.max(0, (likes.count || 0) - 1);
-    await setDB(STORES.moments, m.id, {
-      ...m,
-      likes: { liked: newLiked, count: newCount }
-    });
-    await render();
-  } catch (e) {
-    console.warn('[moments] 点赞失败', e);
-    showToast('没点赞成功，再试一下嘛', 'error');
-  }
-}
-
-function confirmDelete(m) {
-  showConfirm({
-    title: '删掉这条动态吗？',
-    body: '删掉就找不回来啦',
-    confirmText: '删掉吧',
-    cancelText: '留着',
-    danger: true,
-    onConfirm: async () => {
-      try {
-        await deleteDB(STORES.moments, m.id);
-        showToast('删掉啦', 'default', 1200);
-        await render();
-      } catch (e) {
-        console.warn('[moments] 删除失败', e);
-        showToast('没删掉，再试一下嘛', 'error');
+/** 给单张卡片绑定事件：点赞 / 评论 / 更多 / 进详情 / 长按菜单 */
+function bindCardEvents(card, m) {
+  // 点赞
+  const likeBtn = card.querySelector('[data-act="like"]');
+  if (likeBtn) {
+    likeBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const updated = await toggleLike(m.id);
+      if (updated) {
+        m.likes = updated.likes;
+        m.likedByMe = updated.likedByMe;
+        // 局部刷新这张卡片的点赞状态，体验更跟手
+        likeBtn.classList.toggle('liked', m.likedByMe);
+        const span = likeBtn.querySelector('span');
+        if (span) span.textContent = m.likes > 0 ? String(m.likes) : '赞';
       }
+    });
+  }
+  // 评论
+  const commentBtn = card.querySelector('[data-act="comment"]');
+  if (commentBtn) {
+    commentBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openCommentSheet(m.id, charAvatarMap, async () => { await render(); });
+    });
+  }
+  // 更多
+  const moreBtn = card.querySelector('[data-act="more"]');
+  if (moreBtn) {
+    moreBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openMenu(m);
+    });
+  }
+  // 点「查看全部评论」也进详情
+  const viewAllBtn = card.querySelector('.mom-comment-more');
+  if (viewAllBtn) {
+    viewAllBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openDetail(m.id, charAvatarMap, async () => { await render(); });
+    });
+  }
+  // 点卡片其它区域进详情
+  card.addEventListener('click', (e) => {
+    if (e.target.closest('button')) return; // 按钮已经各自处理
+    openDetail(m.id, charAvatarMap, async () => { await render(); });
+  });
+  // 长按弹菜单
+  bindLongPress(card, () => openMenu(m));
+}
+
+// ════════════════════════════════════════
+// 更多菜单（置顶 / 删除）
+// ════════════════════════════════════════
+
+function openMenu(m) {
+  const body = document.createElement('div');
+  const pinLabel = m.pinned ? '取消置顶' : '置顶';
+  const delItem = canDelete(m)
+    ? `<button class="mom-menu-item danger" data-act="del">${createIcon('trash', 18).outerHTML}删除</button>`
+    : '';
+  body.innerHTML = `
+    <button class="mom-menu-item" data-act="pin">${createIcon('pin', 18).outerHTML}${escapeHTML(pinLabel)}</button>
+    ${delItem}
+  `;
+  const sheet = showBottomSheet({ title: '操作', bodyElement: body, dismissible: true });
+  body.addEventListener('click', async (e) => {
+    const btn = e.target.closest('[data-act]');
+    if (!btn) return;
+    const act = btn.dataset.act;
+    if (act === 'pin') {
+      sheet.close();
+      await togglePin(m.id);
+      await render();
+    } else if (act === 'del') {
+      sheet.close();
+      deleteMomentWithConfirm(m, async () => { await render(); });
     }
   });
-}
-
-// ════════════════════════════════════════
-// AI 自动发帖
-// ════════════════════════════════════════
-
-async function aiPost() {
-  try {
-    const content = pick(AI_POST_POOL);
-    const id = generateId('moment');
-    const record = {
-      id,
-      author: '初一',
-      content,
-      images: [],
-      likes: { liked: false, count: 0 },
-      createdAt: getNow()
-    };
-    await setDB(STORES.moments, id, record);
-    showToast('初一偷偷发了一条', 'success', 1400);
-    await render();
-  } catch (e) {
-    console.warn('[moments] AI 发帖失败', e);
-    showToast('初一还没想好发什么呢', 'error');
-  }
 }
 
 // ════════════════════════════════════════
@@ -323,6 +271,13 @@ function openEditor() {
     <div class="mom-form-row">
       <div class="mom-thumbs" id="mom-thumbs"></div>
       <button class="btn ghost mom-add-img" id="mom-add-img">${createIcon('camera', 18).outerHTML}添加图片</button>
+    </div>
+    <div class="mom-form-row">
+      <label class="mom-add-img" style="display:inline-flex;margin-bottom:6px;">可见范围</label>
+      <select class="input" id="mom-vis" style="width:100%;">
+        <option value="public">公开</option>
+        <option value="private">仅自己</option>
+      </select>
     </div>
     <button class="btn primary block" id="mom-send">发出去</button>
   `;
@@ -376,24 +331,33 @@ function openEditor() {
   });
   body.querySelector('#mom-send').addEventListener('click', async () => {
     const content = body.querySelector('#mom-text').value.trim();
+    const visibility = body.querySelector('#mom-vis').value;
     if (!content && images.length === 0) {
       showToast('写点什么或者加张图片嘛', 'error');
       return;
     }
     try {
       const id = generateId('moment');
-      const record = {
+      const record = normalizeMoment({
         id,
         author: '我',
         content,
         images,
-        likes: { liked: false, count: 0 },
+        likes: 0,
+        likedByMe: false,
+        comments: [],
+        pinned: false,
+        visibility: visibility === 'private' ? 'private' : 'public',
         createdAt: getNow()
-      };
+      });
       await setDB(STORES.moments, id, record);
       sheet.close();
       showToast('发出去啦', 'success', 1400);
+      // 事件注入：消息中心会捕获
+      bus.emit('moments:new', { author: '我', preview: content.slice(0, 30), momentId: id });
       await render();
+      // 安排初一来互动：2-5s 点赞，5-10s 评论（用户离开页面也会照常进行）
+      scheduleAIReactions(id, content, () => { render(); });
     } catch (e) {
       console.warn('[moments] 发送失败', e);
       showToast('没发出去，再试一下嘛', 'error');
@@ -401,52 +365,4 @@ function openEditor() {
   });
   // 自动聚焦内容
   setTimeout(() => { try { body.querySelector('#mom-text')?.focus(); } catch (e) {} }, 60);
-}
-
-// ════════════════════════════════════════
-// 长按检测（用于删除自己的动态）
-// ════════════════════════════════════════
-
-function bindLongPress(el, callback) {
-  let timer = null;
-  let triggered = false;
-  const start = (e) => {
-    // 点到按钮（点赞等）时不触发长按
-    if (e.target && e.target.closest && e.target.closest('button')) return;
-    triggered = false;
-    timer = setTimeout(() => {
-      timer = null;
-      triggered = true;
-      callback();
-    }, 600);
-  };
-  const cancel = () => {
-    if (timer) { clearTimeout(timer); timer = null; }
-  };
-  el.addEventListener('touchstart', start, { passive: true });
-  el.addEventListener('touchend', cancel);
-  el.addEventListener('touchmove', cancel, { passive: true });
-  el.addEventListener('touchcancel', cancel);
-  el.addEventListener('mousedown', start);
-  el.addEventListener('mouseup', cancel);
-  el.addEventListener('mouseleave', cancel);
-  el.addEventListener('contextmenu', (e) => {
-    e.preventDefault();
-    if (!triggered) callback();
-  });
-}
-
-// ════════════════════════════════════════
-// 工具
-// ════════════════════════════════════════
-
-function escapeHTML(s) {
-  return String(s ?? '').replace(/[&<>"']/g, (c) => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-  }[c]));
-}
-function escapeAttr(s) { return escapeHTML(s); }
-function cssEscape(s) {
-  if (typeof CSS !== 'undefined' && CSS.escape) return CSS.escape(String(s));
-  return String(s).replace(/["\\]/g, '\\$&');
 }

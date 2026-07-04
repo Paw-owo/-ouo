@@ -14,6 +14,11 @@ import { exportToFile, importFromFile } from '../../core/storage-manager.js';
 import { showToast, showBottomSheet, showConfirm, createIcon } from '../../core/ui.js';
 import bus from '../../core/events.js';
 import { get as getConfig } from '../../core/config.js';
+// 新增卡片的子模块：拆出来避免 index.js 超过 800 行
+import { renderAICard } from './card-ai.js';
+import { renderNotifyCard } from './card-notify.js';
+import { renderDataMgmtCard } from './card-data.js';
+import { renderAppBgCard } from './card-bg.js';
 
 let containerEl = null;
 
@@ -36,7 +41,10 @@ async function renderSections() {
   body.innerHTML = '';
   body.appendChild(await renderThemeCard());
   body.appendChild(renderCustomColorsCard());
+  body.appendChild(renderAICard());
+  body.appendChild(renderNotifyCard());
   body.appendChild(renderWallpaperCard());
+  body.appendChild(await renderAppBgCard());
   body.appendChild(renderLockCard());
   body.appendChild(renderScaleCard());
   body.appendChild(renderPagesCard());
@@ -47,6 +55,7 @@ async function renderSections() {
   body.appendChild(renderWidgetMgmtCard());
   body.appendChild(await renderHiddenIconsCard());
   body.appendChild(renderDataCard());
+  body.appendChild(renderDataMgmtCard());
   body.appendChild(renderAboutCard());
 }
 
@@ -604,14 +613,24 @@ function renderDataCard() {
 function renderAboutCard() {
   const card = document.createElement('div');
   const theme = getCurrentTheme();
+  const systemName = getData(KEYS.systemName, '泡泡');
   card.className = 'card';
   const installable = !!window.popoInstallPrompt;
   card.innerHTML = `<div class="card-title">关于泡泡</div>
+    <div class="card-row"><span class="card-row-label">系统名字</span><input class="input" id="about-sysname" value="${escapeAttr(systemName)}" placeholder="泡泡" style="width:130px"></div>
     <div class="card-row"><span class="card-row-label">版本</span><span class="card-row-value">v1.0.0</span></div>
     <div class="card-row"><span class="card-row-label">当前主题</span><span class="card-row-value">${theme?.name || '默认'}</span></div>
     <div class="card-row"><span class="card-row-label">数据存储</span><span class="card-row-value">本地优先</span></div>
     <div class="card-row" id="pwa-install-row" style="${installable ? '' : 'display:none'}"><span class="card-row-label">装到桌面</span><button class="btn primary" id="pwa-install">安装</button></div>
     <div style="font-size:var(--font-size-small);color:var(--text-hint);margin-top:12px;line-height:1.6">泡泡是一个温柔的 AI 聊天伴侣桌面系统。她有情绪、有记忆，会撒娇、会闹别扭。所有数据都安安静静待在你的设备上，不会偷偷跑出去。</div>`;
+  // 系统名字改了就存起来，并广播一个事件让其他 App 跟着换
+  card.querySelector('#about-sysname').addEventListener('change', (e) => {
+    const name = e.target.value.trim() || '泡泡';
+    setData(KEYS.systemName, name);
+    e.target.value = name;
+    showToast('名字换好啦，刷新生效');
+    bus.emit('system:name-changed', { name });
+  });
   const installBtn = card.querySelector('#pwa-install');
   if (installBtn) installBtn.addEventListener('click', async () => {
     const ev = window.popoInstallPrompt;

@@ -185,7 +185,7 @@ export function getPreset(id) {
 }
 
 export function getCurrentThemeId() {
-  return getData(KEYS.appTheme, 'sky');
+  return getData(KEYS.appTheme, 'lavender');
 }
 
 export function getCurrentTheme() {
