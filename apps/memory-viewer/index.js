@@ -95,7 +95,7 @@ injectStyle('app-memory-viewer-style', `
     transition: var(--motion);
   }
   .mem-tool-btn:active { transform: scale(var(--press-scale)); }
-  .mem-tool-btn.danger { color: #E8888C; }
+  .mem-tool-btn.danger { color: var(--danger); }
   .mem-chip-row {
     display: flex; gap: 8px; overflow-x: auto;
     scrollbar-width: none; padding: 2px 0 10px;

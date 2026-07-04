@@ -71,7 +71,7 @@ injectStyle('app-avatar-style', `
   }
   .av-cards .card{ margin-bottom:14px; padding:16px; }
   .av-upload-row{ display:flex; gap:10px; flex-wrap:wrap; }
-  .av-clear{ color:#E8888C; }
+  .av-clear{ color:var(--danger); }
   .av-shape-row{ display:flex; gap:10px; }
   .av-shape-btn{
     flex:1; padding:10px; border-radius:var(--radius-md);
@@ -309,16 +309,26 @@ function bindControls() {
   });
   // 保存
   containerEl.querySelector('#av-save').addEventListener('click', async () => {
+    // 先读当前角色：如果已删除（getDB 返回 undefined），提示并退出，不写 avatarState、不 emit、不 toast 成功
+    let character = null;
+    let cid = null;
+    try {
+      cid = getData(KEYS.chatCurrentCharacter, null) || 'char_chuyi';
+      character = await getDB(STORES.characters, cid);
+    } catch (e) {
+      console.warn('[avatar] 读取当前角色失败', e);
+    }
+    if (!character || typeof character !== 'object') {
+      // 角色已删除：静默失败会被误以为成功，这里直接提示
+      showToast('找不到当前角色，换不了头像呢', 'error', 1600);
+      return;
+    }
     setData(KEYS.avatarState, workingState);
     // 同步更新当前角色的 avatar 字段，让桌面 / 钱包 / 角色卡都跟着换头像
     try {
-      const cid = getData(KEYS.chatCurrentCharacter, null) || 'char_chuyi';
-      const character = await getDB(STORES.characters, cid);
-      if (character && typeof character === 'object') {
-        character.avatar = isUsableImage(workingState.image) ? workingState.image : '';
-        character.updatedAt = getNow();
-        await setDB(STORES.characters, cid, character);
-      }
+      character.avatar = isUsableImage(workingState.image) ? workingState.image : '';
+      character.updatedAt = getNow();
+      await setDB(STORES.characters, cid, character);
     } catch (e) {
       console.warn('[avatar] 同步角色头像失败', e);
     }

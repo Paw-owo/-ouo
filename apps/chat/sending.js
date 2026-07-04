@@ -9,7 +9,7 @@ import { getDB, setDB, getAllDB, generateId, getNow, compressImage } from '../..
 import { showToast, createIcon, registerIcon } from '../../core/ui.js';
 import bus from '../../core/events.js';
 import { pickImageFile } from '../../core/util.js';
-import { streamChat, buildMessages, isAIConfigured } from '../../core/ai-client.js';
+import { streamChat, buildMessages, isAIConfigured, parseThinkingTags } from '../../core/ai-client.js';
 import { buildMemoryPrompt, recordInteraction } from '../../core/memory.js';
 import { getRecentEventsPrompt } from '../../core/inbox.js';
 import { getLocalReply, pickReplyCategory, inferMood, inferImportance } from './local-replies.js';
@@ -211,12 +211,12 @@ async function triggerAIReply(userMsg) {
     if (state.currentSessionId === sess.id) state.currentCharacter = character;
   }
 
-  // 历史消息（最近 20 条）
+  // 历史消息（最近 20 条）—— 排除当前刚落盘的 userMsg，避免和单独传入的 userText 在 messages 末尾重复
   let history = [];
   try {
     const all = await getAllDB(STORES.messages);
     history = all
-      .filter((m) => m.sessionId === sess.id || (!m.sessionId && m.characterId === sess.characterId))
+      .filter((m) => (m.sessionId === sess.id || (!m.sessionId && m.characterId === sess.characterId)) && m.id !== userMsg.id)
       .sort((a, b) => new Date(a.timestamp || a.createdAt) - new Date(b.timestamp || b.createdAt))
       .slice(-20)
       .map((m) => ({ role: m.role, content: m.content || '' }));
@@ -310,11 +310,31 @@ async function triggerAIReply(userMsg) {
   }
 
   // ── 本地兜底 ──
-  const replyText = getLocalReply(userMsg.content, state.lastReply, {
+  let replyText = getLocalReply(userMsg.content, state.lastReply, {
     isImage: userMsg.type === 'image',
     characterId: sess.characterId
   });
-  state.lastReply = replyText;
+  // 拆 ~thinking~ 标签：思维链走 onThinking UI，主内容走流式
+  if (replyText.includes('~thinking~')) {
+    const segs = parseThinkingTags(replyText, false);
+    let content = '';
+    let thinking = '';
+    for (const seg of segs) {
+      if (seg.type === 'thinking') thinking += seg.text;
+      else content += seg.text;
+    }
+    // lastReply 用纯主内容做去重，不带 thinking 标签
+    state.lastReply = content;
+    // 思维链先发（模拟"先想后说"），和 AI 流式 onThinking 一致的处理
+    if (thinking && msgEl && msgEl.isConnected) {
+      thinkingText = thinking;
+      updateThinkingUI(msgEl, thinking, { streaming: true });
+      if (isNearBottom()) scrollToBottom();
+    }
+    replyText = content;
+  } else {
+    state.lastReply = replyText;
+  }
   accText = await streamLocalReply(bubbleEl, replyText);
   await finishAIMessage(sess, character, aiMsg, msgEl, bubbleEl, accText, userMsg, thinkingText);
 }

@@ -177,7 +177,7 @@ export function injectGameStyles() {
   }
   .truth-btn:active{transform:scale(var(--press-scale));}
   .truth-btn.truth{color:var(--accent-dark);}
-  .truth-btn.dare{color:#E8888C;}
+  .truth-btn.dare{color:var(--danger);}
   .truth-btn .popo-icon{display:flex;}
   .truth-card{
     background:var(--bg-card);border-radius:var(--radius-card);
@@ -350,8 +350,8 @@ export function injectGameStyles() {
     background:color-mix(in srgb,var(--accent-light) 50%,transparent);
     padding:1px 8px;border-radius:999px;font-weight:500;
   }
-  .games-history-tag.dare{color:#E8888C;background:color-mix(in srgb,#E8888C 18%,transparent);}
-  .games-history-tag.undercover{color:#7A9BE0;background:color-mix(in srgb,#7A9BE0 18%,transparent);}
+  .games-history-tag.dare{color:var(--danger);background:color-mix(in srgb,var(--danger) 18%,transparent);}
+  .games-history-tag.undercover{color:var(--info);background:color-mix(in srgb,var(--info) 18%,transparent);}
   .games-history-tag.tavern{color:#B07AE0;background:color-mix(in srgb,#B07AE0 18%,transparent);}
   .games-history-time{font-size:var(--font-size-small);color:var(--text-hint);}
   .games-history-text{font-size:var(--font-size-base);color:var(--text-primary);margin-top:4px;line-height:1.5;}

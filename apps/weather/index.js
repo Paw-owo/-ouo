@@ -67,7 +67,7 @@ injectStyle('app-weather-style', `
   .weather-forecast-pop{ width:38px; text-align:right; font-size:11px; color:var(--text-hint) }
   /* AQI 空气质量 */
   .weather-aqi{ display:flex; align-items:center; gap:12px; padding:12px 14px; background:color-mix(in srgb,var(--accent-light) 22%,transparent); border-radius:var(--radius-md) }
-  .weather-aqi-badge{ min-width:46px; text-align:center; padding:6px 10px; border-radius:var(--radius-sm); color:#fff; font-weight:600; font-size:var(--font-size-base) }
+  .weather-aqi-badge{ min-width:46px; text-align:center; padding:6px 10px; border-radius:var(--radius-sm); color:var(--bubble-user-text); font-weight:600; font-size:var(--font-size-base) }
   .weather-aqi-text{ flex:1; min-width:0 }
   .weather-aqi-label{ font-size:var(--font-size-small); color:var(--text-secondary) }
   .weather-aqi-desc{ font-size:var(--font-size-small); color:var(--text-hint); margin-top:2px; line-height:1.4 }
@@ -82,10 +82,10 @@ injectStyle('app-weather-style', `
   /* 天气预警 */
   .weather-warning{ display:flex; gap:10px; padding:12px 14px; border-radius:var(--radius-md); background:color-mix(in srgb,var(--warning) 18%,transparent); border:1px solid color-mix(in srgb,var(--warning) 45%,transparent) }
   .weather-warning.danger{ background:color-mix(in srgb,var(--danger) 18%,transparent); border-color:color-mix(in srgb,var(--danger) 45%,transparent) }
-  .weather-warning.cold{ background:color-mix(in srgb,#5BA3F0 18%,transparent); border-color:color-mix(in srgb,#5BA3F0 45%,transparent) }
+  .weather-warning.cold{ background:color-mix(in srgb,var(--info) 18%,transparent); border-color:color-mix(in srgb,var(--info) 45%,transparent) }
   .weather-warning-icon{ flex-shrink:0; color:var(--warning) }
   .weather-warning.danger .weather-warning-icon{ color:var(--danger) }
-  .weather-warning.cold .weather-warning-icon{ color:#5BA3F0 }
+  .weather-warning.cold .weather-warning-icon{ color:var(--info) }
   .weather-warning-body{ flex:1; min-width:0 }
   .weather-warning-title{ font-size:var(--font-size-base); color:var(--text-primary); font-weight:600; margin-bottom:2px }
   .weather-warning-text{ font-size:var(--font-size-small); color:var(--text-secondary); line-height:1.5 }

@@ -96,8 +96,8 @@ injectStyle('app-inbox-style', `
   .inbox-dot {
     position: absolute; left: 7px; top: 50%; transform: translateY(-50%);
     width: 8px; height: 8px; border-radius: 50%;
-    background: #E8888C; flex-shrink: 0;
-    box-shadow: 0 0 0 3px color-mix(in srgb, #E8888C 22%, transparent);
+    background: var(--danger); flex-shrink: 0;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 22%, transparent);
   }
   .inbox-item-icon {
     flex-shrink: 0; width: 40px; height: 40px; border-radius: 50%;
@@ -159,7 +159,7 @@ injectStyle('app-inbox-style', `
     transition: var(--motion);
   }
   .inbox-clear-all:active { transform: scale(var(--press-scale)); }
-  .inbox-clear-all.danger { color: #E8888C; border-color: color-mix(in srgb, #E8888C 40%, transparent); }
+  .inbox-clear-all.danger { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, transparent); }
 
   .inbox-header-action {
     font-size: var(--font-size-small); color: var(--accent-dark);

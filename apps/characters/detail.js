@@ -318,7 +318,7 @@ async function fetchGrudges(characterId) {
 // 钱包余额：兼容 wallet 增强后的角色独立余额字段
 // walletState 结构：{globalBalance, balance, characters:{[id]:number}, transactions:[...]}
 // 旧版可能写作 characterBalances（已废弃），这里同时兼容
-// 没有角色独立余额时回退到全局余额
+// 角色不在 characters map 中时显示 0，不再回退到全局余额（避免误导用户）
 function fetchWalletBalance(characterId) {
   try {
     const s = getData(KEYS.walletState, null);
@@ -328,7 +328,8 @@ function fetchWalletBalance(characterId) {
     if (charMap && Object.prototype.hasOwnProperty.call(charMap, characterId)) {
       return Number(charMap[characterId]) || 0;
     }
-    return Number(s.globalBalance != null ? s.globalBalance : s.balance) || 0;
+    // 角色没独立钱包：返回 0（不回退到 globalBalance，避免把主人的钱当成 TA 的）
+    return 0;
   } catch (e) {
     return 0;
   }

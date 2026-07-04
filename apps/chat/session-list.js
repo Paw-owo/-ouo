@@ -52,6 +52,8 @@ export async function renderSessionListPage(keyword = '') {
   const searchInput = container.querySelector('#chat-search');
   const onSearch = debounce((e) => {
     const kw = (e.target.value || '').trim().toLowerCase();
+    // 回写 state.lastSearchKeyword，跨视图保留（进入聊天再返回时搜索框能恢复）
+    state.lastSearchKeyword = kw;
     renderSessionListItems(kw);
   }, 180);
   searchInput.addEventListener('input', onSearch);
@@ -77,7 +79,9 @@ export async function renderSessionListItems(keyword = '') {
   }
 
   // 关键词过滤：先按 title/lastMessage 快速匹配，未命中的再搜历史消息正文
-  const kw = String(keyword || '').toLowerCase();
+  // 跨视图保留：kw 为空但 state 上有上次关键字时，沿用上次的（适配未传参的调用方）
+  let kw = String(keyword || '').toLowerCase();
+  if (!kw && state.lastSearchKeyword) kw = state.lastSearchKeyword;
   let filtered;
   if (kw) {
     const matchedIds = new Set();
@@ -95,11 +99,26 @@ export async function renderSessionListItems(keyword = '') {
     if (unmatched.length) {
       let allMessages = [];
       try { allMessages = await getAllDB(STORES.messages); } catch (e) {}
+      // 按 sessionId / characterId 分组建 Map，避免对每个未命中会话全量扫描（O(会话数×消息数) -> O(消息数 + 命中会话消息数)）
+      // 匹配逻辑与原一致：有 sessionId 用 sessionId，无 sessionId 才用 characterId
+      const msgBySessionId = new Map();
+      const msgByCharacterId = new Map();
+      for (const m of allMessages) {
+        if (m.sessionId) {
+          let arr = msgBySessionId.get(m.sessionId);
+          if (!arr) { arr = []; msgBySessionId.set(m.sessionId, arr); }
+          arr.push(m);
+        } else if (m.characterId) {
+          let arr = msgByCharacterId.get(m.characterId);
+          if (!arr) { arr = []; msgByCharacterId.set(m.characterId, arr); }
+          arr.push(m);
+        }
+      }
       const msgMatches = unmatched.filter((s) => {
-        return allMessages.some((m) =>
-          (m.sessionId === s.id || (!m.sessionId && m.characterId === s.characterId)) &&
-          String(m.content || '').toLowerCase().includes(kw)
-        );
+        const bySid = msgBySessionId.get(s.id) || [];
+        if (bySid.some((m) => String(m.content || '').toLowerCase().includes(kw))) return true;
+        const byCid = msgByCharacterId.get(s.characterId) || [];
+        return byCid.some((m) => String(m.content || '').toLowerCase().includes(kw));
       });
       filtered = [...quickMatches, ...msgMatches];
     } else {

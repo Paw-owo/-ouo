@@ -79,7 +79,6 @@ const modules = [
   'core/router.js',
   'core/seed.js',
   'core/api.js',
-  'core/local-chat.js',
   'core/mcp.js',
   'core/tts.js',
   'apps-registry.js',

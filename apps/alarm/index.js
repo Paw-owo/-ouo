@@ -200,7 +200,7 @@ export async function mount(container, context) {
     .alarm-toggle::after{
       content:'';position:absolute;top:3px;left:3px;
       width:20px;height:20px;border-radius:50%;
-      background:#fff;box-shadow:var(--shadow-sm);
+      background:var(--bg-card);box-shadow:var(--shadow-sm);
       transition:transform var(--motion) var(--motion-spring);
     }
     .alarm-toggle.on{background:var(--accent)}

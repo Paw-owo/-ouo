@@ -7,6 +7,8 @@
 
 import { FALLBACK_REPLIES } from './ai-spec.js';
 import { getAffectionCached } from '../../core/affection.js';
+import { getData } from '../../core/storage.js';
+import { KEYS } from '../../core/storage-keys.js';
 
 // ════════════════════════════════════════
 // 回复池（从 apps/chat/local-replies.js 迁移过来）
@@ -287,14 +289,58 @@ export function pickImageReply() {
 
 /**
  * 我一次性拿本地回复（关键词分类 + 时段 + 好感度 + 去重），方便调用方直接用。
+ * 思维链开关：ai_config.enableChain 开启时，在回复前拼 ~thinking~...~thinking~ 思考内容，
+ * 调用方（如 sending.js）可用 ai-client.js 的 parseThinkingTags 拆分后走 onThinking。
  * @param {string} text 用户输入
  * @param {string} [lastReply] 上一条回复
- * @param {object} [opts] { isImage?: boolean, characterId?: string }
+ * @param {object} [opts] { isImage?: boolean, characterId?: string, enableChain?: boolean }
+ * @returns {string} 兜底回复（开启思维链时带 ~thinking~ 标签前缀）
  */
 export function getLocalReply(text, lastReply, opts = {}) {
-  if (opts.isImage) return pickImageReply();
-  const category = pickReplyCategory(text);
-  return pickReply(category, lastReply, opts);
+  let reply;
+  if (opts.isImage) {
+    reply = pickImageReply();
+  } else {
+    const category = pickReplyCategory(text);
+    reply = pickReply(category, lastReply, opts);
+  }
+  // 思维链开关：开启时在回复前拼 ~thinking~ 包裹的思考内容（不改回复本身）
+  if (isChainEnabled(opts)) {
+    const thought = buildLocalThinking(text, opts);
+    return `~thinking~${thought}~thinking~${reply}`;
+  }
+  return reply;
+}
+
+/**
+ * 我判断思维链是否开启：opts 显式传了就用传的，否则读 ai_config.enableChain。
+ * @param {object} opts
+ * @returns {boolean}
+ */
+function isChainEnabled(opts = {}) {
+  if (typeof opts.enableChain === 'boolean') return opts.enableChain;
+  try {
+    const cfg = getData(KEYS.aiConfig, null);
+    return !!(cfg && cfg.enableChain);
+  } catch (e) {
+    return false;
+  }
+}
+
+/**
+ * 我根据用户输入生成一句简短的思考内容（让本地兜底也有"先想后说"的感觉）。
+ * 不做复杂 NLP，只取用户输入前 20 字拼一句"TA 想了想..."。
+ * @param {string} text 用户输入
+ * @param {object} [opts] { isImage?: boolean }
+ * @returns {string}
+ */
+function buildLocalThinking(text, opts = {}) {
+  if (opts.isImage) return 'TA 发了张图片，我先看看再回';
+  const t = String(text || '').trim();
+  if (!t) return 'TA 没说话，我要温柔地陪一陪';
+  const head = t.slice(0, 20);
+  const ellipsis = t.length > 20 ? '...' : '';
+  return `TA 说了${head}${ellipsis}，我要温柔地回应`;
 }
 
 /** 我从分类推心情（写记忆用） */

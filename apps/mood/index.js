@@ -52,11 +52,11 @@ injectStyle('app-mood-style', `
   .mood-today-bubble {
     position: absolute;
     border-radius: 50%;
-    background: rgba(255,255,255,.16);
+    background: color-mix(in srgb, var(--bubble-user-text) 16%, transparent);
     pointer-events: none;
   }
   .mood-today-bubble.b1 { width: 80px; height: 80px; right: -22px; top: -24px; }
-  .mood-today-bubble.b2 { width: 40px; height: 40px; right: 30px; bottom: -18px; background: rgba(255,255,255,.10); }
+  .mood-today-bubble.b2 { width: 40px; height: 40px; right: 30px; bottom: -18px; background: color-mix(in srgb, var(--bubble-user-text) 10%, transparent); }
   .mood-today-title {
     font-size: var(--font-size-base);
     font-weight: 600;
@@ -74,7 +74,7 @@ injectStyle('app-mood-style', `
     aspect-ratio: 1;
     border-radius: var(--radius-md);
     border: 2px solid transparent;
-    background: rgba(255,255,255,.18);
+    background: color-mix(in srgb, var(--bubble-user-text) 18%, transparent);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -84,16 +84,16 @@ injectStyle('app-mood-style', `
   }
   .mood-emoji-btn:active { transform: scale(var(--press-scale)); }
   .mood-emoji-btn.active {
-    border-color: rgba(255,255,255,.85);
-    background: rgba(255,255,255,.30);
+    border-color: color-mix(in srgb, var(--bubble-user-text) 85%, transparent);
+    background: color-mix(in srgb, var(--bubble-user-text) 30%, transparent);
     transform: translateY(-2px);
   }
   .mood-today-note {
     width: 100%;
     box-sizing: border-box;
     border-radius: var(--radius-sm);
-    background: rgba(255,255,255,.20);
-    border: 1px solid rgba(255,255,255,.18);
+    background: color-mix(in srgb, var(--bubble-user-text) 20%, transparent);
+    border: 1px solid color-mix(in srgb, var(--bubble-user-text) 18%, transparent);
     color: var(--bubble-user-text);
     padding: 10px 12px;
     font-size: var(--font-size-base);
@@ -103,11 +103,11 @@ injectStyle('app-mood-style', `
     margin-bottom: 10px;
   }
   .mood-today-note::placeholder { color: color-mix(in srgb, var(--bubble-user-text) 70%, transparent); }
-  .mood-today-note:focus { outline: none; background: rgba(255,255,255,.28); }
+  .mood-today-note:focus { outline: none; background: color-mix(in srgb, var(--bubble-user-text) 28%, transparent); }
   .mood-today-save {
     width: 100%;
     justify-content: center;
-    background: rgba(255,255,255,.92);
+    background: color-mix(in srgb, var(--bubble-user-text) 92%, transparent);
     color: var(--accent-dark);
     font-weight: 600;
     padding: 11px;
@@ -738,7 +738,7 @@ function openHistoryForm(entry) {
 function moodColor(score) {
   switch (score) {
     case 1: return 'var(--danger)';
-    case 2: return 'color-mix(in srgb, var(--danger) 55%, #F5B86A 45%)';
+    case 2: return 'color-mix(in srgb, var(--danger) 55%, var(--accent) 45%)';
     case 3: return 'color-mix(in srgb, var(--text-hint) 55%, var(--accent) 45%)';
     case 4: return 'var(--accent)';
     case 5: return 'var(--accent-dark)';

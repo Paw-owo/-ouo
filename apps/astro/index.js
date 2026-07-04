@@ -256,7 +256,7 @@ export async function mount(container, context) {
       margin-bottom:6px;display:flex;align-items:center;gap:4px;
     }
     .astro-yiji-head.yi{color:#3a8a55}
-    .astro-yiji-head.ji{color:#E8888C}
+    .astro-yiji-head.ji{color:var(--danger)}
     .astro-yiji-text{font-size:var(--font-size-base);color:var(--text-primary);line-height:1.5}
     /* 详情卡：运势条目可点 */
     .astro-fortune-row{cursor:pointer;transition:var(--motion)}

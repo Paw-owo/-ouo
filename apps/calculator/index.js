@@ -1,12 +1,13 @@
 // apps/calculator/index.js
-// 计算器 App——Phase 1 真实可用版。
-// 对齐：Soulver（自然语言计算器，但 Phase 1 先做基础四则运算）。
+// 计算器 App——支持科学计算的完整表达式版。
+// 对齐：Soulver（自然语言计算器，但 Phase 1 先做基础四则运算 + 科学函数）。
 // 功能：
 //   1) 4x5 键盘：数字 / 四则运算 / 等于 / 清空 / 正负 / 百分比 / 小数点
-//   2) 安全求值（无 eval，手写状态机）
-//   3) 历史记录持久化到 localStorage，最多 50 条
-//   4) 可爱第一人称文案
-//   5) 全部视觉值走 CSS 变量（已用 .calc-* 类）
+//   2) 科学面板：sin/cos/tan/log/ln/√/x²/π/e/( )，横向滚动一行
+//   3) 完整表达式解析器（tokenize + shunting-yard + 后缀求值），支持运算符优先级、括号嵌套、函数调用
+//   4) 历史记录持久化到 localStorage，最多 50 条
+//   5) 可爱第一人称文案
+//   6) 全部视觉值走 CSS 变量（已用 .calc-* 类）
 // 依赖：core/storage.js, core/storage-keys.js, core/ui.js, core/events.js
 
 import { KEYS } from '../../core/storage-keys.js';
@@ -49,12 +50,10 @@ injectStyle('app-calculator-sci-style', `
   }
 `);
 
-// 计算器状态机
-//   display: 当前显示的字符串（用户正在输入）
-//   accumulator: 上一步累积的数值（按下运算符时把 display 转成数存起来）
-//   operator: 待执行的运算符 (+ - × ÷)
-//   justEvaluated: 刚刚按完 = 后，下次按数字会清空 display
-let state = { display: '0', accumulator: null, operator: null, justEvaluated: false };
+// 计算器状态
+//   display: 当前显示的表达式字符串（用户正在输入，例如 "1+2×3" 或 "sin(0)"）
+//   justEvaluated: 刚刚按完 = 后，下次按数字 / 函数会清空 display 重新开始
+let state = { display: '0', justEvaluated: false };
 
 const MAX_HISTORY = 50;
 
@@ -65,7 +64,7 @@ const MAX_HISTORY = 50;
 export async function mount(container, context) {
   containerEl = container;
   ctxRef = context;
-  state = { display: '0', accumulator: null, operator: null, justEvaluated: false };
+  state = { display: '0', justEvaluated: false };
 
   container.innerHTML = `
     <div class="app-header">
@@ -153,6 +152,8 @@ function renderKeys() {
 
 // 科学计算键（横向滚动一行）：sin/cos/tan/log/ln/√/x²/π/e/( )
 // 三角函数用弧度制（与 JS Math 一致）
+//   const 用 symbol 字段：按键时把符号追加进 display（π / e），
+//   求值时由 tokenizer 翻译成 Math.PI / Math.E
 const SCI_KEYS = [
   { label: 'sin', action: 'sci', fn: 'sin' },
   { label: 'cos', action: 'sci', fn: 'cos' },
@@ -161,8 +162,8 @@ const SCI_KEYS = [
   { label: 'ln',  action: 'sci', fn: 'ln' },
   { label: '√',   action: 'sci', fn: 'sqrt' },
   { label: 'x²',  action: 'sci', fn: 'square' },
-  { label: 'π',   action: 'const', val: Math.PI },
-  { label: 'e',   action: 'const', val: Math.E },
+  { label: 'π',   action: 'const', symbol: 'π' },
+  { label: 'e',   action: 'const', symbol: 'e' },
   { label: '(',   action: 'paren', ch: '(' },
   { label: ')',   action: 'paren', ch: ')' }
 ];
@@ -190,59 +191,47 @@ function toggleSciPanel() {
   if (toggle) toggle.classList.toggle('active', sciPanelOpen);
 }
 
-// 科学键处理：一元函数 / 常数 / 括号
+// 科学键处理：把按键内容追加进 display 字符串，由 evaluateExpression 统一求值
+//   sin/cos/tan/log/ln/√：追加 fn( ，等用户继续输入参数 + )
+//   x²：后缀操作符，直接追加 ²（平方前一个数）
+//   π/e：追加常量符号
+//   ( )：直接追加括号
 function onSciKey(k) {
+  // 刚算完 / display 还是初始 0：从新表达式开始（替换而非追加）
+  const startFresh = state.justEvaluated || state.display === '0' || state.display === '';
+
   if (k.action === 'sci') {
-    const cur = parseNumber(state.display);
-    const r = applySciFn(k.fn, cur);
-    if (r === null) { updateDisplay(); return; }
-    state.display = formatNumber(r);
-    state.justEvaluated = true;
-  } else if (k.action === 'const') {
-    // 插入常数：清掉当前 display（若刚算完或还是 0），直接放常数值
-    state.display = formatNumber(k.val);
-    state.justEvaluated = true;
-  } else if (k.action === 'paren') {
-    // 括号：直接拼进 display（状态机不解析括号，仅作展示；parseFloat 会忽略非数字字符）
-    if (state.justEvaluated || state.display === '0') {
-      state.display = k.ch;
+    if (k.fn === 'square') {
+      // x² 是后缀：display 是 0/空时没东西可平方，忽略
+      if (state.display === '0' || state.display === '') { updateDisplay(); return; }
+      if (state.justEvaluated) state.justEvaluated = false;
+      state.display += '²';
     } else {
-      state.display += k.ch;
+      // 函数：追加 fn( ；刚算完就替换
+      state.display = startFresh ? (k.fn + '(') : (state.display + k.fn + '(');
+      state.justEvaluated = false;
+    }
+  } else if (k.action === 'const') {
+    // 常量：追加符号 π / e；刚算完就替换
+    state.display = startFresh ? k.symbol : (state.display + k.symbol);
+    state.justEvaluated = false;
+  } else if (k.action === 'paren') {
+    if (k.ch === '(') {
+      state.display = startFresh ? '(' : (state.display + '(');
+    } else {
+      // ) 不能开头
+      if (startFresh) { updateDisplay(); return; }
+      state.display += ')';
     }
     state.justEvaluated = false;
   }
   updateDisplay();
 }
 
-// 一元科学函数
-function applySciFn(fn, x) {
-  let r;
-  switch (fn) {
-    case 'sin': r = Math.sin(x); break;
-    case 'cos': r = Math.cos(x); break;
-    case 'tan': r = Math.tan(x); break;
-    case 'log':
-      if (x <= 0) { showToast('log 要正数才行哦', 'error', 1400); return null; }
-      r = Math.log10(x); break;
-    case 'ln':
-      if (x <= 0) { showToast('ln 要正数才行哦', 'error', 1400); return null; }
-      r = Math.log(x); break;
-    case 'sqrt':
-      if (x < 0) { showToast('负数开不出来呀', 'error', 1400); return null; }
-      r = Math.sqrt(x); break;
-    case 'square': r = x * x; break;
-    default: return null;
-  }
-  if (!Number.isFinite(r)) {
-    showToast('算不出来啦，这个数字好奇怪', 'error', 1600);
-    return null;
-  }
-  return r;
-}
-
 // ══════════════════════════════════════════════════════════════
-// 状态机逻辑
-// 不用 eval，手写四则运算状态机。支持链式输入（按 1 + 2 + 3 = 6）。
+// 表达式构建 + 求值
+// 用户按键时把按键值追加到 display 字符串，等号时调用 evaluateExpression(display)
+// 支持运算符优先级（× ÷ 优先于 + −）、括号嵌套、函数调用、常量、百分号、正负号
 // ══════════════════════════════════════════════════════════════
 
 function onKey(k) {
@@ -255,74 +244,91 @@ function onKey(k) {
   updateDisplay();
 }
 
+// 判断字符是否是运算符（含 unicode 减号）
+function isOperatorChar(c) {
+  return c === '+' || c === '-' || c === '−' || c === '×' || c === '÷';
+}
+
 function inputDigit(d) {
-  // 刚按完 = 或刚按完运算符，新数字要重置 display
   if (state.justEvaluated) {
+    // 刚算完，按数字开始新表达式
     state.display = (d === '.') ? '0.' : d;
     state.justEvaluated = false;
     return;
   }
-  if (state.display === '0' && d !== '.') {
+  if (d === '.') {
+    // 找到最后一个数字，看是否已经有小数点
+    const m = state.display.match(/(\d+(\.\d*)?|\.\d*)$/);
+    if (m && m[0].includes('.')) return; // 最后一个数字已有小数点，忽略
+    // 最后一个字符不是数字：补 0. 开头
+    const last = state.display.slice(-1);
+    if (!/\d/.test(last)) state.display += '0.';
+    else state.display += '.';
+    return;
+  }
+  // 普通数字：开头是 0 就替换
+  if (state.display === '0') {
     state.display = d;
-  } else if (d === '.') {
-    if (!state.display.includes('.')) state.display += '.';
   } else {
-    // 防止输入过长
-    if (state.display.replace('-', '').replace('.', '').length < 14) {
-      state.display += d;
-    }
+    state.display += d;
   }
 }
 
 function inputOperator(op) {
-  const cur = parseNumber(state.display);
-  if (state.accumulator === null) {
-    // 第一次按运算符
-    state.accumulator = cur;
-  } else if (state.operator && !state.justEvaluated) {
-    // 链式：先算出之前的
-    const result = compute(state.accumulator, cur, state.operator);
-    if (result === null) return; // 除零已经被 toast 过
-    state.accumulator = result;
+  if (state.justEvaluated) state.justEvaluated = false;
+  const last = state.display.slice(-1);
+  // 末尾已经是运算符：替换掉
+  if (isOperatorChar(last)) {
+    state.display = state.display.slice(0, -1) + op;
+    return;
   }
-  state.operator = op;
-  state.justEvaluated = true; // 下一个数字会重置 display
+  // 开头或左括号后只允许 + / − 作为正负号
+  if (state.display === '0' || state.display === '' || last === '(') {
+    if (op === '−' || op === '+') {
+      // 替换掉初始的 0
+      if (state.display === '0') state.display = op;
+      else state.display += op;
+    }
+    // × ÷ 不能开头，忽略
+    return;
+  }
+  state.display += op;
 }
 
 function inputEquals() {
-  if (state.operator === null || state.accumulator === null) return;
-  const cur = parseNumber(state.display);
-  const expr = `${formatNumber(state.accumulator)} ${state.operator} ${formatNumber(cur)}`;
-  const result = compute(state.accumulator, cur, state.operator);
-  if (result === null) return;
+  if (!state.display || state.display === '0') return;
+  const expr = state.display;
+  const result = evaluateExpression(expr);
+  if (result === null || !Number.isFinite(result)) {
+    showToast('算不出来呢，再检查一下嘛', 'error', 1600);
+    return;
+  }
   appendHistory({ expr, result });
   state.display = formatNumber(result);
-  state.accumulator = null;
-  state.operator = null;
   state.justEvaluated = true;
 }
 
 function inputClear() {
-  state = { display: '0', accumulator: null, operator: null, justEvaluated: false };
+  state = { display: '0', justEvaluated: false };
   showToast('清空啦，重新开始算吧', 'default', 1200);
 }
 
+// 正负号切换：切换最后一个数字的符号
 function inputNegate() {
-  if (state.display === '0') return;
-  if (state.display.startsWith('-')) state.display = state.display.slice(1);
-  else state.display = '-' + state.display;
+  if (state.display === '0' || state.display === '') return;
+  const m = state.display.match(/(-?\d*\.?\d+)$/);
+  if (!m) return;
+  const num = m[1];
+  const newNum = num.startsWith('-') ? num.slice(1) : '-' + num;
+  state.display = state.display.slice(0, -num.length) + newNum;
+  state.justEvaluated = false;
 }
 
+// 百分号：作为后缀操作符追加，求值时把前一个数除以 100
 function inputPercent() {
-  const cur = parseNumber(state.display);
-  const result = cur / 100;
-  state.display = formatNumber(result);
-  state.justEvaluated = true;
-}
-
-function parseNumber(s) {
-  const n = parseFloat(s);
-  return Number.isFinite(n) ? n : 0;
+  if (state.justEvaluated) state.justEvaluated = false;
+  // display 是初始 0 时按 % 没意义，但也不报错
+  state.display += '%';
 }
 
 function formatNumber(n) {
@@ -339,31 +345,267 @@ function formatNumber(n) {
   return s;
 }
 
-function compute(a, b, op) {
-  let r;
-  switch (op) {
-    case '+': r = a + b; break;
-    case '−': r = a - b; break;
-    case '×': r = a * b; break;
-    case '÷':
-      if (b === 0) {
-        showToast('哎呀，零不能做除数呀', 'error', 1600);
-        return null;
-      }
-      r = a / b; break;
-    default: return null;
-  }
-  if (!Number.isFinite(r)) {
-    showToast('算不出来啦，这个数字好奇怪', 'error', 1600);
-    return null;
-  }
-  return r;
-}
-
 function updateDisplay() {
   const el = containerEl.querySelector('#calc-display');
   if (!el) return;
   el.textContent = state.display;
+}
+
+// ══════════════════════════════════════════════════════════════
+// 表达式解析器：tokenize + shunting-yard + 后缀求值
+// 不用 eval，安全可控。支持：
+//   运算符优先级：× ÷ 优先于 + −
+//   括号嵌套：(1+2)×3
+//   函数：sin/cos/tan/log/ln/sqrt（接收一个参数）
+//   常量：π = Math.PI, e = Math.E
+//   后缀操作符：² 平方、% 百分比
+//   正负号：-5、+3、2×-3
+//   隐式乘法：2π、2(3+4)、(1+2)(3+4)
+// ══════════════════════════════════════════════════════════════
+
+// 运算符优先级（数字越大越高）
+const OP_PREC = { '+': 1, '-': 1, '*': 2, '/': 2 };
+
+// 把字符串拆成 token：num / op / func / const / paren / postfix / unary
+function tokenize(expr) {
+  const tokens = [];
+  let i = 0;
+  const opMap = { '+': '+', '-': '-', '−': '-', '×': '*', '÷': '/' };
+  while (i < expr.length) {
+    const c = expr[i];
+    // 空白
+    if (/\s/.test(c)) { i++; continue; }
+    // 数字（含小数点）
+    if (/[0-9.]/.test(c)) {
+      let num = '';
+      let dotCount = 0;
+      while (i < expr.length && /[0-9.]/.test(expr[i])) {
+        if (expr[i] === '.') dotCount++;
+        if (dotCount > 1) break; // 第二个小数点，留给下一个 token
+        num += expr[i];
+        i++;
+      }
+      const val = parseFloat(num);
+      if (!Number.isFinite(val)) throw new Error('数字格式不对：' + num);
+      tokens.push({ type: 'num', val });
+      continue;
+    }
+    // 函数名 / 常量名（英文字母）
+    if (/[a-zA-Z]/.test(c)) {
+      let name = '';
+      while (i < expr.length && /[a-zA-Z]/.test(expr[i])) {
+        name += expr[i];
+        i++;
+      }
+      if (name === 'e') {
+        tokens.push({ type: 'const', val: Math.E });
+      } else if (['sin', 'cos', 'tan', 'log', 'ln', 'sqrt'].includes(name)) {
+        tokens.push({ type: 'func', name });
+      } else {
+        throw new Error('不认识的符号：' + name);
+      }
+      continue;
+    }
+    // π 常量（单字符，不在 [a-z] 范围内）
+    if (c === 'π') {
+      tokens.push({ type: 'const', val: Math.PI });
+      i++;
+      continue;
+    }
+    // ² 后缀平方
+    if (c === '²') {
+      tokens.push({ type: 'postfix', name: 'square' });
+      i++;
+      continue;
+    }
+    // % 后缀百分比
+    if (c === '%') {
+      tokens.push({ type: 'postfix', name: 'percent' });
+      i++;
+      continue;
+    }
+    // 运算符 + - × ÷ −
+    if (c in opMap) {
+      tokens.push({ type: 'op', val: opMap[c] });
+      i++;
+      continue;
+    }
+    // 括号
+    if (c === '(' || c === ')') {
+      tokens.push({ type: 'paren', val: c });
+      i++;
+      continue;
+    }
+    throw new Error('不认识的字符：' + c);
+  }
+  return tokens;
+}
+
+// 隐式乘法：在 num/const/) / 后缀 和 num/const/func/( 之间插入 *
+function insertImplicitMul(tokens) {
+  const out = [];
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i];
+    if (i > 0) {
+      const prev = tokens[i - 1];
+      const prevEndsValue =
+        prev.type === 'num' || prev.type === 'const' ||
+        (prev.type === 'paren' && prev.val === ')') ||
+        prev.type === 'postfix';
+      const curStartsValue =
+        t.type === 'num' || t.type === 'const' ||
+        t.type === 'func' ||
+        (t.type === 'paren' && t.val === '(');
+      if (prevEndsValue && curStartsValue) {
+        out.push({ type: 'op', val: '*' });
+      }
+    }
+    out.push(t);
+  }
+  return out;
+}
+
+// 中缀转后缀（shunting-yard）
+// 一元正负号：在表达式开头、运算符后、左括号后出现时，作为 unary 处理（优先级最高）
+function shuntingYard(tokens) {
+  const output = [];
+  const opStack = [];
+  const isUnaryContext = (prev) =>
+    prev === null ||
+    prev.type === 'op' ||
+    prev.type === 'unary' ||
+    (prev.type === 'paren' && prev.val === '(');
+
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i];
+    const prev = i > 0 ? tokens[i - 1] : null;
+
+    if (t.type === 'num' || t.type === 'const') {
+      output.push(t);
+    } else if (t.type === 'func') {
+      opStack.push(t);
+    } else if (t.type === 'postfix') {
+      // 后缀操作符直接进输出（优先级最高）
+      output.push(t);
+    } else if (t.type === 'op') {
+      // 一元 + / - 检测
+      if ((t.val === '+' || t.val === '-') && isUnaryContext(prev)) {
+        opStack.push({ type: 'unary', val: t.val });
+      } else {
+        // 弹出栈顶优先级 >= 当前的运算符（左结合）
+        while (opStack.length > 0) {
+          const top = opStack[opStack.length - 1];
+          if (top.type === 'func' || top.type === 'unary') {
+            output.push(opStack.pop());
+          } else if (top.type === 'op' && (OP_PREC[top.val] || 0) >= (OP_PREC[t.val] || 0)) {
+            output.push(opStack.pop());
+          } else {
+            break;
+          }
+        }
+        opStack.push(t);
+      }
+    } else if (t.type === 'paren') {
+      if (t.val === '(') {
+        opStack.push(t);
+      } else {
+        // 右括号：弹到左括号为止
+        while (opStack.length > 0 && opStack[opStack.length - 1].type !== 'paren') {
+          output.push(opStack.pop());
+        }
+        if (opStack.length === 0) throw new Error('括号没配对呀');
+        opStack.pop(); // 弹出左括号
+        // 如果栈顶是函数，弹出到输出
+        if (opStack.length > 0 && opStack[opStack.length - 1].type === 'func') {
+          output.push(opStack.pop());
+        }
+      }
+    }
+  }
+  // 弹完剩下的
+  while (opStack.length > 0) {
+    const top = opStack.pop();
+    if (top.type === 'paren') throw new Error('括号没配对呀');
+    output.push(top);
+  }
+  return output;
+}
+
+// 后缀表达式求值
+function evalPostfix(postfix) {
+  const stack = [];
+  for (const t of postfix) {
+    if (t.type === 'num' || t.type === 'const') {
+      stack.push(t.val);
+    } else if (t.type === 'postfix') {
+      if (stack.length < 1) throw new Error('表达式不完整呀');
+      const x = stack.pop();
+      let r;
+      if (t.name === 'square') r = x * x;
+      else if (t.name === 'percent') r = x / 100;
+      else throw new Error('不认识的后缀操作符');
+      stack.push(r);
+    } else if (t.type === 'unary') {
+      if (stack.length < 1) throw new Error('表达式不完整呀');
+      const x = stack.pop();
+      stack.push(t.val === '-' ? -x : +x);
+    } else if (t.type === 'op') {
+      if (stack.length < 2) throw new Error('表达式不完整呀');
+      const b = stack.pop();
+      const a = stack.pop();
+      let r;
+      switch (t.val) {
+        case '+': r = a + b; break;
+        case '-': r = a - b; break;
+        case '*': r = a * b; break;
+        case '/':
+          if (b === 0) throw new Error('零不能做除数呀');
+          r = a / b; break;
+        default: throw new Error('不认识的运算符');
+      }
+      stack.push(r);
+    } else if (t.type === 'func') {
+      if (stack.length < 1) throw new Error('表达式不完整呀');
+      const x = stack.pop();
+      let r;
+      switch (t.name) {
+        case 'sin': r = Math.sin(x); break;
+        case 'cos': r = Math.cos(x); break;
+        case 'tan': r = Math.tan(x); break;
+        case 'log':
+          if (x <= 0) throw new Error('log 要正数才行哦');
+          r = Math.log10(x); break;
+        case 'ln':
+          if (x <= 0) throw new Error('ln 要正数才行哦');
+          r = Math.log(x); break;
+        case 'sqrt':
+          if (x < 0) throw new Error('负数开不出来呀');
+          r = Math.sqrt(x); break;
+        default: throw new Error('不认识的函数');
+      }
+      stack.push(r);
+    }
+  }
+  if (stack.length !== 1) throw new Error('表达式不完整呀');
+  return stack[0];
+}
+
+// 主入口：接收字符串表达式，返回计算结果（出错返回 null）
+function evaluateExpression(expr) {
+  try {
+    if (!expr || typeof expr !== 'string') return null;
+    const cleaned = expr.trim();
+    if (!cleaned) return null;
+    let tokens = tokenize(cleaned);
+    if (tokens.length === 0) return null;
+    tokens = insertImplicitMul(tokens);
+    const postfix = shuntingYard(tokens);
+    const result = evalPostfix(postfix);
+    return Number.isFinite(result) ? result : null;
+  } catch (e) {
+    console.warn('[calculator] 表达式求值失败', expr, e);
+    return null;
+  }
 }
 
 // ════════════════════════════════════════
@@ -439,8 +681,6 @@ async function openHistorySheet() {
       row.addEventListener('click', () => {
         state.display = String(h.result);
         state.justEvaluated = true;
-        state.accumulator = null;
-        state.operator = null;
         updateDisplay();
         showToast('拿过来接着算啦', 'default', 1200);
         // 关掉 sheet

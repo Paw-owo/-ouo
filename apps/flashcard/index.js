@@ -150,10 +150,10 @@ export async function mount(container) {
     }
     .fc-status-tag.new{background:color-mix(in srgb,var(--text-hint) 18%,transparent);color:var(--text-secondary)}
     .fc-status-tag.learning{background:color-mix(in srgb,var(--accent-light) 60%,transparent);color:var(--accent-dark)}
-    .fc-status-tag.learned{background:color-mix(in srgb,#7ED99B 40%,transparent);color:#3a8a55}
+    .fc-status-tag.learned{background:color-mix(in srgb,var(--success) 40%,transparent);color:var(--text-primary)}
     /* 复习按钮组 */
     .fc-actions .btn.due{background:color-mix(in srgb,var(--accent-light) 60%,transparent);color:var(--accent-dark)}
-    .fc-actions .btn.easy{background:color-mix(in srgb,#7ED99B 50%,transparent);color:#3a8a55}
+    .fc-actions .btn.easy{background:color-mix(in srgb,var(--success) 50%,transparent);color:var(--text-primary)}
     /* 牌组删除提示 */
     .fc-tab .popo-icon{display:inline-flex}
   `);
@@ -593,7 +593,7 @@ function populateListBody(body, sheet, refresh) {
       <div style="font-size:var(--font-size-small);color:var(--text-hint);margin-top:4px">${escapeHTML(nextLabel)}</div>
       <div class="fc-list-actions">
         <button class="btn ghost" data-act="edit">${createIcon('edit', 16).outerHTML} 编辑</button>
-        <button class="btn ghost" data-act="del" style="color:#E8888C">${createIcon('trash', 16).outerHTML} 删除</button>
+        <button class="btn ghost" data-act="del" style="color:var(--danger)">${createIcon('trash', 16).outerHTML} 删除</button>
       </div>
     `;
     item.querySelector('[data-act=edit]').addEventListener('click', () => {

@@ -173,7 +173,7 @@ injectStyle('app-worldbook-style', `
   .wb-toggle-thumb {
     position: absolute; top: 3px; left: 3px;
     width: 20px; height: 20px; border-radius: 50%;
-    background: #fff; box-shadow: var(--shadow-sm);
+    background: var(--bg-card); box-shadow: var(--shadow-sm);
     transition: var(--motion) var(--motion-spring);
     display: flex; align-items: center; justify-content: center;
     color: var(--text-hint);

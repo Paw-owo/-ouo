@@ -72,7 +72,7 @@ injectStyle('app-countdown-style', `
   .cd-hero-deco{
     position:absolute; right:-24px; top:-24px;
     width:128px; height:128px; border-radius:50%;
-    background:color-mix(in srgb, #fff 12%, transparent);
+    background:color-mix(in srgb, var(--bubble-user-text) 12%, transparent);
     pointer-events:none; z-index:0;
   }
   .cd-hero-actions{ position:absolute; right:10px; top:10px; z-index:2; }
@@ -115,7 +115,7 @@ injectStyle('app-countdown-style', `
     transition:var(--motion);
   }
   .cd-icon-btn:active{ transform:scale(var(--press-scale)); }
-  .cd-icon-btn:hover{ color:#E8888C; }
+  .cd-icon-btn:hover{ color:var(--danger); }
   .cd-empty-icon{ color:var(--text-hint); opacity:0.5; margin-bottom:12px; }
   .cd-form-row{ margin-bottom:14px; }
   .cd-form-label{

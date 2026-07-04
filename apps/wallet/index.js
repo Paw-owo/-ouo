@@ -83,7 +83,8 @@ export function unmount() {
 // 状态读写（含旧版迁移）
 // ════════════════════════════════════════
 
-function ensureState() {
+// 导出给 shop 等模块复用：确保 walletState 已初始化（首次进入送 1000 零花钱）
+export function ensureState() {
   let s = getData(KEYS.walletState, null);
   if (!s || typeof s !== 'object') {
     s = {

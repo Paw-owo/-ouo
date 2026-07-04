@@ -223,11 +223,11 @@ injectStyle('app-chat-style', `
   @keyframes chatStatusSpin{ to{ transform:rotate(360deg); } }
   .chat-status-sent{ color:var(--text-hint); display:inline-flex; }
   .chat-status-failed{
-    color:#E8888C; display:inline-flex; cursor:pointer;
+    color:var(--danger); display:inline-flex; cursor:pointer;
     padding:2px; border-radius:50%;
     transition:var(--motion);
   }
-  .chat-status-failed:active{ transform:scale(var(--press-scale)); background:color-mix(in srgb, #E8888C 18%, transparent); }
+  .chat-status-failed:active{ transform:scale(var(--press-scale)); background:color-mix(in srgb, var(--danger) 18%, transparent); }
 
   /* 撤回消息占位 */
   .chat-recalled-hint{
@@ -278,7 +278,7 @@ injectStyle('app-chat-style', `
     font-size:0.9em;
   }
   .chat-msg-row.user .chat-bubble .md-code{
-    background:color-mix(in srgb, #000 18%, transparent);
+    background:color-mix(in srgb, var(--text-primary) 18%, transparent);
   }
   .chat-bubble .md-link{
     color:var(--accent); text-decoration:underline;
@@ -508,7 +508,7 @@ injectStyle('app-chat-style', `
     font-size:var(--font-size-base); font-family:inherit;
   }
   .chat-action-item:active{ transform:scale(var(--press-scale)); background:color-mix(in srgb, var(--accent-light) 30%, transparent); }
-  .chat-action-item.danger{ color:#E8888C; }
+  .chat-action-item.danger{ color:var(--danger); }
   .chat-action-item .popo-icon{ color:inherit; flex-shrink:0; }
 
   /* 角色选择列表 */
@@ -613,6 +613,12 @@ export function unmount() {
   // 解绑 bus
   state.busListeners.forEach(([name, fn]) => bus.off(name, fn));
   state.busListeners = [];
+
+  // 移除消息列表的 scroll 监听（detail-view.js 在 renderChatDetailView 里绑的，引用存在 state 上）
+  if (state.messageListEl && state._onMessagesScroll) {
+    try { state.messageListEl.removeEventListener('scroll', state._onMessagesScroll); } catch (e) {}
+    state._onMessagesScroll = null;
+  }
 
   state.containerEl = null;
   state.messageListEl = null;

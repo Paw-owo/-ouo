@@ -208,7 +208,7 @@ injectStyle('app-moments-style', `
     transition:var(--motion);
   }
   .mom-comment-act:active{ transform:scale(var(--press-scale)); }
-  .mom-comment-act.danger{ color:#E8888C; }
+  .mom-comment-act.danger{ color:var(--danger); }
 
   /* 评论输入条 */
   .mom-input-bar{
@@ -242,7 +242,7 @@ injectStyle('app-moments-style', `
   .mom-thumb-del{
     position:absolute; right:2px; top:2px;
     width:22px; height:22px; border-radius:50%;
-    background:rgba(0,0,0,0.55); color:#fff;
+    background:color-mix(in srgb, var(--text-primary) 55%, transparent); color:var(--bubble-user-text);
     display:flex; align-items:center; justify-content:center;
   }
   .mom-add-img{
@@ -275,7 +275,7 @@ injectStyle('app-moments-style', `
   /* 大图查看器 */
   .mom-img-viewer{
     position:fixed; inset:0; z-index:9100;
-    background:rgba(0,0,0,0.92);
+    background:color-mix(in srgb, var(--text-primary) 92%, transparent);
     display:flex; align-items:center; justify-content:center;
     padding:24px;
     animation:momViewerIn var(--motion);
@@ -285,7 +285,7 @@ injectStyle('app-moments-style', `
   .mom-img-viewer-close{
     position:absolute; top:calc(env(safe-area-inset-top,0px) + 14px); right:18px;
     width:40px; height:40px; border-radius:50%;
-    background:rgba(255,255,255,0.14); color:#fff;
+    background:color-mix(in srgb, var(--bubble-user-text) 14%, transparent); color:var(--bubble-user-text);
     display:flex; align-items:center; justify-content:center;
   }
 
@@ -298,8 +298,8 @@ injectStyle('app-moments-style', `
   }
   .mom-menu-item:active{ transform:scale(var(--press-scale)); background:color-mix(in srgb, var(--bg-secondary) 60%, transparent); }
   .mom-menu-item .popo-icon-svg{ color:var(--text-secondary); }
-  .mom-menu-item.danger{ color:#E8888C; }
-  .mom-menu-item.danger .popo-icon-svg{ color:#E8888C; }
+  .mom-menu-item.danger{ color:var(--danger); }
+  .mom-menu-item.danger .popo-icon-svg{ color:var(--danger); }
 `);
 
 // ════════════════════════════════════════

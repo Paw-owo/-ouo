@@ -20,7 +20,6 @@ const CORE_ASSETS = [
   './core/theme.js',
   './core/ui.js',
   './core/api.js',
-  './core/local-chat.js',
   './core/memory.js',
   './core/tts.js',
   './core/mcp.js',

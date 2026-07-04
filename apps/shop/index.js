@@ -22,6 +22,7 @@ import { recordInteraction } from '../../core/memory.js';
 import { addAffection } from '../../core/affection.js';
 import { injectStyle } from '../../core/util.js';
 import { normalizeMoment } from '../moments/shared.js';
+import { ensureState as ensureWalletState } from '../wallet/index.js';
 import { injectShopStyles } from './styles.js';
 import {
   CATEGORIES,
@@ -103,16 +104,9 @@ export function unmount() {
 // ════════════════════════════════════════
 
 function readWallet() {
-  const s = getData(KEYS.walletState, null);
-  if (!s || typeof s !== 'object') return { globalBalance: 0, balance: 0, characters: {}, transactions: [] };
-  // 兼容旧版：无 globalBalance 则用 balance
-  if (s.globalBalance === undefined) {
-    s.globalBalance = (typeof s.balance === 'number' ? s.balance : 0);
-  }
-  if (!Array.isArray(s.transactions)) s.transactions = [];
-  if (!s.characters || typeof s.characters !== 'object') s.characters = {};
-  s.balance = s.globalBalance;
-  return s;
+  // 复用 wallet 的 ensureState：用户首次进 shop 也能拿到默认 1000 金币，
+  // 不会因为还没进过 wallet 而看到 0 余额
+  return ensureWalletState();
 }
 
 function writeWallet(state) {
@@ -394,7 +388,7 @@ function celebratePurchase(btn) {
 // 撒花：在屏幕中央生成一圈彩色小圆点，向外四散后消失
 function fireConfetti() {
   try {
-    const colors = ['#F5A0B0', '#F5D88A', '#B5D9A0', '#A0C8E8', '#C8A8E0'];
+    const colors = ['var(--danger)', 'var(--warning)', 'var(--success)', 'var(--info)', 'var(--accent)'];
     const layer = document.createElement('div');
     layer.className = 'shop-confetti-layer';
     document.body.appendChild(layer);

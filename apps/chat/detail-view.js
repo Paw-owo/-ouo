@@ -186,6 +186,8 @@ export async function renderChatDetailView() {
   container.querySelector('#chat-quote-close').addEventListener('click', () => clearQuote());
 
   // 滚动监听：上滑显示"回到底部"按钮；滑到顶部触发加载更多
+  // 保存 handler 引用到 state，unmount 时移除，避免监听泄漏
+  state._onMessagesScroll = onMessagesScroll;
   state.messageListEl.addEventListener('scroll', onMessagesScroll);
   state.scrollBtnEl.addEventListener('click', () => {
     state.unseenNewCount = 0;
@@ -428,6 +430,9 @@ export function appendMessageEl(msg, opts = {}) {
   if (!state.messageListEl) return null;
   const empty = state.messageListEl.querySelector('.chat-empty');
   if (empty) empty.remove();
+  // 空会话的 greeting 占位（id 为 __greeting__）首条消息后也要清掉，避免残留
+  const greeting = state.messageListEl.querySelector('[data-id="__greeting__"]');
+  if (greeting) greeting.remove();
   const el = createMessageEl(msg, opts);
   state.messageListEl.appendChild(el);
   // 新消息到来：流式中不在此处判定（由流式回调处理）；

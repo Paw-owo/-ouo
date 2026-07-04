@@ -62,7 +62,7 @@ injectStyle('app-dream-style', `
   .drm-hero-deco{
     position:absolute; right:-28px; top:-28px;
     width:120px; height:120px; border-radius:50%;
-    background:color-mix(in srgb, #fff 12%, transparent);
+    background:color-mix(in srgb, var(--bubble-user-text) 12%, transparent);
     pointer-events:none;
   }
   .drm-hero-tag{
@@ -528,7 +528,7 @@ function openDetailSheet(d) {
     </div>
     ${tagsHTML}
     <div style="display:flex;gap:8px;margin-top:18px">
-      <button class="btn ghost" style="flex:1;justify-content:center;color:#E8888C" id="drm-detail-del">${createIcon('trash', 16).outerHTML}忘掉这个梦</button>
+      <button class="btn ghost" style="flex:1;justify-content:center;color:var(--danger)" id="drm-detail-del">${createIcon('trash', 16).outerHTML}忘掉这个梦</button>
     </div>
   `;
   const sheet = showBottomSheet({

@@ -11,6 +11,7 @@ export {
   buildMessages,
   streamChat,
   chatOnce,
+  parseThinkingTags,
   getFallbackReply,
   randomFallback
 } from '../js/ai/ai-client.js';

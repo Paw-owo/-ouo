@@ -114,7 +114,7 @@ injectStyle('app-memo-style', `
   .memo-card-meta .chip.pin{ color:var(--accent); }
   .memo-card-meta .chip.cat{ color:var(--text-secondary); }
   .memo-card-meta .chip.remind{ color:var(--accent-dark); }
-  .memo-card-meta .chip.remind.overdue{ color:#E8888C; }
+  .memo-card-meta .chip.remind.overdue{ color:var(--danger); }
   .memo-card-actions{ display:flex; align-items:center; gap:2px; flex-shrink:0; }
   .memo-icon-btn{
     width:30px; height:30px; border-radius:50%;

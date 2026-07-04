@@ -58,7 +58,7 @@ injectStyle('app-anniversary-style', `
     line-height: 1;
     margin-bottom: 8px;
     color: var(--bubble-user-text);
-    filter: drop-shadow(0 2px 6px rgba(0,0,0,.18));
+    filter: drop-shadow(0 2px 6px color-mix(in srgb, var(--text-primary) 18%, transparent));
   }
   .ann-hero-title {
     font-size: var(--font-size-title);
@@ -255,7 +255,7 @@ injectStyle('app-anniversary-style', `
   .ann-cover-placeholder em{ font-style:normal; font-size:var(--font-size-small); }
   .ann-cover-del{
     width:44px; border-radius:var(--radius-md);
-    background:var(--bg-secondary); color:#E8888C; border:none; cursor:pointer;
+    background:var(--bg-secondary); color:var(--danger); border:none; cursor:pointer;
     display:flex; align-items:center; justify-content:center;
   }
   .ann-cover-del:active{ transform:scale(var(--press-scale)); }
@@ -544,7 +544,7 @@ function showItemMenu(item, decorated) {
   body.innerHTML = `
     <button class="btn ghost block" id="ann-menu-edit" style="margin-bottom:8px;">${createIcon('edit', 18).outerHTML} 编辑这条</button>
     <button class="btn ghost block" id="ann-menu-share" style="margin-bottom:8px;">${createIcon('upload', 18).outerHTML} 分享到朋友圈</button>
-    <button class="btn ghost block" id="ann-menu-del" style="color:#E8888C;">${createIcon('trash', 18).outerHTML} 删掉</button>
+    <button class="btn ghost block" id="ann-menu-del" style="color:var(--danger);">${createIcon('trash', 18).outerHTML} 删掉</button>
   `;
   const sheet = showBottomSheet({
     title: item.title || '纪念日',

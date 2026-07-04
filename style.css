@@ -94,7 +94,7 @@ img { display: block; max-width: 100%; }
   margin-top: calc(env(safe-area-inset-top, 0px) + clamp(48px, 14vh, 96px));
   width: clamp(88px, 22vw, 108px); height: clamp(88px, 22vw, 108px);
   border-radius: 50%; background: var(--accent);
-  border: 3px solid rgba(255,255,255,0.6);
+  border: 3px solid color-mix(in srgb, var(--bubble-user-text) 60%, transparent);
   box-shadow: var(--shadow-lg);
   background-size: cover; background-position: center;
   display: flex; align-items: center; justify-content: center;
@@ -109,7 +109,7 @@ img { display: block; max-width: 100%; }
 }
 .lock-hint {
   position: relative; z-index: 1;
-  margin-top: 4px; color: rgba(255,255,255,0.85);
+  margin-top: 4px; color: color-mix(in srgb, var(--bubble-user-text) 85%, transparent);
   font-size: var(--font-size-small);
   text-shadow: 0 1px 4px rgba(48,40,48,0.45);
 }
@@ -119,7 +119,7 @@ img { display: block; max-width: 100%; }
 }
 .lock-dot {
   width: 14px; height: 14px; border-radius: 50%;
-  border: 1.5px solid rgba(255,255,255,0.7);
+  border: 1.5px solid color-mix(in srgb, var(--bubble-user-text) 70%, transparent);
   background: transparent; transition: var(--motion);
 }
 .lock-dot.filled { background: var(--text-on-wallpaper); transform: scale(1.1); }
@@ -135,15 +135,15 @@ img { display: block; max-width: 100%; }
 .lock-key {
   height: clamp(56px, 14vw, 72px);
   border-radius: 50%;
-  background: rgba(255,255,255,0.18);
+  background: color-mix(in srgb, var(--bubble-user-text) 18%, transparent);
   backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255,255,255,0.25);
+  border: 1px solid color-mix(in srgb, var(--bubble-user-text) 25%, transparent);
   color: var(--text-on-wallpaper); font-size: var(--font-size-large); font-weight: 500;
   display: flex; align-items: center; justify-content: center;
   transition: var(--motion);
 }
-.lock-key:active { transform: scale(0.92); background: rgba(255,255,255,0.32); }
-.lock-key.secondary { font-size: var(--font-size-small); background: rgba(255,255,255,0.08); }
+.lock-key:active { transform: scale(0.92); background: color-mix(in srgb, var(--bubble-user-text) 32%, transparent); }
+.lock-key.secondary { font-size: var(--font-size-small); background: color-mix(in srgb, var(--bubble-user-text) 8%, transparent); }
 
 /* ════════════════════════════════════════ */
 /* 桌面 */
@@ -292,7 +292,7 @@ img { display: block; max-width: 100%; }
 .widget-del {
   display: none; position: absolute; top: -8px; right: -8px;
   width: 22px; height: 22px; border-radius: 50%;
-  background: var(--danger); color: #fff;
+  background: var(--danger); color: var(--bubble-user-text);
   align-items: center; justify-content: center;
   box-shadow: var(--shadow-sm); z-index: 2;
 }
@@ -380,7 +380,7 @@ img { display: block; max-width: 100%; }
 .icon-delete {
   position: absolute; top: -4px; right: -4px;
   width: 22px; height: 22px; border-radius: 50%;
-  background: var(--danger); color: #fff;
+  background: var(--danger); color: var(--bubble-user-text);
   display: flex; align-items: center; justify-content: center;
   font-size: 14px; font-weight: bold;
   opacity: 0; transform: scale(0.5);
@@ -390,7 +390,7 @@ img { display: block; max-width: 100%; }
 .icon-badge {
   position: absolute; top: -2px; right: -2px;
   min-width: 18px; height: 18px; border-radius: 9px;
-  background: var(--danger); color: #fff;
+  background: var(--danger); color: var(--bubble-user-text);
   font-size: 11px; font-weight: 600;
   display: flex; align-items: center; justify-content: center;
   padding: 0 5px;
@@ -477,8 +477,7 @@ img { display: block; max-width: 100%; }
   background: var(--bg-card);
   border-radius: var(--radius-card);
   padding: var(--spacing-lg);
-  /* 同色系柔和阴影：rgba fallback（暖灰，非纯黑）+ color-mix 主色系 */
-  box-shadow: 0 4px 20px rgba(60,50,60,0.08);
+  /* 同色系柔和阴影：直接走 var(--shadow-card)（由主题注入，亮色用 accent 系，暗色用 black 系） */
   box-shadow: var(--shadow-card);
   margin-bottom: var(--spacing-md);
   border: none;
@@ -505,7 +504,7 @@ img { display: block; max-width: 100%; }
 }
 .btn:active { transform: scale(var(--press-scale)); }
 .btn.primary { background: linear-gradient(135deg, var(--accent) 0%, var(--accent-dark) 100%); color: var(--bubble-user-text); box-shadow: var(--shadow-soft); }
-.btn.danger { background: var(--danger); color: #fff; }
+.btn.danger { background: var(--danger); color: var(--bubble-user-text); }
 .btn.ghost { background: transparent; color: var(--accent-dark); }
 .btn.block { width: 100%; justify-content: center; }
 
@@ -613,7 +612,7 @@ img { display: block; max-width: 100%; }
 .starfield { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
 .star {
   position: absolute; width: 2px; height: 2px;
-  background: #fff; border-radius: 50%;
+  background: var(--bubble-user-text); border-radius: 50%;
   animation: starTwinkle 3s ease-in-out infinite;
 }
 @keyframes starTwinkle { 0%,100%{opacity:.2} 50%{opacity:1} }

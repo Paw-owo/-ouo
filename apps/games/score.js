@@ -42,6 +42,12 @@ function defaultProgress() {
   };
 }
 
+// 已上报对局的幂等去重表（模块级，内存即可）
+//   key: `${gameId}_${roundId || score}`，value: 上报时间戳
+//   5 秒内相同的 (gameId, score) 视为同一局，跳过重复加金币
+const reportedRounds = new Map();
+const REPORT_DEDUP_WINDOW_MS = 5000;
+
 // 读取进度（合并默认值，兼容老数据）
 export function getProgress() {
   const raw = getData(KEYS.gamesProgress, null);
@@ -65,15 +71,31 @@ function saveProgress(p) {
 
 /**
  * 上报一局分数：自动更新总分、最高分、对局数，并检查成就。
+ * 幂等保护：5 秒内相同的 (gameId, score) 视为同一局，跳过重复加金币。
+ *   如果调用方在 opts.roundId 传了唯一 id，则按 roundId 精确去重。
  * @param {string} gameId
  * @param {number} score 本局得分（负值按 0 处理）
- * @param {object} opts { achievement } 额外成就触发，目前支持 'lucky'
+ * @param {object} opts { achievement, roundId } 额外成就触发 / 自定义去重 id
  * @returns {Array<string>} 新达成的成就 key 列表
  */
 export function reportScore(gameId, score, opts = {}) {
   if (!GAME_IDS.includes(gameId)) return [];
-  const p = getProgress();
   const safeScore = Math.max(0, Math.round(score || 0));
+
+  // 幂等去重：5 秒内相同 (gameId, score) 视为同一局，跳过
+  // 调用方没传 roundId 时，用 score 作为去重维度（同一局分数相同）
+  const dedupKey = opts.roundId
+    ? `${gameId}_${opts.roundId}`
+    : `${gameId}_${safeScore}`;
+  const now = Date.now();
+  const lastTime = reportedRounds.get(dedupKey);
+  if (lastTime && (now - lastTime) < REPORT_DEDUP_WINDOW_MS) {
+    // 已上报过，跳过，不再加金币 / 不重复计数
+    return [];
+  }
+  reportedRounds.set(dedupKey, now);
+
+  const p = getProgress();
   p.totalScore += safeScore;
   p.totalPlays += 1;
   const g = p.games[gameId];

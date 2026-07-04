@@ -40,7 +40,7 @@ export function injectMusicStyles() {
   .music-disc{
     position:absolute;inset:0;border-radius:50%;
     background:conic-gradient(from 0deg,#1a1a1a,#333 12.5%,#1a1a1a 25%,#333 37.5%,#1a1a1a 50%,#333 62.5%,#1a1a1a 75%,#333 87.5%,#1a1a1a);
-    box-shadow:0 8px 24px rgba(0,0,0,.28),inset 0 0 0 6px rgba(255,255,255,.04);
+    box-shadow:0 8px 24px color-mix(in srgb, var(--text-primary) 28%, transparent),inset 0 0 0 6px rgba(255,255,255,.04);
   }
   .music-disc::before{
     content:"";position:absolute;inset:14px;border-radius:50%;
@@ -49,7 +49,7 @@ export function injectMusicStyles() {
   .music-cover{
     position:relative;z-index:1;width:108px;height:108px;border-radius:50%;
     background-size:cover;background-position:center;background-color:var(--bg-secondary);
-    box-shadow:0 4px 12px rgba(0,0,0,.3),inset 0 0 0 4px rgba(255,255,255,.06);
+    box-shadow:0 4px 12px color-mix(in srgb, var(--text-primary) 30%, transparent),inset 0 0 0 4px rgba(255,255,255,.06);
     display:flex;align-items:center;justify-content:center;color:var(--text-hint);
   }
   .music-cover.placeholder{color:var(--text-hint);}
@@ -62,7 +62,7 @@ export function injectMusicStyles() {
   .music-disc-wrap::after{
     content:"";position:absolute;left:50%;top:50%;width:14px;height:14px;
     transform:translate(-50%,-50%);border-radius:50%;z-index:2;
-    background:var(--bg-card);box-shadow:0 0 0 2px rgba(0,0,0,.2);
+    background:var(--bg-card);box-shadow:0 0 0 2px color-mix(in srgb, var(--text-primary) 20%, transparent);
   }
   .music-meta{text-align:center;width:100%;min-width:0;}
   .music-title{

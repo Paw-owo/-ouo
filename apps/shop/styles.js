@@ -1,6 +1,6 @@
 // apps/shop/styles.js
 // 商店 App 的样式——我都收在这啦，方便 index 单独维护结构。
-// 红线：视觉值全部走 CSS 变量；负数/警示色 #E8888C；图标只走 SVG 线稿；无 emoji。
+// 红线：视觉值全部走 CSS 变量；负数/警示色 var(--danger)；图标只走 SVG 线稿；无 emoji。
 // 依赖：core/util.js
 
 import { injectStyle } from '../../core/util.js';
@@ -226,7 +226,7 @@ export function injectShopStyles() {
     .shop-switch::after{
       content:''; position:absolute; top:2px; left:2px;
       width:20px; height:20px; border-radius:50%;
-      background:#fff; box-shadow:var(--shadow-sm);
+      background:var(--bg-card); box-shadow:var(--shadow-sm);
       transition:var(--motion);
     }
     .shop-switch.on{ background:var(--accent); }
@@ -234,7 +234,7 @@ export function injectShopStyles() {
     .shop-form-actions{ display:flex; gap:8px; }
     .shop-form-actions .btn{ flex:1; }
     .shop-form-actions .btn.danger{
-      background:#E8888C; color:#fff;
+      background:var(--danger); color:var(--bubble-user-text);
     }
 
     /* 管理列表 */
@@ -271,7 +271,7 @@ export function injectShopStyles() {
     .shop-mgmt-btn.hide{ background:color-mix(in srgb, var(--text-hint) 22%, transparent); color:var(--text-secondary); }
     .shop-mgmt-btn.show{ background:color-mix(in srgb, var(--accent) 18%, transparent); color:var(--accent); }
     .shop-mgmt-btn.edit{ background:color-mix(in srgb, var(--accent) 18%, transparent); color:var(--accent); }
-    .shop-mgmt-btn.del{ background:color-mix(in srgb, #E8888C 22%, transparent); color:#E8888C; }
+    .shop-mgmt-btn.del{ background:color-mix(in srgb, var(--danger) 22%, transparent); color:var(--danger); }
 
     /* 角色选择列表（送给她） */
     .shop-pick-item{

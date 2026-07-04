@@ -75,7 +75,7 @@ export async function mount(container) {
     .pomo-ring-wrap { position: relative; width: 260px; height: 260px; margin: 6px 0 4px; }
     .pomo-ring { width: 260px; height: 260px; display: block; }
     .pomo-ring-bg { fill: none; stroke: color-mix(in srgb, var(--text-hint) 22%, transparent); stroke-width: 10; }
-    .pomo-ring-fg { fill: none; stroke: var(--accent); stroke-width: 10; stroke-linecap: round; stroke-dasharray: ${RING_C}; stroke-dashoffset: 0; transition: stroke-dashoffset 0.95s linear, stroke var(--motion); transform: rotate(-90deg); transform-origin: center; transform-box: fill-box; }
+    .pomo-ring-fg { fill: none; stroke: var(--accent); stroke-width: 10; stroke-linecap: round; stroke-dasharray: ${RING_C}; stroke-dashoffset: 0; transition: stroke-dashoffset 0.95s cubic-bezier(0.4, 0, 0.2, 1), stroke var(--motion); transform: rotate(-90deg); transform-origin: center; transform-box: fill-box; }
     .pomo-ring-fg.break { stroke: var(--accent-dark); }
     .pomo-ring-fg.no-anim { transition: stroke var(--motion); }
     .pomo-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: none; }
@@ -88,12 +88,12 @@ export async function mount(container) {
     .pomo-ctrl.primary { width: 72px; height: 72px; background: var(--accent); color: var(--bubble-user-text); box-shadow: var(--shadow-glow); }
     .pomo-ctrl.primary svg { width: 28px; height: 28px; }
     .pomo-presets { display: flex; gap: 10px; justify-content: center; margin-top: 16px; }
-    .pomo-preset { padding: 8px 18px; border-radius: 999px; background: color-mix(in srgb, var(--bg-secondary) 60%, transparent); color: var(--text-secondary); font-size: var(--font-size-small); border: none; transition: var(--motion); cursor: pointer; }
+    .pomo-preset { padding: 8px 18px; border-radius: var(--radius-full); background: color-mix(in srgb, var(--bg-secondary) 60%, transparent); color: var(--text-secondary); font-size: var(--font-size-small); border: none; transition: var(--motion); cursor: pointer; }
     .pomo-preset.active { background: var(--accent-light); color: var(--accent-dark); font-weight: 600; }
     .pomo-preset:active { transform: scale(var(--press-scale)); }
     .pomo-hint { font-size: var(--font-size-small); color: var(--text-hint); text-align: center; margin-top: 14px; line-height: 1.5; }
     .pomo-noise-row { display: flex; gap: 8px; justify-content: center; margin-top: 14px; flex-wrap: wrap; }
-    .pomo-noise-btn { padding: 7px 14px; border-radius: 999px; background: color-mix(in srgb, var(--bg-secondary) 60%, transparent); color: var(--text-secondary); font-size: var(--font-size-small); border: none; transition: var(--motion); cursor: pointer; display: inline-flex; align-items: center; gap: 5px; }
+    .pomo-noise-btn { padding: 7px 14px; border-radius: var(--radius-full); background: color-mix(in srgb, var(--bg-secondary) 60%, transparent); color: var(--text-secondary); font-size: var(--font-size-small); border: none; transition: var(--motion); cursor: pointer; display: inline-flex; align-items: center; gap: 5px; }
     .pomo-noise-btn:active { transform: scale(var(--press-scale)); }
     .pomo-noise-btn.active { background: var(--accent-light); color: var(--accent-dark); font-weight: 600; }
     .pomo-noise-btn svg { width: 14px; height: 14px; }
@@ -123,6 +123,11 @@ export function unmount() {
   saveRuntimeState();
   // 停掉白噪音，避免离开后还在响
   stopNoise();
+  // 关掉 AudioContext，释放底层音频资源（避免多次进出导致资源泄漏）
+  if (noiseCtx) {
+    try { noiseCtx.close(); } catch (e) { /* 已经 close 过就算了 */ }
+    noiseCtx = null;
+  }
   containerEl = null;
 }
 
