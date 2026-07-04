@@ -383,7 +383,7 @@ img { display: block; max-width: 100%; }
   flex: 1; max-width: 80px;
 }
 .dock-icon .desktop-icon-img { width: calc(var(--icon-size) * 0.78); height: calc(var(--icon-size) * 0.78); }
-.dock-icon-label { font-size: 11px; color: var(--text-secondary); }
+.dock-icon-label { display: none; }
 
 /* ════════════════════════════════════════ */
 /* 通用 App 容器 */
