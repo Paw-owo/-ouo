@@ -11,6 +11,7 @@ import { getDB, setDB, deleteDB, getAllDB, getNow, getData, setData } from '../.
 import { showToast, showConfirm, showBottomSheet, createIcon } from '../../core/ui.js';
 import bus from '../../core/events.js';
 import { injectStyle } from '../../core/util.js';
+import { openApp } from '../../core/router.js';
 import { applyAppBg } from '../../core/app-bg.js';
 import { recordInteraction } from '../../core/memory.js';
 
@@ -265,11 +266,14 @@ export async function mount(container, context) {
     <div class="app-header">
       <button class="app-back" id="mood-back" aria-label="返回桌面">${createIcon('back', 20).outerHTML}</button>
       <div class="app-header-title">心情日记</div>
+      <button class="app-header-gear" id="mood-settings" aria-label="心情设置">${createIcon('settings', 18).outerHTML}</button>
       <button class="mood-add" id="mood-add" aria-label="记一下今天的心情">${createIcon('edit', 20).outerHTML}</button>
     </div>
     <div class="app-body" id="mood-body"></div>
   `;
   container.querySelector('#mood-back').addEventListener('click', () => bus.emit('router:home'));
+  // 齿轮跳到设置「AI 与陪伴」分组
+  container.querySelector('#mood-settings').addEventListener('click', () => openApp('settings', { deepLink: { tab: 'ai' } }));
   // 顶部加号按钮：滚到顶部并聚焦今天的输入框（今天的心情卡片本身就是新增入口）
   container.querySelector('#mood-add').addEventListener('click', () => {
     const note = containerEl.querySelector('#mood-today-note');

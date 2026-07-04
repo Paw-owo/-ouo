@@ -20,11 +20,11 @@ export async function exportWorldbook() {
     entries = await getAllDB(STORES.worldbook);
   } catch (e) {
     console.warn('[worldbook] 读取词条失败', e);
-    showToast('词条读不出来嘛', 'error');
+    showToast('故事片段读不出来嘛', 'error');
     return;
   }
   if (!Array.isArray(entries) || !entries.length) {
-    showToast('还没有词条，先加一些再导出嘛', 'error');
+    showToast('还没有故事片段，先加一些再取出嘛', 'error');
     return;
   }
   const payload = {
@@ -36,10 +36,10 @@ export async function exportWorldbook() {
   try {
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
     downloadBlob(blob, `世界书_${new Date().toISOString().slice(0, 10)}.json`);
-    showToast(`导出好啦，共 ${entries.length} 条`, 'success', 1600);
+    showToast(`取出好啦，共 ${entries.length} 段`, 'success', 1600);
   } catch (e) {
     console.warn('[worldbook] 导出失败', e);
-    showToast('没导出成功，再试一下嘛', 'error');
+    showToast('没取出成功，再试一下嘛', 'error');
   }
 }
 
@@ -103,10 +103,10 @@ export async function importWorldbook(file, onImported) {
   }
 
   if (okCount > 0) {
-    showToast(`加进来 ${okCount} 条${failCount > 0 ? `，${failCount} 条没成功` : ''}`, 'success', 1800);
+    showToast(`收存好啦 ${okCount} 段${failCount > 0 ? `，${failCount} 段没成功` : ''}`, 'success', 1800);
     if (typeof onImported === 'function') onImported(okCount);
   } else {
-    showToast('一条都没加进来，文件里没合法词条呀', 'error');
+    showToast('一段都没收存进来，文件里没有合法的故事片段呀', 'error');
   }
 }
 

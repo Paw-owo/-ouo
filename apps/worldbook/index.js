@@ -14,6 +14,7 @@ import { deleteDB, setDB, getAllDB } from '../../core/storage.js';
 import { showToast, showConfirm, createIcon } from '../../core/ui.js';
 import bus from '../../core/events.js';
 import { applyAppBg } from '../../core/app-bg.js';
+import { openApp } from '../../core/router.js';
 import { debounce } from '../../core/util.js';
 import {
   CATEGORY_ALL,
@@ -44,15 +45,16 @@ export async function mount(container, context) {
     <div class="app-header">
       <button class="app-back" id="wb-back" aria-label="返回桌面">${createIcon('back', 20).outerHTML}</button>
       <div class="app-header-title">世界书</div>
-      <button class="app-test" id="wb-test" aria-label="测试触发" title="测试触发">${createIcon('search', 20).outerHTML}</button>
-      <button class="app-import" id="wb-import" aria-label="导入" title="导入">${createIcon('upload', 20).outerHTML}</button>
-      <button class="app-export" id="wb-export" aria-label="导出" title="导出">${createIcon('download', 20).outerHTML}</button>
-      <button class="app-add" id="wb-add" aria-label="新增词条" title="新增">${createIcon('plus', 20).outerHTML}</button>
+      <button class="app-header-gear" id="wb-settings" aria-label="世界书设置">${createIcon('settings', 18).outerHTML}</button>
+      <button class="app-test" id="wb-test" aria-label="试试看会不会被想起" title="试试看会不会被想起">${createIcon('search', 20).outerHTML}</button>
+      <button class="app-import" id="wb-import" aria-label="收存" title="收存">${createIcon('upload', 20).outerHTML}</button>
+      <button class="app-export" id="wb-export" aria-label="取出" title="取出">${createIcon('download', 20).outerHTML}</button>
+      <button class="app-add" id="wb-add" aria-label="加一段故事" title="加一段故事">${createIcon('plus', 20).outerHTML}</button>
     </div>
     <div class="app-body" id="wb-body">
       <div class="wb-search-wrap">
         ${createIcon('search', 18).outerHTML}
-        <input class="wb-search" id="wb-search" type="search" placeholder="找找世界观小片段..." aria-label="搜索词条">
+        <input class="wb-search" id="wb-search" type="search" placeholder="找找世界观小片段..." aria-label="搜索故事片段">
       </div>
       <div class="wb-category-bar" id="wb-category-bar"></div>
       <div id="wb-list"></div>
@@ -63,6 +65,8 @@ export async function mount(container, context) {
   container.querySelector('#wb-test').addEventListener('click', () => openTestTrigger());
   container.querySelector('#wb-export').addEventListener('click', () => exportWorldbook().then(() => render()));
   container.querySelector('#wb-import').addEventListener('click', () => triggerImport());
+  // 齿轮跳到设置「AI 与陪伴」分组
+  container.querySelector('#wb-settings').addEventListener('click', () => openApp('settings', { deepLink: { tab: 'ai' } }));
   // 搜索防抖
   const onSearch = debounce((e) => {
     searchKeyword = (e.target.value || '').trim().toLowerCase();
@@ -154,7 +158,7 @@ async function renderList() {
     entries = await getAllDB(STORES.worldbook);
   } catch (e) {
     console.warn('[worldbook] 读取词条失败', e);
-    showToast('词条读不出来嘛，等一下再试试', 'error');
+    showToast('故事片段读不出来嘛，等一下再试试', 'error');
     return;
   }
 
@@ -190,7 +194,7 @@ async function renderList() {
     listEl.innerHTML = `
       <div class="wb-empty">
         <div class="wb-empty-icon">${createIcon('memo', 52).outerHTML}</div>
-        <div class="wb-empty-text">${kw || activeCategory !== CATEGORY_ALL ? '没找到相关的词条呀，换几个字试试嘛' : '还没有词条，加一些世界观设定嘛'}</div>
+        <div class="wb-empty-text">${kw || activeCategory !== CATEGORY_ALL ? '没找到相关的故事片段呀，换几个字试试嘛' : '还没有故事片段，加一些世界观设定嘛'}</div>
       </div>
     `;
     return;
@@ -198,7 +202,7 @@ async function renderList() {
 
   listEl.innerHTML = `
     <div class="wb-list-head">
-      <span class="wb-list-head-title">全部词条</span>
+      <span class="wb-list-head-title">全部故事片段</span>
       <span class="wb-list-head-count">共 ${filtered.length} 条</span>
     </div>
     ${filtered.map(renderCard).join('')}
@@ -252,17 +256,17 @@ function renderCard(e) {
             <span class="wb-card-keyword">${escapeHTML(keyword)}</span>
             ${categoryHTML}
             ${triggerCountHTML}
-            <span class="wb-card-priority">优先级 ${priority}</span>
+            <span class="wb-card-priority">重要程度 ${priority}</span>
           </div>
           <div class="wb-card-content">${escapeHTML(content)}</div>
           ${triggersHTML}
           ${charsHTML}
         </div>
         <div class="wb-card-actions">
-          <button class="wb-toggle ${enabled ? 'on' : ''}" aria-label="${enabled ? '点一下停用' : '点一下启用'}" title="${enabled ? '已启用，点一下停用' : '已停用，点一下启用'}">
+          <button class="wb-toggle ${enabled ? 'on' : ''}" aria-label="${enabled ? '点一下先忘了' : '点一下想起来'}" title="${enabled ? '已经想起来啦，点一下先忘了' : '暂时先忘了，点一下想起来'}">
             <span class="wb-toggle-thumb">${enabled ? checkIcon : ''}</span>
           </button>
-          <button class="wb-icon-btn wb-del" aria-label="删除词条" title="删除">${createIcon('trash', 16).outerHTML}</button>
+          <button class="wb-icon-btn wb-del" aria-label="删掉这段故事" title="删掉">${createIcon('trash', 16).outerHTML}</button>
         </div>
       </div>
     </div>
@@ -273,7 +277,7 @@ function renderCard(e) {
 function renderCardChars(characterIds) {
   if (!Array.isArray(characterIds) || !characterIds.length) {
     // 全局生效
-    return `<div class="wb-card-chars"><span class="wb-card-chars-label">关联：</span><span class="wb-card-char-global">全局生效</span></div>`;
+    return `<div class="wb-card-chars"><span class="wb-card-chars-label">和谁有关：</span><span class="wb-card-char-global">全局生效</span></div>`;
   }
   const chips = characterIds.slice(0, 4).map((id) => {
     const c = charCache.get(id);
@@ -281,7 +285,7 @@ function renderCardChars(characterIds) {
     return `<span class="wb-card-char-chip">${renderCharAvatarHTML(c)}${escapeHTML(name)}</span>`;
   }).join('');
   const more = characterIds.length > 4 ? `<span class="wb-card-chars-label">+${characterIds.length - 4}</span>` : '';
-  return `<div class="wb-card-chars"><span class="wb-card-chars-label">关联：</span>${chips}${more}</div>`;
+  return `<div class="wb-card-chars"><span class="wb-card-chars-label">和谁有关：</span>${chips}${more}</div>`;
 }
 
 // ════════════════════════════════════════
@@ -293,7 +297,7 @@ async function toggleEnabled(e) {
   const next = e.enabled === false; // 当前是 false 就翻成 true
   try {
     await setDB(STORES.worldbook, e.id, { ...e, enabled: next });
-    showToast(next ? '启用啦' : '先停用啦，聊天不会带它了', 'default', 1200);
+    showToast(next ? '想起来啦' : '先忘了它，聊天不会带它了', 'default', 1200);
     // 通知聊天相关模块世界书有变动
     bus.emit('worldbook:changed', { id: e.id, enabled: next });
     await renderList();
@@ -310,8 +314,8 @@ async function toggleEnabled(e) {
 function confirmDelete(e) {
   if (!e || !e.id) return;
   showConfirm({
-    title: '删掉这条词条吗？',
-    body: `「${e.keyword || '这个词条'}」会被我忘掉哦`,
+    title: '删掉这段故事吗？',
+    body: `「${e.keyword || '这段故事'}」会被我忘掉哦`,
     confirmText: '删掉吧',
     cancelText: '再想想',
     danger: true,

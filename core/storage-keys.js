@@ -111,6 +111,13 @@ export const KEYS = Object.freeze({
   appAnniversaries: 'app_anniversaries',
   appVinylSongs: 'app_vinyl_songs',
   appLockUseWallpaper: 'app_lock_use_wallpaper',
+  // 锁屏壁纸透明度（0-100，100 = 完全显示）
+  appLockWallpaperOpacity: 'app_lock_wallpaper_opacity',
+  // Widget 自定义壁纸：{ widgetId: { url, opacity } }
+  appWidgetBackgrounds: 'app_widget_backgrounds',
+
+  // 音乐 App：最近播放列表（最多 20 首，存 [{id, ts}]）
+  musicRecentPlays: 'music_recent_plays',
 
   // 防打扰与主动消息
   aiProactiveBudget: 'ai_proactive_budget',

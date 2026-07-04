@@ -9,12 +9,14 @@ import { showToast, createIcon } from '../../core/ui.js';
 import bus from '../../core/events.js';
 import { clamp } from '../../core/util.js';
 import { recordInteraction } from '../../core/memory.js';
+import { KEYS } from '../../core/storage-keys.js';
 import { state } from './state.js';
 
-// localStorage 里存的音量 / 模式（KEYS 没注册，自己用字符串常量）
+// localStorage 里存的音量 / 模式 / 静音（KEYS 没注册，自己用字符串常量）
 const LS_MUSIC_VOLUME = 'music_volume';
 const LS_MUSIC_MODE = 'music_mode';
 const LS_MUSIC_MUTED = 'music_muted';
+// 最近播放走 KEYS.musicRecentPlays（统一管理 key），存 [{id, ts}] 最多 20 条
 
 // 播放模式：order 顺序 / shuffle 随机 / repeat 单曲循环
 const MODE_ORDER = ['order', 'shuffle', 'repeat'];
@@ -203,6 +205,14 @@ export async function playAt(idx) {
     }
   }
   state.currentIndex = idx;
+  // 同步播放队列：从当前 viewSongs 快照一份 song id 顺序
+  state.queue = viewSongs.map((s) => s.id);
+  state.queueIndex = idx;
+  // 解析歌词
+  state.lyrics = parseLRC(song && song.lyrics);
+  state.lyricsActiveIndex = -1;
+  // 记录最近播放
+  recordRecent(song && song.id);
   ensureAudio();
   const audioEl = state.audioEl;
   audioEl._songId = song.id;
@@ -294,53 +304,110 @@ export async function togglePlay() {
 }
 
 export async function playPrev() {
-  const { viewSongs, currentIndex } = state;
-  if (viewSongs.length === 0) return;
-  if (currentIndex < 0) { await playAt(findAvailableIndex(0, 1)); return; }
-  const idx = findAvailableIndex(currentIndex - 1, -1);
-  if (idx < 0) {
-    showToast('前面没有可播放的歌啦，先选几首嘛', 'error');
+  const { queue, queueIndex, viewSongs } = state;
+  // 队列空了：直接用 viewSongs 兜底（很少走到）
+  if (queue.length === 0) {
+    if (viewSongs.length === 0) return;
+    if (state.currentIndex < 0) { await playAt(findAvailableIndex(0, 1)); return; }
+    const idx = findAvailableIndex(state.currentIndex - 1, -1);
+    if (idx < 0) { showToast('前面没有可播放的歌啦，先选几首嘛', 'error'); return; }
+    await playAt(idx);
     return;
   }
-  await playAt(idx);
+  if (queueIndex < 0) { await playQueueAt(0); return; }
+  // 沿队列往前找一个有 blob 的
+  const next = findAvailableQueueIndex(queueIndex - 1, -1);
+  if (next < 0) { showToast('前面没有可播放的歌啦', 'default', 1200); return; }
+  await playQueueAt(next);
 }
 
 export async function playNext() {
-  const { viewSongs, currentIndex } = state;
-  if (viewSongs.length === 0) return;
+  const { queue, viewSongs, queueIndex, currentIndex } = state;
   const mode = getMode();
-  if (mode === 'shuffle') {
-    const idx = pickRandomIndex(currentIndex);
+  // 队列空了：用 viewSongs 兜底
+  if (queue.length === 0) {
+    if (viewSongs.length === 0) return;
+    if (mode === 'shuffle') {
+      const idx = pickRandomIndex(currentIndex);
+      if (idx < 0) { showToast('没有可播放的歌啦，先选几首嘛', 'error'); return; }
+      await playAt(idx);
+      return;
+    }
+    if (currentIndex < 0) { await playAt(findAvailableIndex(0, 1)); return; }
+    const idx = findAvailableIndex(currentIndex + 1, 1);
     if (idx < 0) {
-      showToast('没有可播放的歌啦，先选几首嘛', 'error');
+      if (mode === 'order') { showToast('已经是最后一首啦', 'default', 1200); return; }
+      const wrap = findAvailableIndex(0, 1);
+      if (wrap < 0) { showToast('没有可播放的歌啦', 'error'); return; }
+      await playAt(wrap);
       return;
     }
     await playAt(idx);
     return;
   }
-  if (currentIndex < 0) { await playAt(findAvailableIndex(0, 1)); return; }
-  const idx = findAvailableIndex(currentIndex + 1, 1);
-  if (idx < 0) {
-    // 顺序模式下到尾了就停；其他模式循环回头
-    if (mode === 'order') {
-      showToast('已经是最后一首啦', 'default', 1200);
-      return;
-    }
-    const wrap = findAvailableIndex(0, 1);
-    if (wrap < 0) { showToast('没有可播放的歌啦', 'error'); return; }
-    await playAt(wrap);
+  // 随机模式：从队列里随机挑一首
+  if (mode === 'shuffle') {
+    const idx = pickRandomQueueIndex(queueIndex);
+    if (idx < 0) { showToast('没有可播放的歌啦，先选几首嘛', 'error'); return; }
+    await playQueueAt(idx);
     return;
   }
-  await playAt(idx);
+  if (queueIndex < 0) { await playQueueAt(findAvailableQueueIndex(0, 1)); return; }
+  const idx = findAvailableQueueIndex(queueIndex + 1, 1);
+  if (idx < 0) {
+    // 顺序模式到尾了就停；其他模式循环回头
+    if (mode === 'order') { showToast('已经是最后一首啦', 'default', 1200); return; }
+    const wrap = findAvailableQueueIndex(0, 1);
+    if (wrap < 0) { showToast('没有可播放的歌啦', 'error'); return; }
+    await playQueueAt(wrap);
+    return;
+  }
+  await playQueueAt(idx);
+}
+
+// 直接播放队列里第 idx 首（用于在队列视图点歌 / playNext/playPrev）
+async function playQueueAt(idx) {
+  const { queue, songs, sessionBlobs } = state;
+  if (idx < 0 || idx >= queue.length) return;
+  const songId = queue[idx];
+  const song = songs.find((s) => s.id === songId);
+  if (!song) {
+    // 队列里引用了不存在的歌，移除掉
+    state.queue.splice(idx, 1);
+    if (state.queueIndex > idx) state.queueIndex -= 1;
+    return;
+  }
+  if (!sessionBlobs.has(songId)) {
+    showToast('这首歌的音频还没准备好嘛，重新加一下试试', 'error');
+    return;
+  }
+  // 同步 viewSongs 里的 currentIndex（用于列表高亮）
+  state.currentIndex = state.viewSongs.findIndex((s) => s.id === songId);
+  state.queueIndex = idx;
+  state.lyrics = parseLRC(song.lyrics);
+  state.lyricsActiveIndex = -1;
+  recordRecent(songId);
+  ensureAudio();
+  const audioEl = state.audioEl;
+  audioEl._songId = songId;
+  audioEl.src = sessionBlobs.get(songId);
+  audioEl.volume = isMuted() ? 0 : getVolume();
+  updateMediaSession(song);
+  try {
+    await audioEl.play();
+  } catch (e) {
+    console.warn('[music] 播放失败', e);
+    showToast('播放不出来嘛，换个文件试试', 'error');
+  }
 }
 
 // ended 时按模式决定下一首
 function onEnded() {
   const mode = getMode();
-  const { audioEl, currentIndex } = state;
+  const { audioEl, queueIndex } = state;
   if (mode === 'repeat') {
     // 单曲循环：重新播当前
-    if (audioEl && currentIndex >= 0) {
+    if (audioEl && queueIndex >= 0) {
       try { audioEl.currentTime = 0; audioEl.play(); } catch (e) {}
     }
     return;
@@ -348,7 +415,33 @@ function onEnded() {
   playNext();
 }
 
-// 从 fromIndex 沿 step 方向找第一首有 blob 的（循环一圈）
+// 从 fromIndex 沿 step 方向在队列里找第一首有 blob 的（循环一圈）
+function findAvailableQueueIndex(fromIndex, step) {
+  const { queue, sessionBlobs } = state;
+  const n = queue.length;
+  if (n === 0) return -1;
+  for (let k = 0; k < n; k++) {
+    const i = ((fromIndex + k * step) % n + n) % n;
+    if (sessionBlobs.has(queue[i])) return i;
+  }
+  return -1;
+}
+
+// 队列里随机挑一首有 blob 的（避开当前）
+function pickRandomQueueIndex(excludeIdx) {
+  const { queue, sessionBlobs } = state;
+  const candidates = [];
+  queue.forEach((id, i) => {
+    if (i !== excludeIdx && sessionBlobs.has(id)) candidates.push(i);
+  });
+  if (candidates.length === 0) {
+    if (excludeIdx >= 0 && sessionBlobs.has(queue[excludeIdx])) return excludeIdx;
+    return -1;
+  }
+  return candidates[Math.floor(Math.random() * candidates.length)];
+}
+
+// viewSongs 兜底版：从 fromIndex 沿 step 方向找第一首有 blob 的（队列空时用）
 function findAvailableIndex(fromIndex, step) {
   const { viewSongs, sessionBlobs } = state;
   const n = viewSongs.length;
@@ -360,7 +453,7 @@ function findAvailableIndex(fromIndex, step) {
   return -1;
 }
 
-// 随机挑一首有 blob 的（避开当前）
+// viewSongs 兜底版：随机挑一首有 blob 的（避开当前）
 function pickRandomIndex(excludeIdx) {
   const { viewSongs, sessionBlobs } = state;
   const candidates = [];
@@ -368,11 +461,57 @@ function pickRandomIndex(excludeIdx) {
     if (i !== excludeIdx && sessionBlobs.has(s.id)) candidates.push(i);
   });
   if (candidates.length === 0) {
-    // 只有当前一首能播
     if (excludeIdx >= 0 && sessionBlobs.has(viewSongs[excludeIdx].id)) return excludeIdx;
     return -1;
   }
   return candidates[Math.floor(Math.random() * candidates.length)];
+}
+
+// ════════════════════════════════════════
+// 队列操作：移动 / 移除 / 清空（导出给 index.js 用）
+// ════════════════════════════════════════
+
+// 上移 / 下移队列项；返回是否需要重渲染
+export function queueMove(idx, dir) {
+  const { queue, queueIndex } = state;
+  if (idx < 0 || idx >= queue.length) return false;
+  const target = dir === 'up' ? idx - 1 : idx + 1;
+  if (target < 0 || target >= queue.length) return false;
+  [queue[idx], queue[target]] = [queue[target], queue[idx]];
+  // 同步 queueIndex
+  if (queueIndex === idx) state.queueIndex = target;
+  else if (queueIndex === target) state.queueIndex = idx;
+  return true;
+}
+
+// 从队列移除某项；如果是当前播放的，跳到下一首
+export async function queueRemove(idx) {
+  const { queue, queueIndex, audioEl } = state;
+  if (idx < 0 || idx >= queue.length) return false;
+  const isCurrent = idx === queueIndex;
+  queue.splice(idx, 1);
+  if (queueIndex > idx) state.queueIndex -= 1;
+  else if (queueIndex === idx) state.queueIndex = -1;
+  if (isCurrent) {
+    // 当前播放的被移除：停掉，跳到队列里下一首可播的
+    if (audioEl) { try { audioEl.pause(); audioEl.src = ''; } catch (e) {} }
+    state.currentIndex = -1;
+    if (queue.length > 0) {
+      const next = findAvailableQueueIndex(Math.min(idx, queue.length - 1), 1);
+      if (next >= 0) await playQueueAt(next);
+    }
+  }
+  return true;
+}
+
+// 清空队列（当前播放的停掉）
+export function queueClear() {
+  const { audioEl } = state;
+  state.queue = [];
+  state.queueIndex = -1;
+  state.currentIndex = -1;
+  if (audioEl) { try { audioEl.pause(); audioEl.src = ''; } catch (e) {} }
+  try { bus.emit('music:paused'); } catch (e) {}
 }
 
 export function onTimeUpdate() {
@@ -391,6 +530,41 @@ export function onTimeUpdate() {
   if (curEl) curEl.textContent = formatDur(cur);
   const durEl = containerEl.querySelector('#music-dur');
   if (durEl) durEl.textContent = formatDur(dur);
+  // 歌词同步高亮
+  updateLyricsHighlight(cur);
+}
+
+// 歌词同步：找到当前时间对应的歌词行，高亮 + 滚动居中
+function updateLyricsHighlight(cur) {
+  const { lyrics, containerEl } = state;
+  if (!containerEl) return;
+  const wrap = containerEl.querySelector('#music-lyrics-body');
+  if (!wrap) return;
+  if (!lyrics || !lyrics.length) {
+    state.lyricsActiveIndex = -1;
+    return;
+  }
+  // 找最后一行 time <= cur
+  let activeIdx = -1;
+  for (let i = 0; i < lyrics.length; i++) {
+    if (lyrics[i].time <= cur) activeIdx = i;
+    else break;
+  }
+  if (activeIdx === state.lyricsActiveIndex) return; // 没变化
+  state.lyricsActiveIndex = activeIdx;
+  // 更新 DOM 高亮 class
+  const items = wrap.querySelectorAll('.music-lyric-line');
+  items.forEach((el, i) => {
+    el.classList.toggle('active', i === activeIdx);
+  });
+  // 当前行滚到居中
+  if (activeIdx >= 0 && items[activeIdx]) {
+    const item = items[activeIdx];
+    const wrapRect = wrap.getBoundingClientRect();
+    const itemRect = item.getBoundingClientRect();
+    const target = wrap.scrollTop + (itemRect.top - wrapRect.top) - (wrapRect.height / 2) + (itemRect.height / 2);
+    wrap.scrollTo({ top: target, behavior: 'smooth' });
+  }
 }
 
 function onSeekInput(e) {
@@ -511,3 +685,98 @@ export function escapeHTML(s) {
   }[c]));
 }
 export function escapeAttr(s) { return escapeHTML(s); }
+
+// ════════════════════════════════════════
+// LRC 歌词解析：把 [mm:ss.xx] 文本解析成 [{time, text}]
+// ════════════════════════════════════════
+
+export function parseLRC(text) {
+  if (!text || typeof text !== 'string') return [];
+  const lines = [];
+  const re = /\[(\d{1,3}):(\d{1,2}(?:\.\d{1,3})?)\]/g;
+  const rawLines = text.split(/\r?\n/);
+  rawLines.forEach((line) => {
+    const matches = [];
+    let m;
+    re.lastIndex = 0;
+    while ((m = re.exec(line)) !== null) {
+      const min = parseInt(m[1], 10);
+      const sec = parseFloat(m[2]);
+      if (Number.isFinite(min) && Number.isFinite(sec)) {
+        matches.push(min * 60 + sec);
+      }
+    }
+    if (matches.length === 0) return;
+    // 去掉所有时间标签后的纯文本
+    const content = line.replace(re, '').trim();
+    matches.forEach((t) => lines.push({ time: t, text: content }));
+  });
+  lines.sort((a, b) => a.time - b.time);
+  return lines;
+}
+
+// 渲染当前歌曲的歌词 HTML（给 index.js 调用）
+export function renderLyricsHTML() {
+  const { lyrics } = state;
+  if (!lyrics || !lyrics.length) {
+    // 软萌空状态：提示用户可以上传 .lrc
+    return `<div class="music-lyric-empty">这首歌还没有歌词呢，可以上传一个~</div>`;
+  }
+  return lyrics.map((l, i) => {
+    const text = l.text || '...';
+    return `<div class="music-lyric-line" data-index="${i}">${escapeHTML(text)}</div>`;
+  }).join('');
+}
+
+// ════════════════════════════════════════
+// 最近播放记录（localStorage，最多 20 首，存 [{id, ts}]）
+// ════════════════════════════════════════
+
+// 记录一首歌到最近播放（去重 + 移到最前 + 截断 20 + 带时间戳）
+export function recordRecent(songId) {
+  if (!songId) return;
+  const list = getRecent(); // [{id, ts}]
+  const filtered = list.filter((r) => r && r.id !== songId);
+  filtered.unshift({ id: songId, ts: Date.now() });
+  const trimmed = filtered.slice(0, 20);
+  try { localStorage.setItem(KEYS.musicRecentPlays, JSON.stringify(trimmed)); } catch (e) {}
+  // state.recentIds 仍保持纯 songId 数组，方便列表渲染直接用
+  state.recentIds = trimmed.map((r) => r.id);
+}
+
+// 读最近播放列表，返回 [{id, ts}]（兼容旧格式：纯 songId 字符串数组）
+export function getRecent() {
+  try {
+    const raw = localStorage.getItem(KEYS.musicRecentPlays);
+    if (!raw) return [];
+    const arr = JSON.parse(raw);
+    if (!Array.isArray(arr)) return [];
+    // 旧格式是 [songId, ...]（字符串），新格式是 [{id, ts}]，统一成新格式
+    return arr.map((r) => {
+      if (typeof r === 'string') return { id: r, ts: 0 };
+      if (r && typeof r === 'object' && r.id) return { id: r.id, ts: Number(r.ts) || 0 };
+      return null;
+    }).filter(Boolean);
+  } catch (e) {
+    return [];
+  }
+}
+
+// 当 lyrics 被外部更新后（上传 .lrc），重新解析当前歌曲的歌词
+export function refreshLyricsForCurrent() {
+  const { audioEl, songs, queue, queueIndex, viewSongs, currentIndex } = state;
+  let song = null;
+  if (queueIndex >= 0 && queueIndex < queue.length) {
+    const sid = queue[queueIndex];
+    song = songs.find((s) => s.id === sid);
+  }
+  if (!song && currentIndex >= 0) {
+    song = viewSongs[currentIndex];
+  }
+  if (!song && audioEl) {
+    song = songs.find((s) => s.id === audioEl._songId);
+  }
+  state.lyrics = parseLRC(song && song.lyrics);
+  state.lyricsActiveIndex = -1;
+  return song;
+}

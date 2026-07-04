@@ -7,6 +7,76 @@ import { injectStyle } from '../../core/util.js';
 
 export function injectGameStyles() {
   injectStyle('app-games-style', `
+  /* ── 我的游戏积分卡片 ── */
+  .games-score-card{
+    background:linear-gradient(135deg,var(--accent) 0%,var(--accent-dark) 100%);
+    color:var(--bubble-user-text);
+    border-radius:var(--radius-card);
+    padding:18px 18px 16px;
+    box-shadow:var(--shadow-md);
+    margin-bottom:16px;
+  }
+  .games-score-top{
+    display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  }
+  .games-score-icon{display:flex;color:var(--bubble-user-text);}
+  .games-score-title{
+    font-size:var(--font-size-base);font-weight:600;
+    flex:1;min-width:0;
+  }
+  .games-score-total{
+    font-size:28px;font-weight:700;line-height:1;
+    font-variant-numeric:tabular-nums;
+  }
+  .games-score-total-label{
+    font-size:var(--font-size-small);opacity:.85;
+  }
+  .games-score-games{
+    display:grid;grid-template-columns:repeat(5,1fr);
+    gap:8px;margin-top:14px;
+  }
+  .games-score-game{
+    background:rgba(255,255,255,.18);
+    border-radius:var(--radius-md);
+    padding:8px 4px;text-align:center;
+  }
+  .games-score-game-name{
+    font-size:var(--font-size-small);opacity:.85;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
+  .games-score-game-val{
+    font-size:var(--font-size-large);font-weight:700;line-height:1.2;
+    font-variant-numeric:tabular-nums;
+  }
+  .games-score-game-label{
+    font-size:var(--font-size-small);opacity:.7;
+  }
+  .games-score-achv{margin-top:14px;}
+  .games-score-achv-title{
+    font-size:var(--font-size-small);opacity:.9;
+    display:flex;align-items:center;gap:6px;margin-bottom:8px;
+  }
+  .games-score-achv-row{
+    display:grid;grid-template-columns:repeat(4,1fr);gap:6px;
+  }
+  .games-score-achv-item{
+    background:rgba(255,255,255,.12);
+    border-radius:var(--radius-sm);
+    padding:8px 4px;text-align:center;
+    opacity:.55;
+  }
+  .games-score-achv-item.on{
+    background:rgba(255,255,255,.28);
+    opacity:1;
+  }
+  .games-score-achv-icon{
+    display:flex;justify-content:center;margin-bottom:3px;
+  }
+  .games-score-achv-name{
+    font-size:var(--font-size-small);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
+
   /* ── 顶部 Tab 选择条 ── */
   .games-tabs{
     display:flex;gap:8px;margin-bottom:16px;

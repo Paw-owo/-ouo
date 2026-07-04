@@ -9,7 +9,7 @@
 //   4) 转账：bottomSheet 选方向（我转给她 / 她转给我）+ 金额 + 备注，余额不足 alert，转账后 bus.emit('wallet:changed')
 //   5) 交易明细：列表倒序，类型图标 + 金额 + 备注 + 分类 + 涉及角色 + 时间；筛选 全部/收入/支出/按角色
 //   6) 删除交易带 showConfirm，删除后反转用户余额与角色余额
-//   7) 余额变色：正数 var(--accent)，负数 #E8888C
+//   7) 余额变色：正数 var(--accent)，负数 var(--danger)
 //   8) 全中文注释 + 第一人称软萌文案，所有图标走 createIcon（SVG 线稿，无 emoji）
 // 依赖：core/storage.js, core/storage-keys.js, core/ui.js, core/events.js, core/util.js, core/app-bg.js
 //       ./styles.js, ./panels.js, ./sheets.js
@@ -18,6 +18,7 @@ import { KEYS, STORES } from '../../core/storage-keys.js';
 import { getData, setData, getAllDB, generateId, getNow } from '../../core/storage.js';
 import { showToast, createIcon } from '../../core/ui.js';
 import bus from '../../core/events.js';
+import { openApp } from '../../core/router.js';
 import { applyAppBg } from '../../core/app-bg.js';
 import { recordInteraction } from '../../core/memory.js';
 import { injectWalletStyles } from './styles.js';
@@ -56,6 +57,7 @@ export async function mount(container, context) {
     <div class="app-header">
       <button class="app-back" id="wallet-back" aria-label="返回桌面">${createIcon('back', 20).outerHTML}</button>
       <div class="app-header-title">你的小金库</div>
+      <button class="app-header-gear" id="wallet-settings" aria-label="钱包设置">${createIcon('settings', 18).outerHTML}</button>
       <button class="app-add" id="wallet-add" aria-label="记一笔">${createIcon('plus', 20).outerHTML}</button>
     </div>
     <div class="app-body" id="wallet-body"></div>
@@ -64,6 +66,8 @@ export async function mount(container, context) {
   container.querySelector('#wallet-add').addEventListener('click', () => openEditor({
     onSave: handleAddTx
   }));
+  // 齿轮跳到设置「数据与系统」分组
+  container.querySelector('#wallet-settings').addEventListener('click', () => openApp('settings', { deepLink: { tab: 'system' } }));
   await render();
   // 末尾应用背景层
   applyAppBg(container, 'wallet');

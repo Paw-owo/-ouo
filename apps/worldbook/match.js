@@ -93,19 +93,19 @@ export function openTestTrigger() {
       <select class="input" id="wb-test-char">
         <option value="">全局（所有角色）</option>
       </select>
-      <div class="wb-form-hint">选了角色后，只匹配「全局」和「关联该角色」的词条</div>
+      <div class="wb-form-hint">选了角色后，只匹配「全局」和「和 TA 有关」的故事片段</div>
     </div>
     <div class="wb-form-row">
       <label class="wb-form-label" for="wb-test-input">随便输一句话试试</label>
       <textarea class="textarea" id="wb-test-input" placeholder="比如：今天我去魔法学校上课啦" maxlength="500"></textarea>
-      <div class="wb-form-hint">我会模拟聊天时的触发逻辑，看看会命中哪些词条</div>
+      <div class="wb-form-hint">我会模拟聊天时的暗号匹配，看看会想起哪些故事片段</div>
     </div>
     <button class="btn primary" id="wb-test-run" style="width:100%;justify-content:center">测一下</button>
     <div class="wb-test-result" id="wb-test-result"></div>
   `;
 
   const sheet = showBottomSheet({
-    title: '测试触发',
+    title: '试试看会不会被想起',
     bodyElement: body,
     dismissible: true
   });
@@ -181,12 +181,12 @@ async function loadCharacterOptions(selectEl) {
 function renderTestResult(hits) {
   if (!Array.isArray(hits) || !hits.length) {
     return `
-      <div class="wb-test-result-title">命中的词条</div>
-      <div class="wb-test-empty">一个都没命中呀，换句话试试嘛</div>
+      <div class="wb-test-result-title">被想起的故事片段</div>
+      <div class="wb-test-empty">一个都没想起来呀，换句话试试嘛</div>
     `;
   }
   return `
-    <div class="wb-test-result-title">命中 ${hits.length} 条</div>
+    <div class="wb-test-result-title">想起来了 ${hits.length} 段</div>
     ${hits.map((e) => `
       <div class="wb-test-hit">
         <div class="wb-test-hit-keyword">${escapeHTML(e.keyword || '（没填关键词）')}</div>

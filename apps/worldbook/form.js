@@ -37,9 +37,9 @@ export function openForm(existing, onSaved, onDelete) {
       <div class="wb-form-hint">聊天里出现这个关键词时，我会把内容悄悄塞进 AI 的脑子里</div>
     </div>
     <div class="wb-form-row">
-      <label class="wb-form-label" for="wb-f-triggers">触发词（逗号或空格分隔，可以不填）</label>
+      <label class="wb-form-label" for="wb-f-triggers">暗号（逗号或空格分隔，可以不填）</label>
       <input class="input" id="wb-f-triggers" type="text" placeholder="比如：学校 魔法 法学院" value="${escapeAttr((init.triggers || []).join(' '))}">
-      <div class="wb-form-hint">比关键词更宽泛，多个触发词里任何一个命中都会带进上下文</div>
+      <div class="wb-form-hint">比关键词更宽泛，多个暗号里任何一个命中都会带进上下文</div>
     </div>
     <div class="wb-form-row">
       <label class="wb-form-label" for="wb-f-category">分类（可以不填）</label>
@@ -51,7 +51,7 @@ export function openForm(existing, onSaved, onDelete) {
       <textarea class="textarea" id="wb-f-content" placeholder="写下这段世界观设定，越详细越好呀..." maxlength="3000">${escapeHTML(init.content || '')}</textarea>
     </div>
     <div class="wb-form-row">
-      <label class="wb-form-label">关联角色（可以不选，不选=全局生效）</label>
+      <label class="wb-form-label">和谁有关（可以不选，不选=全局生效）</label>
       <div class="wb-multiselect" id="wb-f-char-list"></div>
       <div class="wb-form-hint">选了角色后，这条只在和 TA 聊天时才会触发</div>
     </div>
@@ -60,14 +60,14 @@ export function openForm(existing, onSaved, onDelete) {
       <textarea class="textarea" id="wb-f-note" placeholder="给自己看的备忘，比如「这段设定参考了某本书」" maxlength="500">${escapeHTML(init.note || '')}</textarea>
     </div>
     <div class="wb-form-row">
-      <label class="wb-form-label" for="wb-f-priority">优先级（数字越大越优先）</label>
+      <label class="wb-form-label" for="wb-f-priority">重要程度（数字越大越优先）</label>
       <div class="wb-priority-row">
         <input class="input wb-priority-input" id="wb-f-priority" type="number" min="0" max="${MAX_PRIORITY}" step="1" value="${Number(init.priority ?? DEFAULT_PRIORITY)}">
-        <span class="wb-form-hint">同样关键词撞车时，优先级高的先上阵</span>
+        <span class="wb-form-hint">同样关键词撞车时，重要程度高的先上阵</span>
       </div>
     </div>
     <div class="wb-enable-row">
-      <label for="wb-f-enabled">启用这条词条</label>
+      <label for="wb-f-enabled">把这条想起来</label>
       <input type="checkbox" id="wb-f-enabled" ${init.enabled !== false ? 'checked' : ''}>
     </div>
     <div class="wb-actions-row" style="margin-top:14px">
@@ -77,7 +77,7 @@ export function openForm(existing, onSaved, onDelete) {
   `;
 
   const sheet = showBottomSheet({
-    title: editing ? '改一下词条' : '加一个词条',
+    title: editing ? '改一段故事' : '加一段故事',
     bodyElement: body,
     dismissible: true
   });
@@ -121,7 +121,7 @@ export function openForm(existing, onSaved, onDelete) {
       };
       await setDB(STORES.worldbook, id, record);
       sheet.close();
-      showToast(editing ? '改好啦，已帮你更新' : '加进来啦，世界观又丰富一点点', 'success', 1400);
+      showToast(editing ? '改好啦，故事片段更新好啦' : '加进来啦，世界观又丰富一点点', 'success', 1400);
       if (typeof onSaved === 'function') onSaved(record);
     } catch (err) {
       console.warn('[worldbook] 保存失败', err);

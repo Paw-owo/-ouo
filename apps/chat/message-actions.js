@@ -5,10 +5,10 @@
 // 红线：图标只准 SVG 线稿，禁止任何 emoji 字符。
 
 import { KEYS, STORES } from '../../core/storage-keys.js';
-import { getData, setData, getDB, setDB, deleteDB, getAllDB, generateId, getNow } from '../../core/storage.js';
+import { getData, setData, getDB, setDB, deleteDB, getAllDB, generateId, getNow, compressImage } from '../../core/storage.js';
 import { showToast, showConfirm, showBottomSheet, createIcon } from '../../core/ui.js';
 import bus from '../../core/events.js';
-import { downloadBlob, isUsableImage, cssUrl, clamp } from '../../core/util.js';
+import { downloadBlob, isUsableImage, cssUrl, clamp, pickImageFile } from '../../core/util.js';
 import { getState, render, applySessionWallpaper, setQuoteToInput } from './index.js';
 import { escapeHTML, escapeAttr } from './shared-utils.js';
 
@@ -270,6 +270,9 @@ export function openWallpaperSheet(session) {
         <input class="input" id="chat-wp-url" type="text" placeholder="粘贴图片地址，或留空清除..." value="${escapeAttr(cur.url || '')}">
       </div>
       <div class="chat-form-row">
+        <button class="btn block" id="chat-wp-pick" type="button">${createIcon('camera', 18).outerHTML}<span>从相册选一张</span></button>
+      </div>
+      <div class="chat-form-row">
         <label class="chat-form-label" for="chat-wp-opacity">
           透明度：<span id="chat-wp-opacity-val">${Number(cur.opacity ?? 60)}</span>%
         </label>
@@ -309,6 +312,20 @@ export function openWallpaperSheet(session) {
   refreshPreview();
   urlInput.addEventListener('input', refreshPreview);
   opacityInput.addEventListener('input', refreshPreview);
+
+  // 从相册选图：压缩成 data URL 塞回 URL 输入框并刷新预览
+  body.querySelector('#chat-wp-pick').addEventListener('click', async () => {
+    try {
+      const file = await pickImageFile();
+      const dataUrl = await compressImage(file, { quality: 0.78 });
+      urlInput.value = dataUrl;
+      refreshPreview();
+      showToast('图片选好啦，记得点应用背景哦');
+    } catch (e) {
+      if (e && /取消/.test(e.message || '')) return;
+      showToast('图片读不出来嘛', 'error');
+    }
+  });
 
   body.querySelector('#chat-wp-clear').addEventListener('click', async () => {
     try {

@@ -22,6 +22,7 @@ import {
 import { renderCommentPreview, openCommentSheet } from './comments.js';
 import { aiPost, scheduleAIReactions, maybeAutoPost } from './ai-post.js';
 import { openDetail } from './detail.js';
+import { openApp } from '../../core/router.js';
 import { applyAppBg } from '../../core/app-bg.js';
 
 let containerEl = null;
@@ -39,6 +40,7 @@ export async function mount(container) {
     <div class="app-header">
       <button class="app-back" id="mom-back" aria-label="返回桌面">${createIcon('back', 20).outerHTML}</button>
       <div class="app-header-title">朋友圈</div>
+      <button class="app-header-gear" id="mom-settings" aria-label="朋友圈设置">${createIcon('settings', 18).outerHTML}</button>
       <button class="app-add" id="mom-add" aria-label="发动态">${createIcon('plus', 20).outerHTML}</button>
     </div>
     <div class="app-body" id="mom-body">
@@ -49,6 +51,8 @@ export async function mount(container) {
   `;
   container.querySelector('#mom-back').addEventListener('click', () => bus.emit('router:home'));
   container.querySelector('#mom-add').addEventListener('click', () => openEditor());
+  // 齿轮跳到设置「外观」分组
+  container.querySelector('#mom-settings').addEventListener('click', () => openApp('settings', { deepLink: { tab: 'appearance' } }));
   container.querySelector('#mom-ai-post').addEventListener('click', async () => {
     await aiPost();
     await render();

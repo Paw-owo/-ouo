@@ -180,6 +180,7 @@ export async function mount(container, context) {
     <div class="app-header">
       <button class="app-back" id="coll-back" aria-label="返回桌面">${createIcon('back', 20).outerHTML}</button>
       <div class="app-header-title">收藏夹</div>
+      <button class="app-header-gear" id="coll-settings" aria-label="收藏夹设置">${createIcon('settings', 18).outerHTML}</button>
       <button class="app-add" id="coll-add" aria-label="新增收藏">${createIcon('plus', 20).outerHTML}</button>
     </div>
     <div class="app-body" id="coll-body">
@@ -197,6 +198,8 @@ export async function mount(container, context) {
   `;
   container.querySelector('#coll-back').addEventListener('click', () => bus.emit('router:home'));
   container.querySelector('#coll-add').addEventListener('click', () => openEditor(null));
+  // 齿轮跳到设置「数据与系统」分组
+  container.querySelector('#coll-settings').addEventListener('click', () => openApp('settings', { deepLink: { tab: 'system' } }));
   container.querySelector('#coll-filters').addEventListener('click', (e) => {
     const btn = e.target.closest('.coll-filter');
     if (!btn) return;

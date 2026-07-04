@@ -13,6 +13,7 @@ import { pick } from '../../core/util.js';
 import { recordInteraction } from '../../core/memory.js';
 import { TRUTH_QUESTIONS, DARE_QUESTIONS, TRUTH_COMMENTS, DARE_COMMENTS } from './data.js';
 import { escapeHTML, aiText, renderHistoryList, historyCardHTML } from './shared.js';
+import { reportScore } from './score.js';
 
 // 当前题目状态
 let currentType = 'truth';   // 'truth' | 'dare'
@@ -162,6 +163,8 @@ async function submitAnswer(content) {
     game: '真心话大冒险',
     result: `${label(currentType)}：${currentQuestion}`
   });
+  // 上报积分：完成一局 +10 分
+  try { reportScore('truth', 10); } catch (e) { console.warn('[games] 真心话积分上报失败', e); }
   // 写入长期记忆，让 AI 知道主人玩过真心话大冒险
   try {
     await recordInteraction({

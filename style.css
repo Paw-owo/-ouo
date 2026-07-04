@@ -79,6 +79,14 @@ img { display: block; max-width: 100%; }
   background: var(--bg-overlay);
   pointer-events: none;
 }
+/* 壁纸透明度遮罩：盖在背景图上、内容之下，opacity 由 --lock-bg-mask 控制
+   （0 = 完全显示壁纸，1 = 完全用 --bg-primary 盖住壁纸）*/
+.lock-screen::after {
+  content: ''; position: absolute; inset: 0;
+  background: var(--bg-primary);
+  opacity: var(--lock-bg-mask, 0);
+  pointer-events: none;
+}
 .lock-screen.unlocked { transform: translateY(-100%); opacity: 0; pointer-events: none; }
 .lock-screen.hidden { display: none; }
 .lock-avatar {
@@ -249,6 +257,17 @@ img { display: block; max-width: 100%; }
 }
 .widget:active { transform: scale(calc(var(--widget-scale, 1) * 0.97)); }
 .widget.wide { grid-column: span 2; }
+/* Widget 自定义皮肤：背景图通过 ::before 铺一层，opacity 单独控，不影响文字 */
+.widget.has-bg { isolation: isolate; }
+.widget.has-bg::before {
+  content: ''; position: absolute; inset: 0;
+  background-image: var(--widget-bg-url, none);
+  background-size: cover; background-position: center;
+  opacity: var(--widget-bg-opacity, 1);
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: -1;
+}
 .widget-title { font-size: var(--font-size-small); color: var(--text-secondary); margin-bottom: 4px; }
 .widget-value { font-size: var(--font-size-title); color: var(--text-primary); font-weight: 600; }
 .widget-sub { font-size: var(--font-size-small); color: var(--text-hint); margin-top: 2px; }
@@ -433,6 +452,18 @@ img { display: block; max-width: 100%; }
   display: flex; align-items: center; justify-content: center;
 }
 .app-header button svg { width: 20px; height: 20px; }
+/* header 设置入口齿轮：透明底，提示色，按下转主题色 */
+.app-header .app-header-gear {
+  width: 32px; height: 32px;
+  background: transparent;
+  color: var(--text-hint);
+  transition: var(--motion);
+}
+.app-header .app-header-gear:active {
+  transform: scale(var(--press-scale));
+  color: var(--accent);
+}
+.app-header .app-header-gear svg { width: 18px; height: 18px; }
 .app-body { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: var(--spacing-lg); }
 
 /* 通用卡片 */

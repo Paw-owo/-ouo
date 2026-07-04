@@ -14,6 +14,7 @@ import { sendMessage, sendImageMessage, cancelStreaming, retrySendMessage } from
 import { applySessionWallpaper } from './wallpaper.js';
 import { renderMarkdown } from './markdown.js';
 import { escapeHTML, escapeAttr, attachLongPress } from './shared-utils.js';
+import { openApp } from '../../core/router.js';
 
 // 注册感叹号图标（用于消息发送失败状态）
 registerIcon('alert', 'M12 3v10 M12 17h.01');
@@ -45,6 +46,7 @@ export async function renderChatDetailView() {
           <span id="chat-header-status-text">在线</span>
         </div>
       </div>
+      <button class="app-header-gear" id="chat-settings" aria-label="聊天设置">${createIcon('settings', 18).outerHTML}</button>
       <button class="chat-more" id="chat-more" aria-label="聊天设置">${createIcon('more', 20).outerHTML}</button>
     </div>
     <div class="chat-messages" id="chat-messages" data-mode="${escapeAttr(mode)}"></div>
@@ -69,6 +71,8 @@ export async function renderChatDetailView() {
   // 绑定事件
   container.querySelector('#chat-back').addEventListener('click', backToSessionList);
   container.querySelector('#chat-more').addEventListener('click', openChatMoreMenu);
+  // 齿轮跳到设置「AI 与陪伴」分组
+  container.querySelector('#chat-settings').addEventListener('click', () => openApp('settings', { deepLink: { tab: 'ai' } }));
   container.querySelector('#chat-plus').addEventListener('click', openInputPlusMenu);
   state.sendBtnEl.addEventListener('click', onSendClick);
   state.inputEl.addEventListener('keydown', onInputKeyDown);

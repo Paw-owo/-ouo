@@ -10,6 +10,7 @@ import { getData, getAllDB } from '../../core/storage.js';
 import { showToast, showConfirm, showBottomSheet, createIcon } from '../../core/ui.js';
 import bus from '../../core/events.js';
 import { formatRelative, injectStyle, clamp, debounce, downloadBlob } from '../../core/util.js';
+import { openApp } from '../../core/router.js';
 import { applyAppBg } from '../../core/app-bg.js';
 import { getMemories, updateMemory, deleteMemory, clearMemories, recordInteraction } from '../../core/memory.js';
 
@@ -20,33 +21,50 @@ import { getMemories, updateMemory, deleteMemory, clearMemories, recordInteracti
 let containerEl = null;
 let currentCharacterId = null;
 let currentCharacterName = '';
-let filterType = 'all';       // 'all' | fact | preference | event | relationship | summary
+let filterType = 'all';       // 'all' | fact | preference | event | relationship | summary ...
 let searchKeyword = '';
 
-// 类型映射（source 值 -> 中文标签）
-const TYPE_LABELS = {
-  fact: '事实',
-  preference: '喜好',
-  event: '事件',
-  relationship: '关系',
-  summary: '对话总结',
-  manual: '手动',
-  chat: '聊天'
+// 类型映射（source 值 -> 中文软萌标签）。
+// 数据字段值不改，只改 UI 显示标签，保持数据兼容。
+const LABEL_MAP = {
+  fact: '知道的事',
+  preference: '喜欢讨厌',
+  event: '发生过的事',
+  relationship: '我们的关系',
+  summary: '聊天总结',
+  manual: '自己加的',
+  chat: '聊天记的',
+  gift: '收到礼物',
+  transfer: '钱包往来',
+  mood: '心情记录',
+  game: '玩游戏',
+  music: '听歌',
+  auto_extract: '自己记住的'
 };
+// 兼容旧引用（renderCard 里用到的 typeLabel 兜底）
+const TYPE_LABELS = LABEL_MAP;
+// 手动新增记忆时可选的类型（少了 chat / transfer 这种由其他 App 自动写的）
 const TYPE_OPTIONS = [
-  { value: 'fact', label: '事实' },
-  { value: 'preference', label: '喜好' },
-  { value: 'event', label: '事件' },
-  { value: 'relationship', label: '关系' },
-  { value: 'summary', label: '对话总结' }
+  { value: 'fact', label: '知道的事' },
+  { value: 'preference', label: '喜欢讨厌' },
+  { value: 'event', label: '发生过的事' },
+  { value: 'relationship', label: '我们的关系' },
+  { value: 'summary', label: '聊天总结' }
 ];
 const FILTER_CHIPS = [
   { value: 'all', label: '全部' },
-  { value: 'fact', label: '事实' },
-  { value: 'preference', label: '喜好' },
-  { value: 'event', label: '事件' },
-  { value: 'relationship', label: '关系' },
-  { value: 'summary', label: '对话总结' }
+  { value: 'fact', label: '知道的事' },
+  { value: 'preference', label: '喜欢讨厌' },
+  { value: 'event', label: '发生过的事' },
+  { value: 'relationship', label: '我们的关系' },
+  { value: 'summary', label: '聊天总结' },
+  { value: 'chat', label: '聊天记的' },
+  { value: 'gift', label: '收到礼物' },
+  { value: 'transfer', label: '钱包往来' },
+  { value: 'mood', label: '心情记录' },
+  { value: 'game', label: '玩游戏' },
+  { value: 'music', label: '听歌' },
+  { value: 'auto_extract', label: '自己记住的' }
 ];
 
 // ════════════════════════════════════════
@@ -211,6 +229,7 @@ export async function mount(container, context) {
     <div class="app-header">
       <button class="app-back" id="mem-back" aria-label="返回桌面">${createIcon('back', 20).outerHTML}</button>
       <div class="app-header-title">她记得的事</div>
+      <button class="app-header-gear" id="mem-settings" aria-label="记忆设置">${createIcon('settings', 18).outerHTML}</button>
       <button class="app-add" id="mem-add" aria-label="新增记忆">${createIcon('plus', 20).outerHTML}</button>
     </div>
     <div class="app-body" id="mem-body">
@@ -235,6 +254,8 @@ export async function mount(container, context) {
   `;
   container.querySelector('#mem-back').addEventListener('click', () => bus.emit('router:home'));
   container.querySelector('#mem-add').addEventListener('click', () => openEditor(null));
+  // 齿轮跳到设置「AI 与陪伴」分组
+  container.querySelector('#mem-settings').addEventListener('click', () => openApp('settings', { deepLink: { tab: 'ai' } }));
   container.querySelector('#mem-char-pick').addEventListener('click', () => openCharacterPicker());
   container.querySelector('#mem-export').addEventListener('click', () => exportMemories());
   container.querySelector('#mem-import').addEventListener('click', () => importMemories());

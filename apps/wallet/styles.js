@@ -1,6 +1,6 @@
 // apps/wallet/styles.js
 // 钱包 App 的样式——我都收在这啦，方便 index 单独维护结构。
-// 红线：视觉值全部走 CSS 变量；负数色 #E8888C 与 .btn.danger 一致的红粉警示色；图标只走 SVG 线稿。
+// 红线：视觉值全部走 CSS 变量；负数色 var(--danger) 与 .btn.danger 一致的红粉警示色；图标只走 SVG 线稿。
 // 依赖：core/util.js
 
 import { injectStyle } from '../../core/util.js';
@@ -34,7 +34,7 @@ export function injectWalletStyles() {
       word-break:break-all;
       flex:1; min-width:0;
     }
-    .wallet-hero-balance.neg{ color:#E8888C; }
+    .wallet-hero-balance.neg{ color:var(--danger); }
     .wallet-hero-edit{
       width:34px; height:34px; border-radius:50%;
       background:color-mix(in srgb, var(--accent) 14%, transparent);
@@ -61,7 +61,7 @@ export function injectWalletStyles() {
       color:var(--text-primary);
     }
     .wallet-stat-value.income{ color:var(--accent); }
-    .wallet-stat-value.expense{ color:#E8888C; }
+    .wallet-stat-value.expense{ color:var(--danger); }
     .wallet-section-title{
       font-size:var(--font-size-base);
       color:var(--text-secondary);
@@ -192,8 +192,8 @@ export function injectWalletStyles() {
       color:var(--accent);
     }
     .wallet-tx-icon.expense{
-      background:color-mix(in srgb, #E8888C 18%, transparent);
-      color:#E8888C;
+      background:color-mix(in srgb, var(--danger) 18%, transparent);
+      color:var(--danger);
     }
     .wallet-tx-icon.transfer{
       background:color-mix(in srgb, var(--accent-light) 50%, transparent);
@@ -226,7 +226,7 @@ export function injectWalletStyles() {
       flex-shrink:0;
     }
     .wallet-tx-amount.income{ color:var(--accent); }
-    .wallet-tx-amount.expense{ color:#E8888C; }
+    .wallet-tx-amount.expense{ color:var(--danger); }
     .wallet-tx-del{
       width:30px; height:30px; border-radius:50%;
       background:transparent; color:var(--text-hint);
@@ -260,8 +260,8 @@ export function injectWalletStyles() {
       color:var(--accent); border-color:var(--accent);
     }
     .wallet-type-btn.active.expense{
-      background:color-mix(in srgb, #E8888C 18%, transparent);
-      color:#E8888C; border-color:#E8888C;
+      background:color-mix(in srgb, var(--danger) 18%, transparent);
+      color:var(--danger); border-color:var(--danger);
     }
     .wallet-empty-icon{ color:var(--text-hint); opacity:0.5; margin-bottom:12px; }
 

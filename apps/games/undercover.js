@@ -13,6 +13,7 @@ import { pick } from '../../core/util.js';
 import { recordInteraction } from '../../core/memory.js';
 import { WORD_PAIRS, UNDERCOVER_SPEECHES, AI_PLAYER_NAMES, UNDERCOVER_RESULTS } from './data.js';
 import { escapeHTML, escapeAttr, aiText, renderHistoryList, historyCardHTML, sleep } from './shared.js';
+import { reportScore } from './score.js';
 
 // 一局的状态
 let game = null;
@@ -325,6 +326,9 @@ async function finishVote(stage, userVote) {
   }
   // 事件注入
   bus.emit('games:result', { game: '谁是卧底', result: resultText });
+  // 上报积分：赢 +20，输 / 平局 +5
+  const ucWin = resultKey === 'userUndercoverWin' || resultKey === 'userCivilianWin';
+  try { reportScore('undercover', ucWin ? 20 : 5); } catch (e) { console.warn('[games] 谁是卧底积分上报失败', e); }
   // 写入长期记忆，让 AI 知道主人玩过谁是卧底
   try {
     await recordInteraction({

@@ -16,6 +16,7 @@ import { KEYS, STORES } from '../../core/storage-keys.js';
 import { getData, setData, setDB, deleteDB, generateId, getNow } from '../../core/storage.js';
 import { showToast, showConfirm, createIcon, showAlert } from '../../core/ui.js';
 import bus from '../../core/events.js';
+import { openApp } from '../../core/router.js';
 import { applyAppBg } from '../../core/app-bg.js';
 import { recordInteraction } from '../../core/memory.js';
 import { addAffection } from '../../core/affection.js';
@@ -50,6 +51,7 @@ export async function mount(container, context) {
     <div class="app-header">
       <button class="app-back" id="shop-back" aria-label="返回桌面">${createIcon('back', 20).outerHTML}</button>
       <div class="app-header-title">小心意商店</div>
+      <button class="app-header-gear" id="shop-settings" aria-label="商店设置">${createIcon('settings', 18).outerHTML}</button>
       <button class="app-add" id="shop-add" aria-label="新增商品">${createIcon('plus', 20).outerHTML}</button>
     </div>
     <div class="app-body" id="shop-body"></div>
@@ -60,6 +62,8 @@ export async function mount(container, context) {
       onSave: handleSaveCustomProduct
     });
   });
+  // 齿轮跳到设置「数据与系统」分组
+  container.querySelector('#shop-settings').addEventListener('click', () => openApp('settings', { deepLink: { tab: 'system' } }));
   await render();
   // 末尾应用背景层
   applyAppBg(container, 'shop');

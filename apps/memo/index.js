@@ -21,6 +21,7 @@ import { getDB, setDB, deleteDB, getAllDB, generateId, getNow } from '../../core
 import { showToast, showConfirm, showBottomSheet, createIcon } from '../../core/ui.js';
 import bus from '../../core/events.js';
 import { formatRelative, debounce, injectStyle } from '../../core/util.js';
+import { openApp } from '../../core/router.js';
 import { applyAppBg } from '../../core/app-bg.js';
 
 let containerEl = null;
@@ -192,6 +193,7 @@ export async function mount(container, context) {
     <div class="app-header">
       <button class="app-back" id="memo-back" aria-label="返回桌面">${createIcon('back', 20).outerHTML}</button>
       <div class="app-header-title">备忘录</div>
+      <button class="app-header-gear" id="memo-settings" aria-label="备忘录设置">${createIcon('settings', 18).outerHTML}</button>
       <button class="app-add" id="memo-add" aria-label="新增笔记">${createIcon('plus', 20).outerHTML}</button>
     </div>
     <div class="app-body" id="memo-body">
@@ -207,6 +209,8 @@ export async function mount(container, context) {
   `;
   container.querySelector('#memo-back').addEventListener('click', () => bus.emit('router:home'));
   container.querySelector('#memo-add').addEventListener('click', () => openEditor(null));
+  // 齿轮跳到设置「数据与系统」分组
+  container.querySelector('#memo-settings').addEventListener('click', () => openApp('settings', { deepLink: { tab: 'system' } }));
   // 搜索防抖
   const onSearch = debounce((e) => {
     searchKeyword = (e.target.value || '').trim().toLowerCase();

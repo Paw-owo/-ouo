@@ -13,6 +13,7 @@ import { KEYS } from '../../core/storage-keys.js';
 import { getData, setData } from '../../core/storage.js';
 import { showToast, createIcon, showBottomSheet } from '../../core/ui.js';
 import bus from '../../core/events.js';
+import { openApp } from '../../core/router.js';
 import { applyAppBg } from '../../core/app-bg.js';
 
 let containerEl = null;
@@ -41,6 +42,7 @@ export async function mount(container, context) {
     <div class="app-header">
       <button class="app-back" id="calc-back" aria-label="返回桌面">${createIcon('back', 20).outerHTML}</button>
       <div class="app-header-title">计算器</div>
+      <button class="app-header-gear" id="calc-settings" aria-label="计算器设置">${createIcon('settings', 18).outerHTML}</button>
       <button class="app-history" id="calc-history-btn" aria-label="看看历史记录">${createIcon('calendar', 20).outerHTML}</button>
     </div>
     <div class="app-body" id="calc-body">
@@ -51,6 +53,8 @@ export async function mount(container, context) {
 
   container.querySelector('#calc-back').addEventListener('click', () => bus.emit('router:home'));
   container.querySelector('#calc-history-btn').addEventListener('click', openHistorySheet);
+  // 齿轮跳到设置「数据与系统」分组
+  container.querySelector('#calc-settings').addEventListener('click', () => openApp('settings', { deepLink: { tab: 'system' } }));
 
   renderKeys();
   updateDisplay();

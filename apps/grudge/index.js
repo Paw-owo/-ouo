@@ -11,6 +11,7 @@ import { getData, getDB, setDB, deleteDB, getAllDB, generateId, getNow } from '.
 import { showToast, showConfirm, showBottomSheet, createIcon } from '../../core/ui.js';
 import bus from '../../core/events.js';
 import { formatRelative, injectStyle, clamp } from '../../core/util.js';
+import { openApp } from '../../core/router.js';
 import { applyAppBg } from '../../core/app-bg.js';
 
 // ════════════════════════════════════════
@@ -144,6 +145,7 @@ export async function mount(container, context) {
     <div class="app-header">
       <button class="app-back" id="grudge-back" aria-label="返回桌面">${createIcon('back', 20).outerHTML}</button>
       <div class="app-header-title">记仇小本本</div>
+      <button class="app-header-gear" id="grudge-settings" aria-label="记仇本设置">${createIcon('settings', 18).outerHTML}</button>
       <button class="app-add" id="grudge-add" aria-label="新增记仇">${createIcon('plus', 20).outerHTML}</button>
     </div>
     <div class="app-body" id="grudge-body">
@@ -156,6 +158,8 @@ export async function mount(container, context) {
   `;
   container.querySelector('#grudge-back').addEventListener('click', () => bus.emit('router:home'));
   container.querySelector('#grudge-add').addEventListener('click', () => openEditor(null));
+  // 齿轮跳到设置「AI 与陪伴」分组
+  container.querySelector('#grudge-settings').addEventListener('click', () => openApp('settings', { deepLink: { tab: 'ai' } }));
   await render();
   applyAppBg(container, 'grudge');
 }
@@ -487,7 +491,8 @@ export async function addGrudgeFromAI({ characterId, reason, source, level }) {
 }
 
 // 原谅该角色最近一条未原谅的记仇（供道歉关键词触发）
-async function forgiveLatestForCharacter(characterId) {
+// 我把它 export 出来，让 AI 模块（js/ai/ai-emotion.js）检测到道歉时也能调用
+export async function forgiveLatestForCharacter(characterId) {
   if (!characterId) return false;
   try {
     const all = await getAllDB(STORES.grudges);

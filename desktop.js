@@ -98,7 +98,7 @@ async function boot() {
     await applyCustomFont();
     await seedDefaultCharacter();
     currentCharacter = await getDefaultCharacter();
-    await ensureLockPasswordHashed(); // 密码哈希迁移（明文 → 哈希）
+    await ensureLockPasswordHashed(); // 密码哈希迁移（明文 -> 哈希）
     renderLockDots();
     rebuildDesktopPages();
     await renderAll();
@@ -306,6 +306,14 @@ async function createWidget(w) {
     el.querySelector('#w-vinyl-play').addEventListener('click', (e) => { e.stopPropagation(); toggleVinylPlay(); });
     el.querySelector('#w-vinyl-prev').addEventListener('click', (e) => { e.stopPropagation(); playVinylAt(vinylIndex - 1); });
     el.querySelector('#w-vinyl-next').addEventListener('click', (e) => { e.stopPropagation(); playVinylAt(vinylIndex + 1); });
+  }
+  // 应用 Widget 自定义皮肤（背景图 + 透明度，存 localStorage KEYS.appWidgetBackgrounds）
+  const widgetBgs = getData(KEYS.appWidgetBackgrounds, {});
+  const wbg = widgetBgs[w.id];
+  if (wbg && wbg.url && isUsableImage(wbg.url)) {
+    el.classList.add('has-bg');
+    el.style.setProperty('--widget-bg-url', cssUrl(wbg.url));
+    el.style.setProperty('--widget-bg-opacity', String(clamp(Number(wbg.opacity ?? 60), 0, 100) / 100));
   }
   // 编辑态删除角标
   const del = document.createElement('span');
@@ -1117,6 +1125,10 @@ async function applyLockBackground() {
     const rec = await getDB(STORES.blobs, KEYS.appLockWallpaper);
     url = rec?.value || rec?.source || rec?.data || '';
   }
+  // 锁屏壁纸透明度（0-100，100 = 完全显示）。遮罩层不透明度 = (100 - 透明度) / 100
+  const userOpacity = Number(getData(KEYS.appLockWallpaperOpacity, 100));
+  const maskOpacity = Math.max(0, Math.min(1, (100 - userOpacity) / 100));
+  lockScreenEl.style.setProperty('--lock-bg-mask', String(maskOpacity));
   if (isUsableImage(url)) {
     lockScreenEl.style.backgroundImage = `url("${cssUrl(url)}")`;
     lockScreenEl.style.backgroundSize = 'cover';

@@ -15,6 +15,7 @@ import { getData, setData } from '../../core/storage.js';
 import { showToast, createIcon } from '../../core/ui.js';
 import bus from '../../core/events.js';
 import { injectStyle, formatDate, clamp } from '../../core/util.js';
+import { openApp } from '../../core/router.js';
 import { applyAppBg } from '../../core/app-bg.js';
 
 let containerEl = null;
@@ -81,11 +82,13 @@ export async function mount(container) {
     <div class="app-header">
       <button class="app-back" id="pomo-back" aria-label="返回桌面">${createIcon('back', 20).outerHTML}</button>
       <div class="app-header-title">番茄钟</div>
-      <span style="width:36px"></span>
+      <button class="app-header-gear" id="pomo-settings" aria-label="番茄钟设置">${createIcon('settings', 18).outerHTML}</button>
     </div>
     <div class="app-body" id="pomo-body"></div>
   `;
   container.querySelector('#pomo-back').addEventListener('click', () => bus.emit('router:home'));
+  // 齿轮跳到设置「数据与系统」分组
+  container.querySelector('#pomo-settings').addEventListener('click', () => openApp('settings', { deepLink: { tab: 'system' } }));
   render();
   applyAppBg(container, 'pomodoro');
 }

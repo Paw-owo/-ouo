@@ -13,6 +13,7 @@ import { pick } from '../../core/util.js';
 import { recordInteraction } from '../../core/memory.js';
 import { TAVERN_SCENES, TAVERN_ENDINGS, TAVERN_FLAVORS } from './data.js';
 import { escapeHTML, escapeAttr, aiText, renderHistoryList, historyCardHTML } from './shared.js';
+import { reportScore } from './score.js';
 
 // 一局状态
 let game = null;
@@ -167,6 +168,9 @@ async function finishGame(stage) {
   }
   // 事件注入
   bus.emit('games:result', { game: '骗子酒馆', result: TAVERN_ENDINGS[endingKey] });
+  // 上报积分：识破(赢) +20，被骗(输) +5，和平 +10
+  const tvScore = endingKey === 'seen' ? 20 : (endingKey === 'fooled' ? 5 : 10);
+  try { reportScore('tavern', tvScore); } catch (e) { console.warn('[games] 骗子酒馆积分上报失败', e); }
   // 写入长期记忆，让 AI 知道主人玩过骗子酒馆
   try {
     await recordInteraction({

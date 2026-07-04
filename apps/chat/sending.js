@@ -13,6 +13,9 @@ import { streamChat, buildMessages, isAIConfigured } from '../../core/ai-client.
 import { buildMemoryPrompt, recordInteraction } from '../../core/memory.js';
 import { getRecentEventsPrompt } from '../../core/inbox.js';
 import { getLocalReply, pickReplyCategory, inferMood, inferImportance } from './local-replies.js';
+// 新流程：回复完成后跑情绪检测 + 自动提取记忆 + 归档老记忆
+import { handleEmotion } from '../../js/ai/ai-emotion.js';
+import { autoRecordMemories, archiveOldMemories } from '../../js/ai/ai-memory.js';
 import { getState } from './index.js';
 import {
   appendMessageEl, updateChatHeader, scrollToBottom,
@@ -242,7 +245,7 @@ async function triggerAIReply(userMsg) {
     // worldbook 模块加载失败不影响聊天
   }
 
-  const messages = buildMessages({
+  const messages = await buildMessages({
     character,
     history,
     userText: userMsg.type === 'image' ? '（用户发了一张图片）' : userMsg.content,
@@ -488,6 +491,24 @@ async function finishAIMessage(sess, character, aiMsg, msgEl, bubbleEl, finalTex
   } catch (e) {
     console.warn('[chat] 记忆写入失败', e);
   }
+
+  // ── 新流程：回复完成后跑情绪检测 + 自动提取记忆 + 归档老记忆 ──
+  // 情绪检测：根据我和主人的话判情绪，写记仇本 / 原谅
+  try {
+    await handleEmotion(finalText, sess.characterId, userMsg?.content || '');
+  } catch (e) {
+    console.warn('[chat] 情绪检测失败', e);
+  }
+  // 自动提取记忆：从对话里抽"我叫XX / 我喜欢XX / 我的生日是XX" 这种值得记的事
+  try {
+    await autoRecordMemories(userMsg?.content || '', finalText, sess.characterId);
+  } catch (e) {
+    console.warn('[chat] 自动提取记忆失败', e);
+  }
+  // 归档老记忆：超过 100 条时把低重要度的归档（异步跑，不阻塞 UI）
+  archiveOldMemories(sess.characterId).catch((e) => {
+    console.warn('[chat] 归档老记忆失败', e);
+  });
 
   setReplying(false);
   state.streamCancelled = false;

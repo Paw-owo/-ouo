@@ -31,6 +31,7 @@ export async function renderSessionListPage(keyword = '') {
     <div class="app-header">
       <button class="app-back" id="chat-list-back" aria-label="返回桌面">${createIcon('back', 20).outerHTML}</button>
       <div class="app-header-title">消息</div>
+      <button class="app-header-gear" id="chat-list-settings" aria-label="聊天设置">${createIcon('settings', 18).outerHTML}</button>
       <button class="chat-list-add" id="chat-list-add" aria-label="新建聊天">${createIcon('plus', 20).outerHTML}</button>
     </div>
     <div class="chat-list-body" id="chat-list-body">
@@ -45,6 +46,8 @@ export async function renderSessionListPage(keyword = '') {
   // 绑事件
   container.querySelector('#chat-list-back').addEventListener('click', () => bus.emit('router:home'));
   container.querySelector('#chat-list-add').addEventListener('click', openNewChatSheet);
+  // 齿轮跳到设置「AI 与陪伴」分组
+  container.querySelector('#chat-list-settings').addEventListener('click', () => openApp('settings', { deepLink: { tab: 'ai' } }));
 
   const searchInput = container.querySelector('#chat-search');
   const onSearch = debounce((e) => {

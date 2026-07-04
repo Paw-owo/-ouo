@@ -16,6 +16,7 @@
 
 import { createIcon } from '../../core/ui.js';
 import bus from '../../core/events.js';
+import { openApp } from '../../core/router.js';
 import { applyAppBg } from '../../core/app-bg.js';
 import { injectGameStyles } from './styles.js';
 import { renderTarot, resetTarotState } from './tarot.js';
@@ -23,10 +24,13 @@ import { renderTruth, resetTruthState } from './truth.js';
 import { renderUndercover, resetUndercoverState } from './undercover.js';
 import { renderTavern, resetTavernState } from './tavern.js';
 import { renderDice, resetDiceState } from './dice.js';
+import { renderScoreCard } from './score.js';
 
 let containerEl = null;
 // 当前选中的小游戏 tab
 let currentTab = 'tarot';
+// 积分更新事件回调（unmount 时解绑用）
+let onScoreHandler = null;
 
 // 顶部 tab 配置（顺序就是横向显示顺序）
 const TABS = [
@@ -50,16 +54,29 @@ export async function mount(container, context) {
     <div class="app-header">
       <button class="app-back" id="games-back" aria-label="返回桌面">${createIcon('back', 20).outerHTML}</button>
       <div class="app-header-title">小游戏</div>
-      <span style="width:36px"></span>
+      <button class="app-header-gear" id="games-settings" aria-label="游戏设置">${createIcon('settings', 18).outerHTML}</button>
     </div>
     <div class="app-body" id="games-body"></div>
   `;
   container.querySelector('#games-back').addEventListener('click', () => bus.emit('router:home'));
+  // 齿轮跳到设置「AI 与陪伴」分组
+  container.querySelector('#games-settings').addEventListener('click', () => openApp('settings', { deepLink: { tab: 'ai' } }));
+  // 监听积分更新，刷新顶部积分卡
+  onScoreHandler = () => {
+    if (!containerEl) return;
+    const card = containerEl.querySelector('#games-score-card');
+    if (card) renderScoreCard(card);
+  };
+  bus.on('games:score-updated', onScoreHandler);
   render();
   applyAppBg(container, 'games');
 }
 
 export function unmount() {
+  if (onScoreHandler) {
+    bus.off('games:score-updated', onScoreHandler);
+    onScoreHandler = null;
+  }
   containerEl = null;
 }
 
@@ -72,6 +89,7 @@ function render() {
   const body = containerEl.querySelector('#games-body');
   if (!body) return;
   body.innerHTML = `
+    <div id="games-score-card"></div>
     <div class="games-tabs" id="games-tabs">
       ${TABS.map((t) => `
         <button class="games-tab ${currentTab === t.id ? 'active' : ''}" data-tab="${t.id}">
@@ -81,6 +99,8 @@ function render() {
     </div>
     <div id="games-content"></div>
   `;
+  // 渲染顶部「我的游戏积分」卡片
+  renderScoreCard(body.querySelector('#games-score-card'));
   body.querySelectorAll('.games-tab').forEach((btn) => {
     btn.addEventListener('click', () => {
       const next = btn.dataset.tab;

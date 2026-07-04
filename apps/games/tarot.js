@@ -13,6 +13,7 @@ import { shuffle, pick } from '../../core/util.js';
 import { recordInteraction } from '../../core/memory.js';
 import { TAROT_DECK, TAROT_READINGS, TAROT_SPREADS } from './data.js';
 import { escapeHTML, escapeAttr, aiText, renderHistoryList, historyCardHTML } from './shared.js';
+import { reportScore } from './score.js';
 
 // 模块内状态：当前选中的牌阵 + 当前抽到的牌
 let currentSpread = TAROT_SPREADS[1]; // 默认三张
@@ -100,6 +101,9 @@ async function drawTarot(content) {
   // 事件注入
   const summary = drawnCards.map((c) => `${c.name}${c.isReversed ? '·逆' : '·正'}`).join('、');
   bus.emit('games:result', { game: '塔罗牌占卜', result: summary });
+  // 上报积分：正位牌 +8，逆位牌 +4，作为本局运势评分
+  const fortuneScore = drawnCards.reduce((s, c) => s + (c.isReversed ? 4 : 8), 0);
+  try { reportScore('tarot', fortuneScore); } catch (e) { console.warn('[games] 塔罗积分上报失败', e); }
   // 写入长期记忆，让 AI 知道主人玩过塔罗
   try {
     await recordInteraction({

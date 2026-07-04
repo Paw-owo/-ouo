@@ -5,6 +5,7 @@
 
 import { createIcon, showToast } from '../../core/ui.js';
 import { sleep } from './shared.js';
+import { reportScore } from './score.js';
 
 let diceCount = 1;       // 1 或 2 颗
 let diceValues = [1];    // 当前点数
@@ -89,7 +90,21 @@ async function rollDice(content) {
   // 重新渲染整块（含点数和）
   renderDice(content);
   const sum = diceValues.reduce((a, b) => a + b, 0);
-  showToast(`掷出 ${diceCount === 2 ? `点数和 ${sum}` : sum}`, 'default', 1000);
+  // 豹子判定：2 颗骰子点数相同即为豹子，+30 分并触发「幸运儿」成就
+  const isLeopard = diceCount === 2 && diceValues.length === 2 && diceValues[0] === diceValues[1];
+  try {
+    if (isLeopard) {
+      reportScore('dice', 30, { achievement: 'lucky' });
+      showToast(`豹子！${diceValues[0]} - ${diceValues[1]}，+30 分`, 'success', 1600);
+    } else {
+      // 普通掷骰也算一次游戏，但不得分
+      reportScore('dice', 0);
+      showToast(`掷出 ${diceCount === 2 ? `点数和 ${sum}` : sum}`, 'default', 1000);
+    }
+  } catch (e) {
+    console.warn('[games] 骰子积分上报失败', e);
+    showToast(`掷出 ${diceCount === 2 ? `点数和 ${sum}` : sum}`, 'default', 1000);
+  }
 }
 
 // 切换 tab 时不需要特殊清空，状态保留也无所谓（回来还能看到上次点数）

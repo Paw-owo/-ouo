@@ -13,6 +13,7 @@ import { getData, setData, generateId, getNow, compressImage } from '../../core/
 import { showToast, showConfirm, showBottomSheet, createIcon } from '../../core/ui.js';
 import bus from '../../core/events.js';
 import { injectStyle, pickImageFile, isUsableImage } from '../../core/util.js';
+import { openApp } from '../../core/router.js';
 import { applyAppBg } from '../../core/app-bg.js';
 import { shareToMoments } from './share.js';
 
@@ -272,12 +273,15 @@ export async function mount(container, context) {
     <div class="app-header">
       <button class="app-back" id="ann-back" aria-label="返回桌面">${createIcon('back', 20).outerHTML}</button>
       <div class="app-header-title">纪念日</div>
+      <button class="app-header-gear" id="ann-settings" aria-label="纪念日设置">${createIcon('settings', 18).outerHTML}</button>
       <button class="app-add" id="ann-add" aria-label="新增纪念日">${createIcon('plus', 20).outerHTML}</button>
     </div>
     <div class="app-body" id="ann-body"></div>
   `;
   container.querySelector('#ann-back').addEventListener('click', () => bus.emit('router:home'));
   container.querySelector('#ann-add').addEventListener('click', () => openForm(null));
+  // 齿轮跳到设置「数据与系统」分组
+  container.querySelector('#ann-settings').addEventListener('click', () => openApp('settings', { deepLink: { tab: 'system' } }));
   await render();
   // mount 末尾：应用背景 + 检查即将到来的纪念日提醒
   applyAppBg(container, 'anniversary');

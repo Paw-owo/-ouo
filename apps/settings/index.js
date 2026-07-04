@@ -19,6 +19,7 @@ import { renderAICard } from './card-ai.js';
 import { renderNotifyCard } from './card-notify.js';
 import { renderDataMgmtCard } from './card-data.js';
 import { renderAppBgCard } from './card-bg.js';
+import { renderWidgetBgCard } from './card-widget-bg.js';
 import { applyAppBg } from '../../core/app-bg.js';
 
 let containerEl = null;
@@ -104,6 +105,11 @@ export async function mount(container, context) {
     });
   });
   await renderSections();
+  // 支持 deepLink 跳转：从其他 App 的 header 齿轮按钮带 tab 进来直接进对应分组
+  if (context?.deepLink?.tab) {
+    activeTab = context.deepLink.tab;
+    applyActiveTab();
+  }
   applyAppBg(container, 'settings');
 }
 
@@ -140,9 +146,10 @@ async function renderSections() {
   body.appendChild(wrapCard(renderNotifyCard(), 'ai'));
   body.appendChild(wrapCard(await renderIconCustomCard(), 'ai'));
 
-  // ── 桌面与锁屏：桌面分页 / Widget 管理 / 隐藏图标 / 锁屏 / 今日提示 ──
+  // ── 桌面与锁屏：桌面分页 / Widget 管理 / Widget 皮肤 / 隐藏图标 / 锁屏 / 今日提示 ──
   body.appendChild(wrapCard(renderPagesCard(), 'desktop'));
   body.appendChild(wrapCard(renderWidgetMgmtCard(), 'desktop'));
+  body.appendChild(wrapCard(renderWidgetBgCard(), 'desktop'));
   body.appendChild(wrapCard(await renderHiddenIconsCard(), 'desktop'));
   body.appendChild(wrapCard(renderLockCard(), 'desktop'));
   body.appendChild(wrapCard(renderFocusCard(), 'desktop'));
@@ -298,10 +305,12 @@ function renderLockCard() {
   const card = document.createElement('div');
   card.className = 'card';
   const useWp = getData(KEYS.appLockUseWallpaper, false);
+  const lockOpacity = Number(getData(KEYS.appLockWallpaperOpacity, 100));
   card.innerHTML = `<div class="card-title">锁屏</div>
     <div class="card-row"><span class="card-row-label">锁屏背景图</span><button class="btn" id="lock-bg-pick">选一张</button></div>
     <div class="card-row"><span class="card-row-label">用链接设背景</span><button class="btn" id="lock-bg-url">贴链接</button></div>
     <div class="card-row"><span class="card-row-label">锁屏跟桌面同款</span><input type="checkbox" id="lock-use-wp" ${useWp ? 'checked' : ''}></div>
+    <div class="card-row"><span class="card-row-label">背景透明度</span><input type="range" id="lock-bg-opacity" min="0" max="100" value="${lockOpacity}" style="width:140px"></div>
     <div class="card-row"><span class="card-row-label">锁屏头像</span><button class="btn" id="lock-avatar-pick">选一张</button></div>
     <div class="card-row"><span class="card-row-label">锁屏密码</span><button class="btn ghost" id="lock-pwd-change">改密码</button></div>`;
   card.querySelector('#lock-bg-pick').addEventListener('click', async () => {
@@ -330,6 +339,12 @@ function renderLockCard() {
   });
   card.querySelector('#lock-use-wp').addEventListener('change', (e) => {
     setData(KEYS.appLockUseWallpaper, e.target.checked);
+    if (window.popoRefreshLock) window.popoRefreshLock();
+  });
+  // 锁屏壁纸透明度：0 = 完全遮住，100 = 完全显示
+  card.querySelector('#lock-bg-opacity').addEventListener('change', (e) => {
+    const op = clamp(Number(e.target.value), 0, 100);
+    setData(KEYS.appLockWallpaperOpacity, op);
     if (window.popoRefreshLock) window.popoRefreshLock();
   });
   card.querySelector('#lock-avatar-pick').addEventListener('click', async () => {
@@ -479,9 +494,17 @@ const COLOR_VARS = [
   { key: '--accent-dark', label: '主题深色' },
   { key: '--bg-primary', label: '背景色' },
   { key: '--bg-card', label: '卡片背景' },
-  { key: '--text-primary', label: '主文字色' },
-  { key: '--text-secondary', label: '次文字色' },
-  { key: '--bubble-user-bg', label: '我的气泡' }
+  { key: '--bg-secondary', label: '次要背景' },
+  { key: '--text-primary', label: '主文字' },
+  { key: '--text-secondary', label: '次文字' },
+  { key: '--text-hint', label: '提示文字' },
+  { key: '--bubble-ai-bg', label: 'TA的气泡' },
+  { key: '--bubble-ai-text', label: 'TA的气泡文字' },
+  { key: '--bubble-user-bg', label: '我的气泡' },
+  { key: '--bubble-user-text', label: '我的气泡文字' },
+  { key: '--success', label: '成功色' },
+  { key: '--warning', label: '警告色' },
+  { key: '--danger', label: '危险色' }
 ];
 
 function renderCustomColorsCard() {

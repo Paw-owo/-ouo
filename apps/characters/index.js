@@ -13,6 +13,7 @@ import { KEYS, STORES } from '../../core/storage-keys.js';
 import { getData, setData, deleteDB, getAllDB } from '../../core/storage.js';
 import { showToast, showConfirm, showAlert, createIcon } from '../../core/ui.js';
 import bus from '../../core/events.js';
+import { openApp } from '../../core/router.js';
 import { applyAppBg } from '../../core/app-bg.js';
 import {
   DEFAULT_CHARACTER_ID,
@@ -38,6 +39,7 @@ export async function mount(container, context) {
     <div class="app-header">
       <button class="app-back" id="char-back" aria-label="返回桌面">${createIcon('back', 20).outerHTML}</button>
       <div class="app-header-title">角色管理</div>
+      <button class="app-header-gear" id="char-settings" aria-label="角色设置">${createIcon('settings', 18).outerHTML}</button>
       <button class="app-import" id="char-import" aria-label="导入角色卡" title="导入">${createIcon('upload', 20).outerHTML}</button>
       <button class="app-add" id="char-add" aria-label="新增角色" title="新增">${createIcon('plus', 20).outerHTML}</button>
     </div>
@@ -54,6 +56,8 @@ export async function mount(container, context) {
   });
   container.querySelector('#char-add').addEventListener('click', () => openForm(null, onSaved, onDelete));
   container.querySelector('#char-import').addEventListener('click', () => triggerImport());
+  // 齿轮跳到设置「AI 与陪伴」分组
+  container.querySelector('#char-settings').addEventListener('click', () => openApp('settings', { deepLink: { tab: 'ai' } }));
   applyAppBg(container, 'characters');
   await render();
 }

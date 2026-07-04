@@ -12,5 +12,14 @@ export const state = {
   currentPlaylistId: null,  // 当前选中的歌单 id；null = 全部
   playlists: [],            // 所有歌单
   currentIndex: -1,         // 当前播放歌曲在 viewSongs 里的索引，-1 = 没选
-  seeking: false            // 拖动进度时暂停 timeupdate 回写，避免抖动
+  seeking: false,           // 拖动进度时暂停 timeupdate 回写，避免抖动
+  // 新增：播放队列（独立的 song id 数组，播放时从 viewSongs 快照过来）
+  queue: [],                // 播放队列：songId 数组
+  queueIndex: -1,           // 当前在队列里的索引
+  // 新增：列表视图模式
+  viewMode: 'all',          // 'all' | 'queue' | 'recent' | 'favorite'
+  recentIds: [],            // 最近播放的 song id（最多 20，从 localStorage 恢复）
+  // 新增：歌词
+  lyrics: [],               // 当前歌曲解析后的歌词行 [{time, text}]
+  lyricsActiveIndex: -1     // 当前高亮的歌词行
 };
