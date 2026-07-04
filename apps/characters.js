@@ -1856,6 +1856,11 @@ function emitCharacterUpdates() {
   window.AppEvents?.emit?.('chat:refresh');
   window.dispatchEvent(new CustomEvent('characters:updated'));
   window.dispatchEvent(new CustomEvent('chat:refresh'));
+  // 同步走 appBus，让 chat 等通过 appBus.on 监听的 APP 也能收到
+  try {
+    window.AppBus?.emit('characters:updated', {});
+    window.AppBus?.emit('chat:refresh', {});
+  } catch (_) {}
   window.refreshDesktopBadges?.();
 }
 

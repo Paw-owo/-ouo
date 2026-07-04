@@ -28,7 +28,7 @@ import {
 
 import { silentRequest } from '../../core/api.js';
 
-import { recordExternalInteraction } from '../../core/memory.js';
+import { recordExternalInteraction } from '../../core/app-bus.js';
 
 // ═══════════════════════════════════════
 // 【常量】配置项、随机AI池、本地题词库

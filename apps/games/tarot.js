@@ -29,7 +29,7 @@ import {
   silentRequest
 } from '../../core/api.js';
 
-import { recordExternalInteraction } from '../../core/memory.js';
+import { recordExternalInteraction } from '../../core/app-bus.js';
 
 const STYLE_ID = 'tarot-game-style';
 const STATE_KEY = 'tarot_game_state';

@@ -557,7 +557,20 @@ function renderDetailPage() {
     renderPage();
   });
 
-  actions.append(wakeBtn, editBtn, delBtn);
+  const chatBtn = document.createElement('button');
+  chatBtn.className = 'dream-btn secondary';
+  chatBtn.type = 'button';
+  chatBtn.append(createIcon('send', 18), document.createTextNode('去聊聊'));
+  if (currentDream.characterId) {
+    chatBtn.addEventListener('click', () => {
+      window.AppBus?.openApp?.('chat', { route: { name: 'thread', params: { mode: 'private', characterId: currentDream.characterId, groupId: '' } } });
+    });
+  } else {
+    chatBtn.disabled = true;
+    chatBtn.style.opacity = '0.5';
+  }
+
+  actions.append(wakeBtn, editBtn, chatBtn, delBtn);
   body.append(card, actions);
   screen.appendChild(body);
 }
@@ -896,6 +909,19 @@ ${recentText || '（还没有对话记录）'}
 
     await saveDream(dream);
     if (pageView === 'list') renderPage();
+    // 写入角色记忆 + 通知其他 APP
+    try {
+      const summaryText = dream.summary || dream.content.slice(0, 30);
+      await window.AppBus?.recordExternalInteraction?.({
+        characterId: ch.id,
+        role: 'assistant',
+        content: `我做了一个梦：${summaryText}。${dream.content || ''}`.slice(0, 600),
+        source: '梦境',
+        importance: 3,
+        mood: dream.mood || ''
+      });
+      window.AppBus?.emit?.('dream:created', { dreamId: dream.id, characterId: ch.id, mood: dream.mood });
+    } catch (_) {}
   } catch (err) {
     console.warn('[梦境] 生成失败:', err);
   } finally {

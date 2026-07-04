@@ -213,6 +213,21 @@ export async function mount(containerEl) {
 
   await applyWorldbookBackground(screen);
   await renderList();
+
+  // 注册到 appBus，让其他 APP 可以查询世界书条目
+  try {
+    window.AppBus?.registerAPI('worldbook', {
+      getEntries: () => getWorldbookEntries(),
+      getEntry: async (entryId) => {
+        if (!entryId) return null;
+        const all = await getWorldbookEntries();
+        return all.find((item) => String(item.id) === String(entryId)) || null;
+      },
+      getAll: () => getWorldbookEntries(),
+      getVisual: (entryId) => getWorldbookVisual(entryId),
+      getWorldbookForCharacter: (characterId) => getWorldbookForCharacter(characterId)
+    });
+  } catch (_) {}
 }
 
 export function unmount() {
@@ -226,6 +241,7 @@ export function unmount() {
   allChars = [];
   coverCache = new Map();
   iconCache = new Map();
+  // 注意：不注销 appBus API，其他 APP 在 worldbook 关闭后仍可能需要查询
 }
 
 export async function getWorldbookEntries() {
@@ -690,6 +706,9 @@ async function deleteEntry(entry) {
   hideBottomSheet();
   showToast('已删除');
   await renderList();
+  try {
+    window.AppBus?.emit('worldbook:updated', { entryId: entry.id, deleted: true });
+  } catch (_) {}
 }
 
 function openEditor(entry) {
@@ -767,6 +786,9 @@ function openEditor(entry) {
     showToast(isEdit ? '已保存' : '已添加');
     editingEntry = null;
     await renderList();
+    try {
+      window.AppBus?.emit('worldbook:updated', { entryId: nextEntry.id, saved: true, isEdit });
+    } catch (_) {}
   });
 
   sheet.append(title, typeField, bindField, titleField, categoryField, priorityField, modeField, keywordField, contentField, enabledRow, saveBtn);

@@ -3,7 +3,7 @@
 // import { getData, setData, getAllDB, getDB, setDB, deleteDB, generateId, getNow, compressImage } from '../../core/storage.js';
 // import { createIcon, showToast, showBottomSheet, hideBottomSheet, showConfirm } from '../../core/ui.js';
 // import { silentRequest } from '../../core/api.js';
-// import { recordExternalInteraction } from '../../core/memory.js';
+// import { recordExternalInteraction } from '../../core/app-bus.js';
 
 import {
   getData,
@@ -24,7 +24,7 @@ import {
   showConfirm
 } from '../../core/ui.js';
 import { silentRequest } from '../../core/api.js';
-import { recordExternalInteraction } from '../../core/memory.js';
+import { recordExternalInteraction } from '../../core/app-bus.js';
 
 const SETTINGS_KEY = 'app_liars_tavern_settings';
 const WALLPAPER_KEY = 'app_bg_liars_tavern';

@@ -1136,6 +1136,11 @@ export async function transferToAI({ characterId, characterName = 'TA', amount, 
     detail: { ...card }
   }));
 
+  // 统一事件总线：wallet:transfer，payload 含 characterId/direction/amount/note/characterName
+  try {
+    window.AppBus?.emit('wallet:transfer', { ...card });
+  } catch (_) {}
+
   return { ok: true, amount: value, card };
 }
 
@@ -1201,6 +1206,11 @@ export async function aiTransferToUser({ characterId, characterName = 'TA', amou
   window.dispatchEvent(new CustomEvent('wallet-transfer-created', {
     detail: { ...card }
   }));
+
+  // 统一事件总线：wallet:transfer，payload 含 characterId/direction/amount/note/characterName
+  try {
+    window.AppBus?.emit('wallet:transfer', { ...card });
+  } catch (_) {}
 
   return { ok: true, amount: value, card };
 }
@@ -1529,6 +1539,28 @@ function createRecord(record, character = null) {
   amount.textContent = `${record.type === 'income' ? '+' : '-'}¥${formatMoney(record.amount)}`;
 
   item.append(icon, main, amount);
+
+  // 转账记录且绑定角色：加"去聊聊"按钮，跳转到 chat 该角色会话
+  if (record.category === 'transfer' && record.characterId) {
+    const chatBtn = document.createElement('button');
+    chatBtn.className = 'wallet-mini-btn';
+    chatBtn.type = 'button';
+    chatBtn.style.minHeight = '30px';
+    chatBtn.style.padding = '4px 10px';
+    chatBtn.style.flex = '0 0 auto';
+    chatBtn.style.fontSize = '12px';
+    chatBtn.textContent = '去聊聊';
+    chatBtn.addEventListener('click', (event) => {
+      event.stopPropagation();
+      try {
+        window.AppBus?.openApp('chat', {
+          route: { name: 'thread', params: { mode: 'private', characterId: record.characterId, groupId: '' } }
+        });
+      } catch (_) {}
+    });
+    item.appendChild(chatBtn);
+  }
+
   return item;
 }
 
@@ -2247,32 +2279,19 @@ async function clearTransactions() {
 }
 
 async function recordWalletMemory({ characterId, role, content, source }) {
-  if (!characterId || !content) return;
+  if (!characterId || !content) return null;
 
   try {
-    const chatModule = await import('./chat.js');
-
-    if (typeof chatModule.recordExternalInteraction === 'function') {
-      await chatModule.recordExternalInteraction({
-        characterId,
-        role,
-        content,
-        source
-      });
-      return;
-    }
-  } catch (_) {}
-
-  const id = generateId();
-
-  await setDB('memories', id, {
-    id,
-    characterId,
-    content,
-    source: 'manual',
-    createdAt: getNow(),
-    updatedAt: getNow()
-  });
+    return await window.AppBus.recordExternalInteraction({
+      characterId,
+      role,
+      content,
+      source,
+      importance: 3
+    });
+  } catch (_) {
+    return null;
+  }
 }
 
 function getImageFromRecord(record) {
@@ -2291,4 +2310,4 @@ function cssUrl(value) {
   return String(value || '').replace(/"/g, '\\"');
 }
 
-// 依赖：../core/storage.js 的 getData/setData/generateId/getNow/getDB/setDB/deleteDB/compressImage/getAllDB；../core/ui.js 的 showToast/showBottomSheet/hideBottomSheet/showConfirm/createIcon；可选动态依赖 ./chat.js 的 recordExternalInteraction
+// 依赖：../core/storage.js 的 getData/setData/generateId/getNow/getDB/setDB/deleteDB/compressImage/getAllDB；../core/ui.js 的 showToast/showBottomSheet/hideBottomSheet/showConfirm/createIcon；通过 window.AppBus 统一写记忆（recordExternalInteraction）、发 wallet:transfer 事件、跳转 chat

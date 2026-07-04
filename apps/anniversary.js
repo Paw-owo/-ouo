@@ -33,6 +33,8 @@ let todayCache = '';
 let midnightTimer = null;
 let visibilityHandler = null;
 let visualCache = new Map();
+let greetingTimer = null;
+let greetedKeys = new Set(Array.isArray(getData('app_anniversary_greeted')) ? getData('app_anniversary_greeted') : []);
 
 function injectStyles() {
   if (document.getElementById(STYLE_ID)) return;
@@ -414,6 +416,14 @@ export async function mount(containerEl) {
   await applyAnniversaryBackground(screen);
   bindDateRefresh();
   await render();
+
+  // 纪念日问候：启动时检查一次，之后每小时检查一次
+  try {
+    await checkAnniversaryGreetings();
+    greetingTimer = window.setInterval(() => {
+      checkAnniversaryGreetings().catch(() => {});
+    }, 60 * 60 * 1000);
+  } catch (_) {}
 }
 
 export function unmount() {
@@ -425,6 +435,11 @@ export function unmount() {
   if (visibilityHandler) {
     document.removeEventListener('visibilitychange', visibilityHandler);
     visibilityHandler = null;
+  }
+
+  if (greetingTimer) {
+    window.clearInterval(greetingTimer);
+    greetingTimer = null;
   }
 
   visualCache = new Map();
@@ -482,6 +497,36 @@ export async function checkTodayAnniversaries() {
       createdBy: item.createdBy || '',
       marker: item.marker || 'heart'
     }));
+}
+
+// 纪念日当天首次解锁时：写角色记忆 + toast 提醒（不自动跳转，避免打扰）
+async function checkAnniversaryGreetings() {
+  const today = getTodayString();
+  const todayItems = await checkTodayAnniversaries();
+  if (!todayItems.length) return;
+
+  for (const item of todayItems) {
+    const greetKey = `${item.id}_${today}`;
+    if (greetedKeys.has(greetKey)) continue;
+    greetedKeys.add(greetKey);
+    try {
+      setData('app_anniversary_greeted', [...greetedKeys]);
+    } catch (_) {}
+
+    if (item.characterId) {
+      try {
+        await window.AppBus.recordExternalInteraction({
+          characterId: item.characterId,
+          role: 'assistant',
+          content: `今天是${item.name || '纪念日'}。${item.note || ''}`.trim(),
+          source: '纪念日',
+          importance: 5
+        });
+      } catch (_) {}
+    }
+
+    showToast(`今天是 ${item.name || '纪念日'}，要不要去聊聊？`);
+  }
 }
 
 export async function addAnniversaryMark({
@@ -880,6 +925,23 @@ function createCard(item) {
   });
 
   actions.append(imageButton, editImageButton, editButton, deleteButton);
+
+  // 绑定角色的纪念日：加"去聊聊"按钮跳转 chat
+  if (item.characterId) {
+    const chatButton = document.createElement('button');
+    chatButton.className = 'ann-action-btn';
+    chatButton.type = 'button';
+    chatButton.append(createIcon('send', 14), document.createTextNode('去聊聊'));
+    chatButton.addEventListener('click', (event) => {
+      event.stopPropagation();
+      try {
+        window.AppBus?.openApp('chat', {
+          route: { name: 'thread', params: { mode: 'private', characterId: item.characterId, groupId: '' } }
+        });
+      } catch (_) {}
+    });
+    actions.appendChild(chatButton);
+  }
   card.append(top, note, tags, actions);
 
   card.addEventListener('click', () => openEditor(item));

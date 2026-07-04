@@ -2158,20 +2158,38 @@ async function loadWorldbookForCharacter(character) {
 
   const ids = normalizeList(character.worldbookIds).map(String);
   const mode = character.worldbookMode || 'bound_plus_global';
+  const charId = String(character.id);
 
-  if (!ids.length) return mode === 'only_bound' ? [] : all;
-
+  // 角色侧绑定（character.worldbookIds）
   const bound = all.filter((item) => ids.includes(String(item.id)));
 
-  if (mode === 'only_bound') return bound;
+  if (mode === 'only_bound') {
+    // 仅角色绑定的条目，但也包含条目侧显式 targetIds 命中本角色的条目
+    const entryBound = all.filter((item) => {
+      if (ids.includes(String(item.id))) return false;
+      const targets = item.targetIds;
+      if (targets === 'all' || (Array.isArray(targets) && targets.includes('all'))) return false;
+      return Array.isArray(targets) && targets.includes(charId);
+    });
+    return [...bound, ...entryBound];
+  }
 
   const global = all.filter((item) => {
     if (ids.includes(String(item.id))) return false;
-    if (item.characterId && String(item.characterId) !== String(character.id)) return false;
+    if (item.characterId && String(item.characterId) !== charId) return false;
     return item.global === true || item.isGlobal === true || !item.characterId;
   });
 
-  return [...bound, ...global];
+  // 条目侧显式 targetIds 命中本角色的条目（与 worldbook APP 的 getWorldbookForCharacter 对齐）
+  const entryBound = all.filter((item) => {
+    if (ids.includes(String(item.id))) return false;
+    if (global.includes(item)) return false;
+    const targets = item.targetIds;
+    if (targets === 'all' || (Array.isArray(targets) && targets.includes('all'))) return false;
+    return Array.isArray(targets) && targets.includes(charId);
+  });
+
+  return [...bound, ...global, ...entryBound];
 }
 
 async function loadInventory() {

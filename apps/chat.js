@@ -12,24 +12,19 @@ import { mountChatThread, unmountChatThread } from './chat/thread.js';
 
 import {
   getData,
-  setData,
-  generateId,
-  getNow,
-  getDB,
-  setDB,
-  getByIndexDB
+  setData
 } from '../core/storage.js';
-
-import { silentRequest } from '../core/api.js';
 
 const CHAT_APP_STYLE_ID = 'chat-app-style';
 const CHAT_ROUTE_KEY = 'chat_last_route';
 const CHAT_HIDDEN_PRIVATE_KEY = 'chat_hidden_private_threads';
-const MEMORY_DUPLICATE_LIMIT = 160;
 
 let rootEl = null;
 let mounted = false;
 let activeView = '';
+let unsubscribeCharsUpdated = null;
+let unsubscribeWalletTransfer = null;
+let unsubscribeShopGift = null;
 let currentRoute = {
   name: 'list',
   params: {
@@ -47,12 +42,62 @@ export async function mount(containerEl, options = {}) {
   currentRoute = resolveInitialRoute(options);
 
   await renderRoute();
+
+  // 注册到 appBus，让其他 APP 可以联动 chat
+  try {
+    window.AppBus?.registerAPI('chat', getAppApi());
+  } catch (_) {}
+
+  // 监听全局事件
+  if (window.AppBus) {
+    unsubscribeCharsUpdated = window.AppBus.on('characters:updated', async () => {
+      if (currentRoute.name === 'list') {
+        await renderRoute();
+      }
+    });
+
+    unsubscribeWalletTransfer = window.AppBus.on('wallet:transfer', (data) => {
+      const amount = Number(data?.amount || 0);
+      const name = data?.characterName || data?.characterId || 'TA';
+      const dir = data?.direction;
+      // 当前会话就是该角色时不再 toast（避免在 thread 内重复打扰）
+      if (currentRoute.name === 'thread' && currentRoute.params?.characterId === data?.characterId) return;
+      const text = dir === 'ai_to_user'
+        ? `收到 ${name} 转来的 ¥${amount}`
+        : `已转给 ${name} ¥${amount}`;
+      window.showToast?.(text);
+    });
+
+    unsubscribeShopGift = window.AppBus.on('shop:gift', (data) => {
+      const itemName = data?.itemName || data?.title || '礼物';
+      const name = data?.characterName || data?.characterId || 'TA';
+      if (currentRoute.name === 'thread' && currentRoute.params?.characterId === data?.characterId) return;
+      const dir = data?.direction;
+      const text = dir === 'ai_to_user'
+        ? `收到 ${name} 的礼物：${itemName}`
+        : `已送 ${name} 礼物：${itemName}`;
+      window.showToast?.(text);
+    });
+  }
 }
 
 export function unmount() {
   mounted = false;
 
   unmountActiveView();
+
+  if (unsubscribeCharsUpdated) {
+    try { unsubscribeCharsUpdated(); } catch (_) {}
+    unsubscribeCharsUpdated = null;
+  }
+  if (unsubscribeWalletTransfer) {
+    try { unsubscribeWalletTransfer(); } catch (_) {}
+    unsubscribeWalletTransfer = null;
+  }
+  if (unsubscribeShopGift) {
+    try { unsubscribeShopGift(); } catch (_) {}
+    unsubscribeShopGift = null;
+  }
 
   if (rootEl) {
     rootEl.replaceChildren();
@@ -62,45 +107,74 @@ export function unmount() {
   activeView = '';
 }
 
-export async function recordExternalInteraction(input = {}, legacyInteraction = {}) {
-  const payload = normalizeExternalInteraction(input, legacyInteraction);
-  const characterId = String(payload.characterId || '').trim();
-  const role = payload.role === 'user' ? 'user' : 'assistant';
-  const content = normalizeText(payload.content);
-  const source = normalizeText(payload.source || '外部互动');
+// 对外暴露 chat 能力，供其他 APP 通过 appBus.getAPI('chat') 调用
+export function getAppApi() {
+  return {
+    appState,
 
-  if (!characterId || !content) return null;
+    async openPrivateThread(characterId) {
+      return appState.openPrivateThread(characterId);
+    },
 
-  const character = await getDB('characters', characterId).catch(() => null);
-  if (!character) return null;
+    async openGroupThread(groupId) {
+      return appState.openGroupThread(groupId);
+    },
 
-  const memoryContent = await summarizeExternalMemory({
-    character,
-    role,
-    content,
-    source
-  });
+    async openMemory(characterId, options = {}) {
+      return appState.openMemory(characterId, options);
+    },
 
-  if (!memoryContent) return null;
+    async sendMessage(characterId, text, extra = {}) {
+      const id = String(characterId || '').trim();
+      const content = String(text || '').trim();
+      if (!id || !content) return null;
+      await appState.openPrivateThread(id);
+      // 通过 recordExternalInteraction 把外部消息写入记忆；UI 层的消息渲染由 thread 自身处理
+      return recordExternalInteraction({
+        characterId: id,
+        role: 'user',
+        content,
+        source: extra.source || '外部 APP',
+        importance: extra.importance,
+        mood: extra.mood || ''
+      });
+    },
 
-  const duplicated = await isDuplicateMemory(characterId, memoryContent);
-  if (duplicated) return null;
+    async refreshList() {
+      if (currentRoute.name === 'list') {
+        await renderRoute();
+      }
+    },
 
-  const now = getNow();
-  const memory = {
-    id: generateId(),
-    characterId,
-    content: memoryContent,
-    source: 'auto',
-    createdAt: now,
-    updatedAt: now
+    async refreshCurrentThread() {
+      if (currentRoute.name === 'thread') {
+        await renderRoute();
+      }
+    },
+
+    async recordExternalInteraction(payload) {
+      return recordExternalInteraction(payload);
+    },
+
+    async navigateToRoute(route) {
+      if (!route || !route.name) return;
+      await navigateTo(route);
+    }
   };
-
-  await setDB('memories', memory.id, memory);
-  return memory;
 }
 
-const appState = {
+export async function recordExternalInteraction(input = {}, legacyInteraction = {}) {
+  // 统一走 core/memory.js（通过 appBus 转发），保留 source/keywords/importance/mood
+  const payload = normalizeExternalInteraction(input, legacyInteraction);
+  if (!payload?.characterId || !payload?.content) return null;
+  try {
+    return await window.AppBus.recordExternalInteraction(payload);
+  } catch (_) {
+    return null;
+  }
+}
+
+export const appState = {
   getRoute() {
     return currentRoute;
   },
@@ -314,7 +388,11 @@ function normalizeExternalInteraction(input, legacyInteraction) {
       characterId: input.characterId,
       role: input.role || 'assistant',
       content: input.content || input.text || input.note || '',
-      source: input.source || '外部互动'
+      source: input.source || '外部互动',
+      importance: input.importance,
+      mood: input.mood || '',
+      character: input.character || null,
+      userProfile: input.userProfile || {}
     };
   }
 
@@ -324,68 +402,6 @@ function normalizeExternalInteraction(input, legacyInteraction) {
     content: legacyInteraction?.content || legacyInteraction?.text || legacyInteraction?.note || '',
     source: legacyInteraction?.source || '外部互动'
   };
-}
-
-async function summarizeExternalMemory({ character, role, content, source }) {
-  const fallback = createFallbackExternalMemory({
-    character,
-    role,
-    content,
-    source
-  });
-
-  const prompt = [
-    '请把下面这段外部事件总结成一条适合长期记忆的中文。',
-    '要求：自然、具体、可作为以后聊天时想起来的素材。',
-    '不要写成系统日志，不要提“外部事件”这四个字。',
-    '只返回 JSON：{"memory":"..."}',
-    `角色：${character.name || 'TA'}`,
-    `来源：${source}`,
-    `发言者：${role === 'user' ? '用户' : character.name || 'TA'}`,
-    `内容：${content}`
-  ].join('\n');
-
-  const result = await silentRequest({
-    prompt,
-    json: true
-  }).catch(() => null);
-
-  const memory = normalizeText(result?.memory || '');
-  return memory ? trimMemory(memory) : fallback;
-}
-
-function createFallbackExternalMemory({ character, role, content, source }) {
-  const actor = role === 'user' ? '用户' : (character?.name || 'TA');
-  const shortContent = trimMemory(content, 34);
-  const cleanSource = normalizeText(source || '某个地方');
-
-  if (!shortContent) return '';
-
-  return trimMemory(`${actor}曾在${cleanSource}里经历过：${shortContent}`);
-}
-
-async function isDuplicateMemory(characterId, content) {
-  const fingerprint = createMemoryFingerprint(content);
-  if (!fingerprint) return true;
-
-  const memories = await getByIndexDB('memories', 'characterId', characterId).catch(() => []);
-  const recent = normalizeArray(memories).slice(-MEMORY_DUPLICATE_LIMIT);
-
-  return recent.some((item) => {
-    const oldFingerprint = createMemoryFingerprint(item?.content || '');
-    if (!oldFingerprint) return false;
-
-    return oldFingerprint === fingerprint ||
-      oldFingerprint.includes(fingerprint.slice(0, 22)) ||
-      fingerprint.includes(oldFingerprint.slice(0, 22));
-  });
-}
-
-function createMemoryFingerprint(text) {
-  return normalizeText(text)
-    .replace(/[，。！？、；：“”‘’"'`~\-—_=+()[\]{}<>【】《》,.!?;:]/g, '')
-    .toLowerCase()
-    .slice(0, 160);
 }
 
 function getHiddenPrivateThreads() {
@@ -430,22 +446,6 @@ function closeChatApp() {
   if (typeof window.navigateHome === 'function') {
     window.navigateHome();
   }
-}
-
-function normalizeArray(value) {
-  return Array.isArray(value) ? value : [];
-}
-
-function normalizeText(value) {
-  return String(value || '').replace(/\s+/g, ' ').trim();
-}
-
-function trimMemory(text, max = 48) {
-  const clean = normalizeText(text)
-    .replace(/^["'“”‘’]+|["'“”‘’]+$/g, '');
-
-  if (!clean) return '';
-  return clean.length > max ? `${clean.slice(0, max)}…` : clean;
 }
 
 function injectChatAppStyle() {

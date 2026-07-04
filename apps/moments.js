@@ -383,6 +383,9 @@ async function toggleLike(post) {
 
   if (post.authorId !== 'user' && set.has('user')) {
     await recordToChat(post.authorId, 'user', `我喜欢了你的朋友圈：${post.content || '图片动态'}`, '朋友圈点赞');
+    try {
+      window.AppBus?.emit('moments:interaction', { type: 'like', characterId: post.authorId, postId: post.id });
+    } catch (_) {}
   }
 }
 
@@ -419,6 +422,9 @@ function openCommentSheet(post) {
 
     if (post.authorId !== 'user') {
       await recordToChat(post.authorId, 'user', `我评论了你的朋友圈：${content}`, '朋友圈评论');
+      try {
+        window.AppBus?.emit('moments:interaction', { type: 'comment', characterId: post.authorId, postId: post.id, content });
+      } catch (_) {}
       await aiReplyToUserComment(post, content);
     } else {
       await maybeAiInteract(post);
@@ -456,6 +462,10 @@ async function aiReplyToUserComment(post, userComment) {
 
   await setDB('moments', latest.id, latest);
   await recordToChat(character.id, 'assistant', `我回复了你在朋友圈的评论：${reply}`, '朋友圈回复');
+
+  try {
+    window.AppBus?.emit('moments:interaction', { type: 'reply', characterId: character.id, postId: latest.id, content: reply });
+  } catch (_) {}
 
   window.AppEvents?.emit?.('badge:moments', 1);
   window.refreshDesktopBadges?.();
@@ -506,6 +516,9 @@ async function maybeAiInteract(post) {
 
     touchCharacterInteract(character.id, targetPost.id);
     await recordToChat(character.id, 'assistant', `我评论了朋友圈：${content}`, '朋友圈互动');
+    try {
+      window.AppBus?.emit('moments:interaction', { type: 'ai-interaction', characterId: character.id, postId: targetPost.id, content });
+    } catch (_) {}
   }
 
   targetPost.isRead = targetPost.authorId === 'user' ? false : targetPost.isRead;
@@ -577,14 +590,19 @@ async function copyText(text) {
 }
 
 async function recordToChat(characterId, role, content, source) {
-  if (!characterId || characterId === 'user') return;
+  if (!characterId || characterId === 'user') return null;
 
   try {
-    const module = await import('./chat.js');
-    if (typeof module.recordExternalInteraction === 'function') {
-      await module.recordExternalInteraction({ characterId, role, content, source });
-    }
-  } catch (_) {}
+    return await window.AppBus.recordExternalInteraction({
+      characterId,
+      role,
+      content,
+      source,
+      importance: 3
+    });
+  } catch (_) {
+    return null;
+  }
 }
 
 function getAuthor(authorId) {

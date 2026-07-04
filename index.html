@@ -1165,6 +1165,7 @@
     import { loadTheme } from './core/theme.js';
     import { createIcon, showToast } from './core/ui.js';
     import { seedDefaultCharacter } from './apps/chat/thread-ai-local.js';
+    import { registerAPI, getAPI, emit as busEmit, on as busOn, openApp as busOpenApp, recordExternalInteraction as busRecordExternalInteraction, subscribe as busSubscribe } from './core/app-bus.js';
 
     const LOCK_PASSWORD = '0326';
     const CUSTOM_FONT_KEY = 'app_custom_font';
@@ -1257,6 +1258,22 @@
         window.addEventListener(event, handler);
         return () => window.removeEventListener(event, handler);
       }
+    };
+
+    window.AppBus = {
+      registerAPI,
+      getAPI,
+      hasAPI: (id) => getAPI(id) !== null,
+      emit: busEmit,
+      on: busOn,
+      once: (event, fn) => {
+        let off = busOn(event, (data) => { off(); fn(data); });
+        return off;
+      },
+      openApp: busOpenApp,
+      recordExternalInteraction: busRecordExternalInteraction,
+      subscribe: busSubscribe,
+      getEventLog: () => { try { return JSON.parse(JSON.stringify(getData('app_bus_event_log') || [])); } catch (_) { return []; } }
     };
 
     window.AppImages = { getImageKeys, buildImageKey, readImageRecord, readImageValue, writeImageRecord, removeImageRecord, applyImageToElement, applyAllImages, getImageFromRecord, getOpacityFromRecord, normalizeImageRecord };
@@ -2136,7 +2153,7 @@
       }
     }
 
-    async function openApp(appId) {
+    async function openApp(appId, options = {}) {
       const app = APPS.find((item) => item.id === appId);
       if (!app) return;
       editing = false;
@@ -2149,18 +2166,30 @@
         const module = await import(app.module);
         currentAppModule = module;
         currentAppId = app.id;
-        const context = createAppContext(app);
-        if (typeof module.mount === 'function') { await module.mount(appLayerEl, context); }
-        else if (typeof module.render === 'function') { await module.render(appLayerEl, context); }
-        else if (typeof module.open === 'function') { await module.open(appLayerEl, context); }
-        else if (typeof module.default === 'function') { await module.default(appLayerEl, context); }
+        const context = createAppContext(app, options);
+        const mountOptions = { ...context, ...options };
+        if (typeof module.mount === 'function') { await module.mount(appLayerEl, mountOptions); }
+        else if (typeof module.render === 'function') { await module.render(appLayerEl, mountOptions); }
+        else if (typeof module.open === 'function') { await module.open(appLayerEl, mountOptions); }
+        else if (typeof module.default === 'function') { await module.default(appLayerEl, mountOptions); }
         else { openPlaceholderApp(app); }
         await applyAllImages();
       } catch (error) { console.error(error); openPlaceholderApp(app, '哎呀，出了点小问题'); }
     }
 
-    function createAppContext(app) {
-      return { app, appId: app.id, appLayer: appLayerEl, closeApp: closeCurrentApp, closeCurrentApp, showToast, createIcon, getData, setData, removeData, getDB, setDB, deleteDB, getAllDB, generateId, getNow, images: window.AppImages, refreshDesktop, refreshBadges, emit: window.AppEvents.emit, on: window.AppEvents.on };
+    function createAppContext(app, options = {}) {
+      return {
+        app, appId: app.id, appLayer: appLayerEl,
+        closeApp: closeCurrentApp, closeCurrentApp,
+        showToast, createIcon,
+        getData, setData, removeData, getDB, setDB, deleteDB, getAllDB, generateId, getNow,
+        images: window.AppImages,
+        refreshDesktop, refreshBadges, refreshDesktopImages: applyAllImages,
+        emit: window.AppEvents.emit, on: window.AppEvents.on,
+        appBus: window.AppBus,
+        openApp: window.AppBus.openApp,
+        options
+      };
     }
 
     function openPlaceholderApp(app, message = '马上就好，先别急') {

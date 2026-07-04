@@ -508,11 +508,13 @@ function createEmptyState(titleText, textContent) {
   return empty;
 }
 
-function openEditor(memo) {
+async function openEditor(memo) {
   const isEdit = Boolean(memo);
   const current = memo ? normalizeMemo(memo) : null;
   let selectedCategory = current?.category || 'life';
   let pendingCover = '';
+  let syncEnabled = false;
+  let syncCharacterId = '';
 
   const sheet = document.createElement('div');
 
@@ -535,6 +537,29 @@ function openEditor(memo) {
     pendingCover = await compressImage(file, 1400, 0.86);
     showToast('图片选好啦，保存后生效');
   }));
+
+  // "让 TA 也记得这件事" 同步角色记忆
+  const characters = await getAllDB('characters').catch(() => []);
+  const syncRow = createSwitchRow('让 TA 也记得这件事', '勾选后会把这条备忘录写进 TA 的记忆。', false);
+  const syncToggle = syncRow.querySelector('.switch');
+  const syncSelect = document.createElement('select');
+  syncSelect.className = 'memo-input';
+  syncSelect.disabled = true;
+  syncSelect.style.marginTop = 'var(--spacing-sm)';
+  syncSelect.innerHTML = '<option value="">选择 TA</option>';
+  characters.forEach((character) => {
+    const option = document.createElement('option');
+    option.value = character.id;
+    option.textContent = character.name || '未命名';
+    syncSelect.appendChild(option);
+  });
+  syncToggle.addEventListener('click', () => {
+    syncEnabled = syncToggle.classList.contains('active');
+    syncSelect.disabled = !syncEnabled;
+  });
+  syncSelect.addEventListener('change', () => {
+    syncCharacterId = syncSelect.value;
+  });
 
   const actions = document.createElement('div');
   actions.className = 'memo-sheet-actions';
@@ -595,14 +620,27 @@ function openEditor(memo) {
       await saveMemoCover(memoId, pendingCover, nextTitle || '未命名');
     }
 
+    // 同步到角色记忆
+    if (syncEnabled && syncCharacterId) {
+      try {
+        await window.AppBus.recordExternalInteraction({
+          characterId: syncCharacterId,
+          role: 'assistant',
+          content: `我在备忘录里记下了：${nextTitle || '未命名'}。${nextContent}`.trim(),
+          source: '备忘录',
+          importance: selectedCategory === 'todo' ? 4 : 3
+        });
+      } catch (_) {}
+    }
+
     hideBottomSheet();
-    showToast('已收好');
+    showToast(syncEnabled && syncCharacterId ? '已收好，TA 也记得啦' : '已收好');
     await loadCoverCache(readMemos());
     renderMemo();
   });
 
   actions.append(cancelButton, saveButton);
-  sheet.append(title, titleField, categoryField, pinRow, imageButton, contentField, actions);
+  sheet.append(title, titleField, categoryField, pinRow, imageButton, contentField, syncRow, syncSelect, actions);
 
   if (isEdit) {
     const deleteButton = document.createElement('button');

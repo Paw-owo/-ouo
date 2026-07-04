@@ -107,13 +107,33 @@ export async function mount(containerEl) {
   startAnimationLoop();
   ensureMiniPlayer();
 
-  window.musicPlayer = {
+  const playerApi = {
     isPlaying: () => state.isPlaying,
     getCurrentSong: () => getCurrentSong(),
     togglePlay,
     playNext,
-    playPrevious
+    playPrevious,
+    playSong,
+    getSongs: () => state.songs,
+    getPlaylists: () => state.playlists
   };
+
+  window.musicPlayer = playerApi;
+
+  // 注册到 appBus，让其他 APP 可以控制播放
+  try {
+    window.AppBus?.registerAPI('music', playerApi);
+
+    // 监听外部播放请求
+    state.unsubscribeMusicPlay = window.AppBus?.on?.('music:play', (data) => {
+      const songId = data?.songId;
+      if (songId) {
+        playSong(songId).catch(() => {});
+      } else {
+        togglePlay();
+      }
+    });
+  } catch (_) {}
 }
 
 export function unmount() {
@@ -123,6 +143,12 @@ export function unmount() {
 
   if (state.audioElement) {
     state.audioElement.pause();
+  }
+
+  // 清理 appBus 订阅（保留 music API 注册，方便其他 APP 继续控制迷你播放条）
+  if (state.unsubscribeMusicPlay) {
+    try { state.unsubscribeMusicPlay(); } catch (_) {}
+    state.unsubscribeMusicPlay = null;
   }
 
   state.mounted = false;

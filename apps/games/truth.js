@@ -28,7 +28,7 @@ import {
   silentRequest
 } from '../../core/api.js';
 
-import { recordExternalInteraction } from '../../core/memory.js';
+import { recordExternalInteraction } from '../../core/app-bus.js';
 
 const STYLE_ID = 'truth-game-style';
 const STATE_KEY = 'truth_game_state';

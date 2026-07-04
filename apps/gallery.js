@@ -8,6 +8,8 @@ import { createIcon, showBottomSheet, hideBottomSheet, showToast } from '../core
 
 const STYLE_ID = 'grudge-book-style';
 
+let unsubscribeGrudgePunishment = null;
+
 const state = {
   rootEl: null,
   mounted: false,
@@ -31,12 +33,26 @@ export async function mount(containerEl) {
   injectStyle();
   await loadData();
   render();
+
+  // 监听 chat 里的惩罚事件，自动刷新记仇本列表
+  try {
+    unsubscribeGrudgePunishment = window.AppBus?.on('grudge:punishment', async () => {
+      if (!state.mounted) return;
+      await loadData();
+      render();
+    });
+  } catch (_) {}
 }
 
 export function unmount() {
   state.mounted = false;
   state.items = [];
   state.characters = new Map();
+
+  if (unsubscribeGrudgePunishment) {
+    try { unsubscribeGrudgePunishment(); } catch (_) {}
+    unsubscribeGrudgePunishment = null;
+  }
 
   if (state.rootEl) {
     state.rootEl.replaceChildren();
@@ -350,7 +366,26 @@ function openDetail(item) {
   close.type = 'button';
   close.addEventListener('click', () => hideBottomSheet());
 
-  sheet.append(head, content, info, close);
+  // 跳转到 chat 该角色会话（如果记仇条目绑定了角色）
+  const chatBtn = el('button', 'grudge-detail-close', '去聊聊');
+  chatBtn.type = 'button';
+  chatBtn.style.background = 'var(--bg-card)';
+  chatBtn.style.color = 'var(--text-primary)';
+  if (item.characterId) {
+    chatBtn.addEventListener('click', () => {
+      try {
+        hideBottomSheet();
+        window.AppBus?.openApp('chat', {
+          route: { name: 'thread', params: { mode: 'private', characterId: item.characterId, groupId: '' } }
+        });
+      } catch (_) {}
+    });
+  } else {
+    chatBtn.disabled = true;
+    chatBtn.style.opacity = '0.5';
+  }
+
+  sheet.append(head, content, info, close, chatBtn);
   showBottomSheet(sheet);
 }
 

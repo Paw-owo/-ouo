@@ -1521,6 +1521,11 @@ export async function aiGiftToUser({ characterId, characterName = 'TA', itemId, 
     detail: { ...card }
   }));
 
+  // 统一事件总线：shop:gift，payload 含 characterId/direction/itemName/itemId/note/characterName
+  try {
+    window.AppBus?.emit('shop:gift', { ...card });
+  } catch (_) {}
+
   return { ok: true, item, card };
 }
 
@@ -1576,6 +1581,11 @@ export async function userGiftToAI({ characterId, characterName = 'TA', itemId, 
     detail: { ...card }
   }));
 
+  // 统一事件总线：shop:gift，payload 含 characterId/direction/itemName/itemId/note/characterName
+  try {
+    window.AppBus?.emit('shop:gift', { ...card });
+  } catch (_) {}
+
   showToast('礼物已经送到TA手里啦 ๑˃ ᵕ ˂๑');
   return { ok: true, item, card };
 }
@@ -1606,32 +1616,19 @@ async function writeGiftRecord({ direction, characterId, characterName, item, no
 }
 
 async function recordGiftMemory({ characterId, role, content, source }) {
-  if (!characterId || !content) return;
+  if (!characterId || !content) return null;
 
   try {
-    const chatModule = await import('./chat.js');
-
-    if (typeof chatModule.recordExternalInteraction === 'function') {
-      await chatModule.recordExternalInteraction({
-        characterId,
-        role,
-        content,
-        source
-      });
-      return;
-    }
-  } catch (_) {}
-
-  const id = generateId('memory');
-
-  await setDB('memories', id, {
-    id,
-    characterId,
-    content,
-    source: 'manual',
-    createdAt: getNow(),
-    updatedAt: getNow()
-  });
+    return await window.AppBus.recordExternalInteraction({
+      characterId,
+      role,
+      content,
+      source,
+      importance: 3
+    });
+  } catch (_) {
+    return null;
+  }
 }
 
 function createShopSvg() {
@@ -1733,4 +1730,4 @@ function addSoftFill(svg, d) {
 // 改了什么：礼物记录加 owner/source 隔离，背包查找和展示排除 gift_record；礼物卡片补齐 card/item/shopItem/image/price 字段，方便聊天小卡片读取商店图片和文案。
 // 会不会影响其他文件：会让 apps/chat/thread-render.js 能显示更完整的礼物卡片；如果要礼物直接进入聊天记录，下一步需要改 apps/chat/thread-actions.js 或聊天入口监听 shop-gift-created。
 // 更新记忆里该文件的导出函数：无变化。
-// 依赖：../core/storage.js(getData,setData,generateId,getNow,getAllDB,setDB,getDB,deleteDB)；../core/ui.js(showToast,showConfirm,createIcon)；./wallet.js(getBalance,deductBalance,deductAiBalance)；可选动态依赖 ./chat.js(recordExternalInteraction)
+// 依赖：../core/storage.js(getData,setData,generateId,getNow,getAllDB,setDB,getDB,deleteDB)；../core/ui.js(showToast,showConfirm,createIcon)；./wallet.js(getBalance,deductBalance,deductAiBalance)；通过 window.AppBus 统一写记忆（recordExternalInteraction）、发 shop:gift 事件
