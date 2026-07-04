@@ -33,7 +33,9 @@ export const STORES = Object.freeze({
   flashcards: 'flashcards',
   alarms: 'alarms',
   notes: 'notes',
-  pomodoroStats: 'pomodoro_stats'
+  pomodoroStats: 'pomodoro_stats',
+  chatSessions: 'chat_sessions',
+  inbox: 'inbox'
 });
 
 export const KEYS = Object.freeze({
@@ -43,12 +45,14 @@ export const KEYS = Object.freeze({
   appIcons: 'app_icons',
   appWidgetPositions: 'app_widget_positions',
   appDockOrder: 'app_dock_order',
+  appDesktopPages: 'app_desktop_pages',
   appWallpaper: 'app_wallpaper',
   appLockWallpaper: 'app_lock_wallpaper',
   appLockAvatar: 'app_lock_avatar',
   appLockPassword: 'app_lock_password',
   appTheme: 'app_theme',
   appCustomTheme: 'app_custom_theme',
+  appCustomColors: 'app_custom_colors',
   appFontFamily: 'app_font_family',
   appCustomFontBlob: 'app_custom_font_blob',
   appDesktopScale: 'app_desktop_scale',
@@ -58,6 +62,9 @@ export const KEYS = Object.freeze({
   appSchemaVersion: 'app_schema_version',
   appLastOpenedApp: 'app_last_opened_app',
   appInstallPrompted: 'app_install_prompted',
+  appLockUnlocked: 'app_lock_unlocked',
+  appIconOrder: (page) => `app_icon_order_${page}`,
+  appHiddenIcons: 'app_hidden_icons',
 
   // 聊天相关
   chatCurrentCharacter: 'chat_current_character',
@@ -68,6 +75,7 @@ export const KEYS = Object.freeze({
   chatWallpaperOpacity: (characterId) => `chat_${characterId}_wallpaper_opacity`,
   chatStickerPack: (characterId) => `chat_${characterId}_sticker_pack`,
   chatConfig: (characterId) => `chat_${characterId}_config`,
+  chatUnreadCount: 'chat_unread_count',
 
   // 群聊（必须用 groupId，避免与单聊冲突）
   groupConfig: (groupId) => `chat_group_${groupId}_config`,
@@ -94,6 +102,12 @@ export const KEYS = Object.freeze({
   widgetStoreState: 'widget_store_state',
   astroState: 'astro_state',
   calculatorHistory: 'calculator_history',
+  appFocusWidget: 'app_focus_widget',
+  appBadges: 'app_badges',
+  momentsUnreadCount: 'moments_unread_count',
+  appAnniversaries: 'app_anniversaries',
+  appVinylSongs: 'app_vinyl_songs',
+  appLockUseWallpaper: 'app_lock_use_wallpaper',
 
   // 防打扰与主动消息
   aiProactiveBudget: 'ai_proactive_budget',
@@ -101,7 +115,15 @@ export const KEYS = Object.freeze({
   aiNightSilent: 'ai_night_silent',
 
   // 调试
-  eventsHistory: 'events_history'
+  eventsHistory: 'events_history',
+
+  // 第 0 步新增：AI / 消息中心 / APP 背景 / 系统
+  aiConfig: 'ai_config',
+  appAppBackgrounds: 'app_app_backgrounds',
+  inboxMessages: 'inbox_messages',
+  systemName: 'system_name',
+  chatMode: 'chat_mode',           // 'bubble' | 'dialog'
+  notifySettings: 'notify_settings'
 });
 
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;

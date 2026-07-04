@@ -10,119 +10,127 @@ import { KEYS } from './storage-keys.js';
 import { getData, setData } from './storage.js';
 import bus from './events.js';
 
+const CUSTOM_COLORS_KEY = KEYS.appCustomColors;
+
 const PRESETS = {
   sky: {
-    id: 'sky', name: '天空蓝', mode: 'light',
+    id: 'sky', name: '海盐蓝', mode: 'light',
     vars: {
-      '--bg-primary': '#F2F6FB',
-      '--bg-secondary': '#E4ECF5',
+      '--bg-primary': '#EEF6FB',
+      '--bg-secondary': '#DDEDF6',
       '--bg-card': '#FFFFFF',
-      '--bg-overlay': 'rgba(0,0,0,0.28)',
-      '--accent': '#7AA2D6',
-      '--accent-light': '#DAE5F5',
-      '--accent-dark': '#5B84BC',
-      '--text-primary': '#1C1C1E',
-      '--text-secondary': '#8A8A8E',
-      '--text-hint': '#C4C4C8',
-      '--bubble-user-bg': '#7AA2D6',
+      '--bg-overlay': 'rgba(0,0,0,0.24)',
+      '--accent': '#7EC4E0',
+      '--accent-light': '#CFE9F2',
+      '--accent-dark': '#5AA6C6',
+      '--text-primary': '#2A3A44',
+      '--text-secondary': '#7A8E9A',
+      '--text-hint': '#B8C8D0',
+      '--bubble-user-bg': '#7EC4E0',
       '--bubble-user-text': '#FFFFFF',
       '--bubble-ai-bg': '#FFFFFF',
-      '--bubble-ai-text': '#1C1C1E'
+      '--bubble-ai-text': '#2A3A44',
+      '--shadow-glow': '0 0 20px rgba(126,196,224,0.40)'
     }
   },
   sakura: {
-    id: 'sakura', name: '樱花粉', mode: 'light',
+    id: 'sakura', name: '草莓牛奶', mode: 'light',
     vars: {
-      '--bg-primary': '#FDF5F7',
-      '--bg-secondary': '#F8E6EC',
+      '--bg-primary': '#FDEEF1',
+      '--bg-secondary': '#F8DEE5',
       '--bg-card': '#FFFFFF',
-      '--bg-overlay': 'rgba(0,0,0,0.24)',
-      '--accent': '#E2A0B4',
-      '--accent-light': '#F8DEE8',
-      '--accent-dark': '#C88898',
-      '--text-primary': '#2A1C22',
+      '--bg-overlay': 'rgba(0,0,0,0.22)',
+      '--accent': '#F5A0B0',
+      '--accent-light': '#FBDFE6',
+      '--accent-dark': '#E07C90',
+      '--text-primary': '#3A2630',
       '--text-secondary': '#9A8088',
-      '--text-hint': '#C4B0B6',
-      '--bubble-user-bg': '#E2A0B4',
+      '--text-hint': '#D0B8BE',
+      '--bubble-user-bg': '#F5A0B0',
       '--bubble-user-text': '#FFFFFF',
       '--bubble-ai-bg': '#FFFFFF',
-      '--bubble-ai-text': '#2A1C22'
+      '--bubble-ai-text': '#3A2630',
+      '--shadow-glow': '0 0 20px rgba(245,160,176,0.40)'
     }
   },
   lavender: {
-    id: 'lavender', name: '薰衣紫', mode: 'light',
+    id: 'lavender', name: '焦糖拿铁', mode: 'light',
     vars: {
-      '--bg-primary': '#F6F3FC',
-      '--bg-secondary': '#E7DEF2',
+      '--bg-primary': '#F7F0E6',
+      '--bg-secondary': '#EDE0CC',
       '--bg-card': '#FFFFFF',
-      '--bg-overlay': 'rgba(0,0,0,0.26)',
-      '--accent': '#A88CC8',
-      '--accent-light': '#E0D2F0',
-      '--accent-dark': '#826BA0',
-      '--text-primary': '#1F1A2A',
-      '--text-secondary': '#8A82A0',
-      '--text-hint': '#C0B8CE',
-      '--bubble-user-bg': '#A88CC8',
+      '--bg-overlay': 'rgba(0,0,0,0.24)',
+      '--accent': '#D4A87A',
+      '--accent-light': '#EEDCC2',
+      '--accent-dark': '#B08658',
+      '--text-primary': '#3A2A1A',
+      '--text-secondary': '#8A7C68',
+      '--text-hint': '#C8B8A0',
+      '--bubble-user-bg': '#D4A87A',
       '--bubble-user-text': '#FFFFFF',
       '--bubble-ai-bg': '#FFFFFF',
-      '--bubble-ai-text': '#1F1A2A'
+      '--bubble-ai-text': '#3A2A1A',
+      '--shadow-glow': '0 0 20px rgba(212,168,122,0.40)'
     }
   },
   skyDark: {
-    id: 'skyDark', name: '深夜蓝', mode: 'dark',
+    id: 'skyDark', name: '夜海蓝', mode: 'dark',
     vars: {
-      '--bg-primary': '#0F1622',
-      '--bg-secondary': '#1A2230',
-      '--bg-card': '#222B3A',
+      '--bg-primary': '#15212C',
+      '--bg-secondary': '#1E2D3C',
+      '--bg-card': '#243648',
       '--bg-overlay': 'rgba(0,0,0,0.55)',
-      '--accent': '#8FB8E8',
-      '--accent-light': '#2A3A52',
-      '--accent-dark': '#6A95C8',
-      '--text-primary': '#E8ECF2',
-      '--text-secondary': '#9AA4B0',
-      '--text-hint': '#5C6674',
-      '--bubble-user-bg': '#5B84BC',
+      '--accent': '#8FD0E8',
+      '--accent-light': '#2A4050',
+      '--accent-dark': '#6AAEC8',
+      '--text-primary': '#E8F0F6',
+      '--text-secondary': '#9AB0BC',
+      '--text-hint': '#5C7080',
+      '--bubble-user-bg': '#6AAEC8',
       '--bubble-user-text': '#FFFFFF',
-      '--bubble-ai-bg': '#2A3544',
-      '--bubble-ai-text': '#E8ECF2'
+      '--bubble-ai-bg': '#2A3C4E',
+      '--bubble-ai-text': '#E8F0F6',
+      '--shadow-glow': '0 0 20px rgba(143,208,232,0.40)'
     }
   },
   sakuraDark: {
-    id: 'sakuraDark', name: '夜樱粉', mode: 'dark',
+    id: 'sakuraDark', name: '夜莓粉', mode: 'dark',
     vars: {
-      '--bg-primary': '#1F161A',
-      '--bg-secondary': '#2A1F24',
-      '--bg-card': '#33262C',
+      '--bg-primary': '#231820',
+      '--bg-secondary': '#2E2028',
+      '--bg-card': '#3A2832',
       '--bg-overlay': 'rgba(0,0,0,0.55)',
-      '--accent': '#E2A0B4',
-      '--accent-light': '#3A2630',
-      '--accent-dark': '#C88898',
-      '--text-primary': '#F2E0E6',
-      '--text-secondary': '#A89098',
-      '--text-hint': '#6C5A60',
-      '--bubble-user-bg': '#C88898',
+      '--accent': '#F5A0B0',
+      '--accent-light': '#3A2832',
+      '--accent-dark': '#E07C90',
+      '--text-primary': '#F6E4EA',
+      '--text-secondary': '#B098A0',
+      '--text-hint': '#6C5860',
+      '--bubble-user-bg': '#E07C90',
       '--bubble-user-text': '#FFFFFF',
-      '--bubble-ai-bg': '#33262C',
-      '--bubble-ai-text': '#F2E0E6'
+      '--bubble-ai-bg': '#3A2832',
+      '--bubble-ai-text': '#F6E4EA',
+      '--shadow-glow': '0 0 20px rgba(245,160,176,0.40)'
     }
   },
   lavenderDark: {
-    id: 'lavenderDark', name: '暮色紫', mode: 'dark',
+    id: 'lavenderDark', name: '夜焦糖', mode: 'dark',
     vars: {
-      '--bg-primary': '#161220',
-      '--bg-secondary': '#221C30',
-      '--bg-card': '#2A2440',
+      '--bg-primary': '#22180E',
+      '--bg-secondary': '#2C2018',
+      '--bg-card': '#382A1E',
       '--bg-overlay': 'rgba(0,0,0,0.55)',
-      '--accent': '#A88CC8',
-      '--accent-light': '#2E2640',
-      '--accent-dark': '#826BA0',
-      '--text-primary': '#ECDEF8',
-      '--text-secondary': '#9A8FB0',
-      '--text-hint': '#5E5670',
-      '--bubble-user-bg': '#826BA0',
+      '--accent': '#E0B888',
+      '--accent-light': '#3A2C20',
+      '--accent-dark': '#B88E58',
+      '--text-primary': '#F4E8D8',
+      '--text-secondary': '#B8A488',
+      '--text-hint': '#706048',
+      '--bubble-user-bg': '#B88E58',
       '--bubble-user-text': '#FFFFFF',
-      '--bubble-ai-bg': '#2A2440',
-      '--bubble-ai-text': '#ECDEF8'
+      '--bubble-ai-bg': '#382A1E',
+      '--bubble-ai-text': '#F4E8D8',
+      '--shadow-glow': '0 0 20px rgba(224,184,136,0.40)'
     }
   }
 };
@@ -135,31 +143,30 @@ const SHARED_VARS = {
   '--font-size-title': '17px',
   '--font-size-large': '20px',
   '--font-size-huge': '28px',
-  '--spacing-xs': '4px',
-  '--spacing-sm': '8px',
-  '--spacing-md': '16px',
-  '--spacing-lg': '24px',
-  '--spacing-xl': '32px',
-  '--radius-sm': '8px',
-  '--radius-md': '16px',
-  '--radius-lg': '24px',
-  '--radius-icon': '14px',
-  '--radius-card': '20px',
-  '--radius-sheet': '24px',
-  '--radius-dock': '28px',
-  '--bubble-radius': '18px',
-  '--bubble-radius-tail': '4px',
-  '--shadow-sm': '0 1px 4px rgba(0,0,0,0.06)',
-  '--shadow-md': '0 2px 12px rgba(0,0,0,0.10)',
-  '--shadow-lg': '0 8px 32px rgba(0,0,0,0.16)',
-  '--shadow-glow': '0 0 16px rgba(122,162,214,0.45)',
-  '--glass-blur': '20px',
-  '--glass-blur-strong': '32px',
+  '--spacing-xs': '6px',
+  '--spacing-sm': '10px',
+  '--spacing-md': '18px',
+  '--spacing-lg': '26px',
+  '--spacing-xl': '36px',
+  '--radius-sm': '12px',
+  '--radius-md': '18px',
+  '--radius-lg': '26px',
+  '--radius-icon': '18px',
+  '--radius-card': '24px',
+  '--radius-sheet': '28px',
+  '--radius-dock': '32px',
+  '--bubble-radius': '20px',
+  '--bubble-radius-tail': '6px',
+  '--shadow-sm': '0 2px 8px rgba(0,0,0,0.04)',
+  '--shadow-md': '0 4px 16px rgba(0,0,0,0.06)',
+  '--shadow-lg': '0 8px 28px rgba(0,0,0,0.10)',
+  '--glass-blur': '14px',
+  '--glass-blur-strong': '20px',
   '--wallpaper-soft': '0.10',
-  '--press-scale': '0.96',
-  '--motion': 'all 200ms ease',
+  '--press-scale': '0.94',
+  '--motion': 'all 220ms ease',
   '--motion-spring': 'cubic-bezier(0.34, 1.56, 0.64, 1)',
-  '--motion-fast': 'all 120ms ease',
+  '--motion-fast': 'all 140ms ease',
   '--icon-size': '60px',
   '--dock-base': '84px',
   '--status-bar-base': '44px',
@@ -178,7 +185,7 @@ export function getPreset(id) {
 }
 
 export function getCurrentThemeId() {
-  return getData(KEYS.appTheme, 'sky');
+  return getData(KEYS.appTheme, 'lavender');
 }
 
 export function getCurrentTheme() {
@@ -222,11 +229,13 @@ export function setTheme(id) {
     if (!custom || custom.id !== id) return false;
     setData(KEYS.appTheme, id);
     applyTheme(custom);
+    restoreCustomColors(); // 切主题后重应用自定义颜色覆盖
     bus.emit('theme:changed', { id, theme: custom });
     return true;
   }
   setData(KEYS.appTheme, id);
   applyTheme(preset);
+  restoreCustomColors(); // 切主题后重应用自定义颜色覆盖
   bus.emit('theme:changed', { id, theme: preset });
   return true;
 }
@@ -314,4 +323,57 @@ export function listThemes() {
   const custom = getData(KEYS.appCustomTheme, null);
   if (custom) presets.push({ id: custom.id, name: custom.name || '自定义', mode: custom.mode || 'light' });
   return presets;
+}
+
+// ════════════════════════════════════════
+// 运行时自定义颜色（基于当前主题覆盖单个 CSS 变量）
+// ════════════════════════════════════════
+
+export function getCustomColors() {
+  return getData(CUSTOM_COLORS_KEY, {});
+}
+
+/**
+ * 应用一组颜色覆盖到根元素，并持久化。
+ * @param {Record<string,string>} colors  例：{ '--accent': '#FF0000' }
+ */
+export function applyCustomColors(colors) {
+  const root = document.documentElement;
+  const cleaned = {};
+  for (const [k, v] of Object.entries(colors || {})) {
+    if (typeof k === 'string' && k.startsWith('--') && typeof v === 'string' && v) {
+      root.style.setProperty(k, v);
+      cleaned[k] = v;
+    }
+  }
+  setData(CUSTOM_COLORS_KEY, cleaned);
+  bus.emit('theme:changed', { id: getCurrentThemeId(), custom: cleaned });
+  return cleaned;
+}
+
+export function clearCustomColors() {
+  const root = document.documentElement;
+  const saved = getData(CUSTOM_COLORS_KEY, {});
+  Object.keys(saved).forEach((k) => root.style.removeProperty(k));
+  setData(CUSTOM_COLORS_KEY, {});
+  // 重新应用当前主题，恢复 preset 原值
+  applyTheme(getCurrentTheme());
+  bus.emit('theme:changed', { id: getCurrentThemeId() });
+}
+
+/** 启动时恢复自定义颜色覆盖 */
+export function restoreCustomColors() {
+  const saved = getData(CUSTOM_COLORS_KEY, {});
+  const root = document.documentElement;
+  for (const [k, v] of Object.entries(saved)) {
+    root.style.setProperty(k, v);
+  }
+}
+
+/** 取某个主题某变量的当前值（用于颜色拾取器回填） */
+export function getThemeVar(themeId, varName) {
+  const t = getPreset(themeId) || getData(KEYS.appCustomTheme, null);
+  if (t && t.vars && t.vars[varName]) return t.vars[varName];
+  // 落到当前实际计算值
+  return getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
 }

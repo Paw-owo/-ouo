@@ -1,0 +1,412 @@
+// apps/chat/message-actions.js
+// 消息与聊天的操作菜单——长按消息弹小菜单，顶部 more 菜单管整段聊天。
+// 负责：复制/引用/撤回/收藏/删除消息，切换模式/聊天背景/免打扰/导出/清空记录。
+// 依赖：core/storage.js, core/storage-keys.js, core/ui.js, core/events.js, core/util.js
+// 红线：图标只准 SVG 线稿，禁止任何 emoji 字符。
+
+import { KEYS, STORES } from '../../core/storage-keys.js';
+import { getData, setData, getDB, setDB, deleteDB, getAllDB, getNow } from '../../core/storage.js';
+import { showToast, showConfirm, showBottomSheet, createIcon } from '../../core/ui.js';
+import bus from '../../core/events.js';
+import { downloadBlob, isUsableImage, cssUrl, clamp } from '../../core/util.js';
+import { getState, render, applySessionWallpaper, setQuoteToInput } from './index.js';
+
+// 撤回时间窗（毫秒）：仅自己的消息 2 分钟内可撤回
+const RECALL_WINDOW_MS = 2 * 60 * 1000;
+
+// ════════════════════════════════════════
+// 消息长按操作菜单
+// ════════════════════════════════════════
+
+/**
+ * 长按消息弹操作菜单。菜单项根据消息类型/角色动态显示。
+ * @param {object} msg 消息对象
+ */
+export function openMessageActionSheet(msg) {
+  const isUser = msg.role === 'user';
+  const isImage = msg.type === 'image';
+  // 撤回：仅自己的消息且在 2 分钟内
+  const canRecall = isUser && (Date.now() - new Date(msg.timestamp || msg.createdAt).getTime()) < RECALL_WINDOW_MS;
+
+  const actions = [
+    { key: 'copy',    label: '复制',     icon: 'memo',  show: !isImage, onClick: () => copyMessage(msg) },
+    { key: 'quote',   label: '引用',      icon: 'chat',  show: true,    onClick: () => quoteMessage(msg) },
+    { key: 'recall',  label: '撤回',      icon: 'back',  show: canRecall, onClick: () => recallMessage(msg) },
+    { key: 'star',    label: '收藏',      icon: 'star',  show: true,    onClick: () => starMessage(msg) },
+    { key: 'delete',  label: '删除',      icon: 'trash', show: true, danger: true, onClick: () => deleteMessage(msg) }
+  ].filter((a) => a.show);
+
+  if (!actions.length) return;
+
+  const body = document.createElement('div');
+  body.className = 'chat-action-list';
+  body.innerHTML = actions.map((a) => `
+    <button class="chat-action-item ${a.danger ? 'danger' : ''}" data-key="${a.key}" role="menuitem">
+      ${createIcon(a.icon, 20).outerHTML}
+      <span>${escapeHTML(a.label)}</span>
+    </button>
+  `).join('');
+
+  const sheet = showBottomSheet({
+    title: '消息操作',
+    bodyElement: body,
+    dismissible: true
+  });
+
+  body.querySelectorAll('.chat-action-item').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const key = btn.dataset.key;
+      const action = actions.find((a) => a.key === key);
+      sheet.close();
+      if (action && typeof action.onClick === 'function') {
+        try { action.onClick(); } catch (e) { console.warn('[chat] 消息操作失败', e); }
+      }
+    });
+  });
+}
+
+// ── 复制 ──
+function copyMessage(msg) {
+  const text = String(msg.content || '');
+  if (!text) {
+    showToast('没什么可复制的呀', 'default', 1200);
+    return;
+  }
+  // 优先走剪贴板 API，失败兜底
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(
+      () => showToast('复制好啦', 'success', 1200),
+      () => fallbackCopy(text)
+    );
+  } else {
+    fallbackCopy(text);
+  }
+}
+
+function fallbackCopy(text) {
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.left = '-9999px';
+    ta.style.top = '0';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    const ok = document.execCommand('copy');
+    ta.remove();
+    showToast(ok ? '复制好啦' : '没复制成功，长按手动复制吧', ok ? 'success' : 'error', 1200);
+  } catch (e) {
+    showToast('剪贴板不让用呀', 'error');
+  }
+}
+
+// ── 引用 ──
+function quoteMessage(msg) {
+  const text = String(msg.content || '');
+  if (!text) {
+    showToast('这条没法引用呀', 'default', 1200);
+    return;
+  }
+  // 截断长文本，引用只取前 40 字
+  const snippet = text.length > 40 ? text.slice(0, 40) + '...' : text;
+  setQuoteToInput(snippet);
+  showToast('已引用，写好回复就发吧', 'default', 1400);
+}
+
+// ── 撤回 ──
+function recallMessage(msg) {
+  showConfirm({
+    title: '撤回这条消息吗？',
+    body: '撤回后就看不到了，对方也不会再看到。',
+    confirmText: '撤回吧',
+    cancelText: '不要',
+    onConfirm: async () => {
+      try {
+        await deleteDB(STORES.messages, msg.id);
+        showToast('撤回啦', 'default', 1200);
+        await render();
+      } catch (e) {
+        console.warn('[chat] 撤回失败', e);
+        showToast('没撤回成功，再试一下嘛', 'error');
+      }
+    }
+  });
+}
+
+// ── 收藏（简化版：只 emit 事件 + toast，不真存） ──
+function starMessage(msg) {
+  bus.emit('chat:star-message', { id: msg.id, content: msg.content, characterId: msg.characterId });
+  showToast('收藏好啦（暂存到事件流，后续接入收藏 App）', 'success', 1600);
+}
+
+// ── 删除 ──
+function deleteMessage(msg) {
+  showConfirm({
+    title: '删掉这条消息吗？',
+    body: '删掉就看不到啦，确定嘛？',
+    confirmText: '删掉吧',
+    cancelText: '不要',
+    danger: true,
+    onConfirm: async () => {
+      try {
+        await deleteDB(STORES.messages, msg.id);
+        showToast('删掉啦', 'default', 1200);
+        await render();
+      } catch (e) {
+        console.warn('[chat] 删除消息失败', e);
+        showToast('没删掉，再试一下嘛', 'error');
+      }
+    }
+  });
+}
+
+// ════════════════════════════════════════
+// 聊天详情顶部 more 菜单
+// ════════════════════════════════════════
+
+export function openChatMoreMenu() {
+  const state = getState();
+  const session = state.currentSession;
+  if (!session) return;
+  const mode = getData(KEYS.chatMode, 'bubble');
+  const isMuted = !!session.muted;
+
+  const actions = [
+    { key: 'mode',      label: mode === 'bubble' ? '切换为对话模式' : '切换为气泡模式', icon: 'edit',     onClick: () => toggleChatMode(mode) },
+    { key: 'wallpaper', label: '聊天背景',     icon: 'camera',   onClick: () => openWallpaperSheet(session) },
+    { key: 'mute',      label: isMuted ? '取消免打扰' : '免打扰',  icon: 'moon',      onClick: () => toggleSessionMute(session, isMuted) },
+    { key: 'export',    label: '导出记录',     icon: 'download', onClick: () => exportChatRecords(session) },
+    { key: 'clear',     label: '清空记录',     icon: 'trash',    danger: true, onClick: () => clearChatRecords(session) }
+  ];
+
+  const body = document.createElement('div');
+  body.className = 'chat-action-list';
+  body.innerHTML = actions.map((a) => `
+    <button class="chat-action-item ${a.danger ? 'danger' : ''}" data-key="${a.key}" role="menuitem">
+      ${createIcon(a.icon, 20).outerHTML}
+      <span>${escapeHTML(a.label)}</span>
+    </button>
+  `).join('');
+
+  const sheet = showBottomSheet({
+    title: '聊天设置',
+    bodyElement: body,
+    dismissible: true
+  });
+
+  body.querySelectorAll('.chat-action-item').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const key = btn.dataset.key;
+      const action = actions.find((a) => a.key === key);
+      sheet.close();
+      if (action && typeof action.onClick === 'function') {
+        // 异步操作不阻塞菜单关闭
+        Promise.resolve().then(() => action.onClick()).catch((e) => console.warn('[chat] more 菜单失败', e));
+      }
+    });
+  });
+}
+
+// ── 切换气泡/对话模式 ──
+async function toggleChatMode(curMode) {
+  const next = curMode === 'bubble' ? 'dialog' : 'bubble';
+  setData(KEYS.chatMode, next);
+  showToast(next === 'bubble' ? '已切回气泡模式' : '已切换为对话模式，像剧本一样', 'default', 1400);
+  await render();
+}
+
+// ── 切换免打扰 ──
+async function toggleSessionMute(session, isMuted) {
+  try {
+    await setDB(STORES.chatSessions, session.id, { ...session, muted: !isMuted });
+    // 同步到 state
+    const state = getState();
+    if (state.currentSession) state.currentSession.muted = !isMuted;
+    showToast(!isMuted ? '已开启免打扰，新消息不再打扰你' : '取消免打扰啦', 'default', 1400);
+    await render();
+  } catch (e) {
+    console.warn('[chat] 切换免打扰失败', e);
+    showToast('没切换成功，再试一下嘛', 'error');
+  }
+}
+
+// ════════════════════════════════════════
+// 聊天背景设置（bottomSheet）
+// ════════════════════════════════════════
+
+export function openWallpaperSheet(session) {
+  const cur = session.wallpaper || { url: '', opacity: 60 };
+  const body = document.createElement('div');
+  body.innerHTML = `
+    <div class="chat-wallpaper-form">
+      <div class="chat-form-row">
+        <label class="chat-form-label" for="chat-wp-url">背景图片 URL</label>
+        <input class="input" id="chat-wp-url" type="text" placeholder="粘贴图片地址，或留空清除..." value="${escapeAttr(cur.url || '')}">
+      </div>
+      <div class="chat-form-row">
+        <label class="chat-form-label" for="chat-wp-opacity">
+          透明度：<span id="chat-wp-opacity-val">${Number(cur.opacity ?? 60)}</span>%
+        </label>
+        <input id="chat-wp-opacity" type="range" min="0" max="100" value="${Number(cur.opacity ?? 60)}" step="5" aria-label="背景透明度">
+      </div>
+      <div class="chat-wp-preview" id="chat-wp-preview"></div>
+      <div class="chat-wallpaper-actions">
+        <button class="btn ghost" id="chat-wp-clear">${createIcon('trash', 18).outerHTML}<span>清除背景</span></button>
+        <button class="btn primary" id="chat-wp-save">${createIcon('check', 18).outerHTML}<span>应用背景</span></button>
+      </div>
+    </div>
+  `;
+
+  const sheet = showBottomSheet({
+    title: '聊天背景',
+    bodyElement: body,
+    dismissible: true
+  });
+
+  const urlInput = body.querySelector('#chat-wp-url');
+  const opacityInput = body.querySelector('#chat-wp-opacity');
+  const opacityVal = body.querySelector('#chat-wp-opacity-val');
+  const previewEl = body.querySelector('#chat-wp-preview');
+
+  function refreshPreview() {
+    const url = urlInput.value.trim();
+    const op = Number(opacityInput.value);
+    opacityVal.textContent = op;
+    if (url && isUsableImage(url)) {
+      previewEl.style.display = '';
+      previewEl.style.backgroundImage = cssUrl(url);
+      previewEl.style.opacity = String(op / 100);
+    } else {
+      previewEl.style.display = 'none';
+    }
+  }
+  refreshPreview();
+  urlInput.addEventListener('input', refreshPreview);
+  opacityInput.addEventListener('input', refreshPreview);
+
+  body.querySelector('#chat-wp-clear').addEventListener('click', async () => {
+    try {
+      await setDB(STORES.chatSessions, session.id, { ...session, wallpaper: null });
+      const state = getState();
+      if (state.currentSession && state.currentSession.id === session.id) state.currentSession.wallpaper = null;
+      sheet.close();
+      showToast('背景已清除', 'default', 1200);
+      applySessionWallpaper();
+    } catch (e) {
+      console.warn('[chat] 清除背景失败', e);
+      showToast('没清除成功，再试一下嘛', 'error');
+    }
+  });
+
+  body.querySelector('#chat-wp-save').addEventListener('click', async () => {
+    const url = urlInput.value.trim();
+    const op = clamp(Number(opacityInput.value) || 60, 0, 100);
+    if (url && !isUsableImage(url)) {
+      showToast('图片地址看起来不对呀', 'error');
+      return;
+    }
+    try {
+      const wallpaper = url ? { url, opacity: op } : null;
+      await setDB(STORES.chatSessions, session.id, { ...session, wallpaper });
+      const state = getState();
+      if (state.currentSession && state.currentSession.id === session.id) state.currentSession.wallpaper = wallpaper;
+      sheet.close();
+      showToast(url ? '背景换好啦' : '已清除背景', 'success', 1200);
+      applySessionWallpaper();
+    } catch (e) {
+      console.warn('[chat] 保存背景失败', e);
+      showToast('没保存成功，再试一下嘛', 'error');
+    }
+  });
+}
+
+// ════════════════════════════════════════
+// 导出聊天记录
+// ════════════════════════════════════════
+
+export async function exportChatRecords(session) {
+  const state = getState();
+  let character = null;
+  try { character = await getDB(STORES.characters, session.characterId); } catch (e) {}
+  const charName = character?.name || character?.nickname || '角色';
+
+  let messages = [];
+  try {
+    const all = await getAllDB(STORES.messages);
+    messages = all.filter((m) => m.sessionId === session.id || (!m.sessionId && m.characterId === session.characterId));
+  } catch (e) {
+    console.warn('[chat] 读取消息失败', e);
+    showToast('消息读不出来嘛', 'error');
+    return;
+  }
+  if (!messages.length) {
+    showToast('还没有消息可以导出呀', 'default', 1400);
+    return;
+  }
+  messages.sort((a, b) => new Date(a.timestamp || a.createdAt) - new Date(b.timestamp || b.createdAt));
+
+  // 组 txt
+  const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  const lines = [];
+  lines.push(`和 ${charName} 的聊天记录`);
+  lines.push(`导出时间：${new Date().toLocaleString('zh-CN')}`);
+  lines.push(`消息条数：${messages.length}`);
+  lines.push('─'.repeat(28));
+  messages.forEach((m) => {
+    const who = m.role === 'user' ? '我' : charName;
+    const t = m.timestamp || m.createdAt || '';
+    const timeStr = t ? new Date(t).toLocaleString('zh-CN', { hour12: false }) : '';
+    if (m.type === 'image') {
+      lines.push(`[${timeStr}] ${who}：[图片]`);
+    } else {
+      lines.push(`[${timeStr}] ${who}：${m.content || ''}`);
+    }
+  });
+  const txt = lines.join('\n');
+  const filename = `聊天记录_${charName}_${dateStr}.txt`;
+  const blob = new Blob([txt], { type: 'text/plain;charset=utf-8' });
+  downloadBlob(blob, filename);
+  showToast('导出好啦，去下载列表里看看吧', 'success', 1600);
+}
+
+// ════════════════════════════════════════
+// 清空聊天记录
+// ════════════════════════════════════════
+
+export function clearChatRecords(session) {
+  showConfirm({
+    title: '清空所有消息吗？',
+    body: '这个会话里的全部消息都会被删掉，会话本身保留。确定嘛？',
+    confirmText: '清空吧',
+    cancelText: '再想想',
+    danger: true,
+    onConfirm: async () => {
+      try {
+        const all = await getAllDB(STORES.messages);
+        const toDelete = all.filter((m) => m.sessionId === session.id || (!m.sessionId && m.characterId === session.characterId));
+        for (const m of toDelete) {
+          try { await deleteDB(STORES.messages, m.id); } catch (e) {}
+        }
+        // 清空 lastMessage + 草稿保留
+        await setDB(STORES.chatSessions, session.id, { ...session, lastMessage: '', unread: 0 });
+        showToast('清空啦，会话还在，可以重新开始聊', 'default', 1400);
+        await render();
+      } catch (e) {
+        console.warn('[chat] 清空记录失败', e);
+        showToast('没清空成功，再试一下嘛', 'error');
+      }
+    }
+  });
+}
+
+// ════════════════════════════════════════
+// 工具
+// ════════════════════════════════════════
+
+function escapeHTML(s) {
+  return String(s ?? '').replace(/[&<>"']/g, (c) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[c]));
+}
+function escapeAttr(s) { return escapeHTML(s); }

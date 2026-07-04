@@ -6,13 +6,14 @@
 
 import { initDB, ensureDefaultSettings, getData, setData, removeData, getDB, setDB, deleteDB, getAllDB, generateId, getNow, compressImage } from './core/storage.js';
 import { STORES, KEYS } from './core/storage-keys.js';
-import { loadTheme, applyTheme, getCurrentTheme, setTheme, applyFontFamily, applyDesktopScale, getPresets } from './core/theme.js';
+import { loadTheme, applyTheme, getCurrentTheme, setTheme, applyFontFamily, applyDesktopScale, getPresets, restoreCustomColors } from './core/theme.js';
 import { createIcon, showToast, showConfirm, showBottomSheet, hideBottomSheet } from './core/ui.js';
 import { pickImageFile, clamp, debounce, cssUrl, isUsableImage } from './core/util.js';
 import { get as getConfig } from './core/config.js';
 import bus from './core/events.js';
 import { openApp, goHome } from './core/router.js';
 import { seedDefaultCharacter, getDefaultCharacter } from './core/seed.js';
+import { initInbox } from './core/inbox.js';
 
 // ════════════════════════════════════════
 // DOM 引用
@@ -47,13 +48,33 @@ let currentCharacter = null;
 const STATUS_ICONS = ['heart', 'sun', 'weather', 'music', 'star', 'calendar', 'moon', 'bell'];
 
 // 5 个预设 widget 定义
-const WIDGETS = [
+const WIDGET_DEFS = [
   { id: 'time', type: 'time', shape: 'wide', page: 0 },
   { id: 'weather', type: 'weather', shape: 'square', page: 0 },
   { id: 'anniversary', type: 'anniversary', shape: 'square', page: 0 },
   { id: 'focus', type: 'focus', shape: 'wide', page: 0 },
   { id: 'vinyl', type: 'vinyl', shape: 'wide', page: 1 }
 ];
+// 向后兼容旧引用
+const WIDGETS = WIDGET_DEFS;
+
+// 用户布局覆盖：{ widgetId: { page, hidden, order } }
+function getWidgetLayout() {
+  const v = getData(KEYS.appWidgetPositions, null);
+  return (v && typeof v === 'object') ? v : {};
+}
+function saveWidgetLayout(layout) { setData(KEYS.appWidgetPositions, layout || {}); }
+function getActiveWidgets() {
+  const layout = getWidgetLayout();
+  return WIDGET_DEFS
+    .map((w) => {
+      const o = layout[w.id];
+      if (o && o.hidden) return null;
+      return { ...w, page: o?.page ?? w.page, order: o?.order ?? 999 };
+    })
+    .filter(Boolean)
+    .sort((a, b) => (a.order - b.order) || (a.page - b.page));
+}
 
 // ════════════════════════════════════════
 // 启动
@@ -63,10 +84,13 @@ async function boot() {
     await initDB();
     ensureDefaultSettings();
     loadTheme();
+    restoreCustomColors();
     applyDesktopScaleFromConfig();
     await applyCustomFont();
     await seedDefaultCharacter();
     currentCharacter = await getDefaultCharacter();
+    renderLockDots();
+    rebuildDesktopPages();
     await renderAll();
     bindEvents();
     initWidgets();
@@ -74,14 +98,17 @@ async function boot() {
     refreshLockScreen();
     refreshBadges();
     subscribeBus();
+    initInbox();
+    setupPwaInstallPrompt();
   } catch (e) {
     console.error('[boot]', e);
     showToast('哎呀，启动出了点问题', 'error');
   } finally {
-    setTimeout(() => {
+    // 等 renderAll 真正完成后再隐藏 boot 屏，避免慢设备白屏
+    requestAnimationFrame(() => {
       bootEl.classList.add('hide');
       setTimeout(() => bootEl.remove(), 280);
-    }, 260);
+    });
   }
 }
 
@@ -121,7 +148,9 @@ function renderStatusBar() {
   STATUS_ICONS.forEach((name, i) => {
     const wrap = document.createElement('span');
     wrap.className = 'status-bar-icon';
+    wrap.setAttribute('aria-label', name);
     wrap.appendChild(createIcon(name, 18));
+    wrap.addEventListener('click', () => onStatusBarIconClick(name));
     // 第 4 个位置后面插时间
     statusCapsuleEl.appendChild(wrap);
     if (i === 3) {
@@ -134,6 +163,20 @@ function renderStatusBar() {
   updateStatusTime();
 }
 
+// 状态栏图标点击：跳转对应 App 或给提示
+const STATUS_ICON_TARGET = {
+  heart: 'moments', sun: 'weather', weather: 'weather', music: 'music',
+  star: 'collections', calendar: 'memo', moon: 'dream', bell: 'moments'
+};
+function onStatusBarIconClick(name) {
+  const target = STATUS_ICON_TARGET[name];
+  if (!target) { showToast('这个还没准备好哦'); return; }
+  const reg = getRegistrySync();
+  const exists = reg?.APPS.some((a) => a.id === target);
+  if (exists) openApp(target);
+  else showToast('对应的小应用还在路上～', 'default', 1600);
+}
+
 function updateStatusTime() {
   const el = $('status-time');
   if (!el) return;
@@ -142,20 +185,30 @@ function updateStatusTime() {
 }
 
 async function getRegistry() {
-  try { return await import('./apps-registry.js'); }
+  try {
+    const mod = await import('./apps-registry.js');
+    registryCache = mod; // 缓存，供同步路径使用
+    return mod;
+  }
   catch (e) { console.warn('[desktop] 注册表加载失败', e); return { APPS: [] }; }
 }
 
+let registryCache = null;
+function getRegistrySync() {
+  return registryCache || { APPS: [] };
+}
+
 function getDockOrder(reg) {
-  const dockIds = reg.APPS.filter((a) => a.dock).map((a) => a.id);
+  const r = reg || getRegistrySync();
+  const dockIds = r.APPS.filter((a) => a.dock).map((a) => a.id);
   const saved = getData(KEYS.appDockOrder, null);
   const ordered = Array.isArray(saved) ? saved.filter((id) => dockIds.includes(id)) : [];
   const missing = dockIds.filter((id) => !ordered.includes(id));
   return [...ordered, ...missing];
 }
 
-function getHiddenIcons() { return getData('app_hidden_icons', []); }
-function saveHiddenIcons(arr) { setData('app_hidden_icons', [...new Set(arr)]); }
+function getHiddenIcons() { return getData(KEYS.appHiddenIcons, []); }
+function saveHiddenIcons(arr) { setData(KEYS.appHiddenIcons, [...new Set(arr)]); }
 
 async function renderDock() {
   const reg = await getRegistry();
@@ -174,22 +227,25 @@ function createDockIcon(app) {
   el.setAttribute('aria-label', app.name);
   const img = document.createElement('span');
   img.className = 'desktop-icon-img';
+  if (app.iconColor) img.style.background = app.iconColor;
   img.appendChild(createIcon(app.icon, 26));
   const label = document.createElement('span');
   label.className = 'dock-icon-label';
   label.textContent = app.name;
   el.append(img, label);
   el.addEventListener('click', () => { if (!editing) openApp(app.id); });
+  el.addEventListener('pointerdown', (e) => handleIconPointerDown(e, el));
   return el;
 }
 
 async function renderWidgets() {
   document.querySelectorAll('[data-widget-area]').forEach((area) => area.innerHTML = '');
-  for (const w of WIDGETS) {
+  for (const w of getActiveWidgets()) {
     const area = document.querySelector(`[data-widget-area="${w.page}"]`);
     if (!area) continue;
     const el = await createWidget(w);
     area.appendChild(el);
+    el.addEventListener('pointerdown', (e) => handleWidgetPointerDown(e, el, w));
   }
 }
 
@@ -205,8 +261,9 @@ async function createWidget(w) {
     el.innerHTML = `<div class="widget-title">天气</div><div class="widget-value" id="w-weather">看看外面天气如何</div>`;
   } else if (w.type === 'anniversary') {
     el.innerHTML = `<div class="widget-title">纪念日</div><div class="widget-value" id="w-anniversary">还没有纪念日呢</div>`;
+    el.addEventListener('click', () => addAnniversaryPrompt());
   } else if (w.type === 'focus') {
-    const focus = getData('app_focus_widget', { title: '今天也要好好休息', text: '打开设置，看看我能帮你做什么' });
+    const focus = getData(KEYS.appFocusWidget, { title: '今天也要好好休息', text: '打开设置，看看我能帮你做什么' });
     el.innerHTML = `<div class="widget-title">今日提示</div><div class="widget-value" id="w-focus-title">${escapeHtml(focus.title || '今天也要好好休息')}</div><div class="widget-sub" id="w-focus-text">${escapeHtml(focus.text || '')}</div>`;
   } else if (w.type === 'vinyl') {
     el.innerHTML = `
@@ -214,7 +271,7 @@ async function createWidget(w) {
         <div class="widget-vinyl-disc" id="w-vinyl-disc"></div>
         <div class="widget-vinyl-info">
           <div class="widget-vinyl-title" id="w-vinyl-title">还没有歌曲呢</div>
-          <div class="widget-vinyl-artist" id="w-vinyl-artist">去音乐里挑一首吧</div>
+          <div class="widget-vinyl-artist" id="w-vinyl-artist">点这里挑一首本地歌</div>
           <div class="widget-vinyl-controls">
             <button type="button" id="w-vinyl-prev" aria-label="上一首">${createIcon('prev', 14).outerHTML}</button>
             <button type="button" id="w-vinyl-play" aria-label="播放">${createIcon('play', 14).outerHTML}</button>
@@ -222,10 +279,26 @@ async function createWidget(w) {
           </div>
         </div>
       </div>`;
-    el.querySelector('#w-vinyl-play').addEventListener('click', (e) => { e.stopPropagation(); window.musicPlayer?.togglePlay?.(); });
-    el.querySelector('#w-vinyl-prev').addEventListener('click', (e) => { e.stopPropagation(); window.musicPlayer?.playPrevious?.(); });
-    el.querySelector('#w-vinyl-next').addEventListener('click', (e) => { e.stopPropagation(); window.musicPlayer?.playNext?.(); });
+    el.querySelector('#w-vinyl-disc').addEventListener('click', (e) => { e.stopPropagation(); pickLocalSong(); });
+    el.querySelector('#w-vinyl-title').addEventListener('click', (e) => { e.stopPropagation(); pickLocalSong(); });
+    el.querySelector('#w-vinyl-play').addEventListener('click', (e) => { e.stopPropagation(); toggleVinylPlay(); });
+    el.querySelector('#w-vinyl-prev').addEventListener('click', (e) => { e.stopPropagation(); playVinylAt(vinylIndex - 1); });
+    el.querySelector('#w-vinyl-next').addEventListener('click', (e) => { e.stopPropagation(); playVinylAt(vinylIndex + 1); });
   }
+  // 编辑态删除角标
+  const del = document.createElement('span');
+  del.className = 'widget-del';
+  del.appendChild(createIcon('close', 12));
+  del.addEventListener('click', (e) => {
+    e.preventDefault(); e.stopPropagation();
+    if (!editing) return;
+    showConfirm({
+      title: '把这个 widget 藏起来吗？', body: '藏起来后可以在设置里找回哦',
+      confirmText: '藏起来', cancelText: '不要',
+      onConfirm: () => { setWidgetHidden(w.id, true); renderWidgets().then(() => { updateClock(); updateWeather(); updateAnniversaryWidget(); updateVinylWidget(); }); showToast('藏好啦'); }
+    });
+  });
+  el.appendChild(del);
   return el;
 }
 
@@ -249,6 +322,7 @@ function createDesktopIcon(app) {
 
   const img = document.createElement('span');
   img.className = 'desktop-icon-img';
+  if (app.iconColor) img.style.background = app.iconColor;
   img.appendChild(createIcon(app.icon, 30));
 
   const label = document.createElement('span');
@@ -293,7 +367,7 @@ function hideIcon(appId) {
 }
 
 // ════════════════════════════════════════
-// 图标拖拽（长按进入编辑态，网格内重排）
+// 图标拖拽（长按进入编辑态，桌面网格/dock 之间互相拖拽重排）
 // ════════════════════════════════════════
 function handleIconPointerDown(event, element) {
   if (event.button !== undefined && event.button !== 0) return;
@@ -305,6 +379,7 @@ function handleIconPointerDown(event, element) {
   let moved = false;
   let dragGhost = null;
   let originGrid = null;
+  const isDockIcon = element.classList.contains('dock-icon');
 
   const onMove = (e) => {
     const dx = e.clientX - startX, dy = e.clientY - startY;
@@ -328,9 +403,10 @@ function handleIconPointerDown(event, element) {
       dragGhost.style.left = (e.clientX - 30) + 'px';
       dragGhost.style.top = (e.clientY - 30) + 'px';
     }
-    // 高亮目标位置
-    const target = document.elementFromPoint(e.clientX, e.clientY)?.closest('.desktop-icon[data-app-id]');
-    document.querySelectorAll('.desktop-icon.drop-target').forEach((n) => n.classList.remove('drop-target'));
+    // 高亮目标位置（同类型图标之间）
+    const sel = isDockIcon ? '.dock-icon[data-app-id]' : '.desktop-icon[data-app-id]';
+    const target = document.elementFromPoint(e.clientX, e.clientY)?.closest(sel);
+    document.querySelectorAll('.drop-target').forEach((n) => n.classList.remove('drop-target'));
     if (target && target !== element && target.parentElement === originGrid) {
       target.classList.add('drop-target');
     }
@@ -341,18 +417,27 @@ function handleIconPointerDown(event, element) {
     window.removeEventListener('pointermove', onMove);
     window.removeEventListener('pointerup', onUp);
     window.removeEventListener('pointercancel', onUp);
-    document.querySelectorAll('.desktop-icon.drop-target').forEach((n) => n.classList.remove('drop-target'));
+    document.querySelectorAll('.drop-target').forEach((n) => n.classList.remove('drop-target'));
     if (dragGhost) dragGhost.remove();
     element.style.opacity = '';
     if (!moved) return;
-    const target = document.elementFromPoint(e.clientX, e.clientY)?.closest('.desktop-icon[data-app-id]');
+    const sel = isDockIcon ? '.dock-icon[data-app-id]' : '.desktop-icon[data-app-id]';
+    const target = document.elementFromPoint(e.clientX, e.clientY)?.closest(sel);
     if (target && target !== element && target.parentElement === originGrid) {
-      // 在 target 前插入
       originGrid.insertBefore(element, target);
-      saveIconOrder(originGrid);
+      if (isDockIcon) saveDockOrder(originGrid); else saveIconOrder(originGrid);
       showToast('好啦，位置记下来啦', 'success');
+    } else {
+      // 拖到 dock / 桌面区域则切换归属
+      const overDock = document.elementFromPoint(e.clientX, e.clientY)?.closest('.dock');
+      const overDesktop = document.elementFromPoint(e.clientX, e.clientY)?.closest('[data-icon-grid]');
+      if (isDockIcon && overDesktop && overDesktop !== originGrid) {
+        moveToDesktop(element, overDesktop);
+      } else if (!isDockIcon && overDock && originGrid?.dataset.iconGrid !== undefined) {
+        moveToDock(element);
+      }
     }
-    setTimeout(() => { /* 保持编辑态，用户可继续调整或点空白退出 */ }, 60);
+    setTimeout(() => { /* 保持编辑态 */ }, 60);
   };
 
   window.addEventListener('pointermove', onMove, { passive: false });
@@ -360,9 +445,153 @@ function handleIconPointerDown(event, element) {
   window.addEventListener('pointercancel', onUp, { passive: true });
 }
 
+function moveToDesktop(dockEl, grid) {
+  const appId = dockEl.dataset.appId;
+  // 从 dock 移除
+  const dockOrder = getDockOrder().filter((id) => id !== appId);
+  saveDockOrderArr(dockOrder);
+  // 加入桌面网格（插入到末尾）
+  const reg = getRegistrySync();
+  const app = reg?.APPS.find((a) => a.id === appId);
+  if (app) {
+    const newIcon = createDesktopIcon({ ...app, dock: false });
+    grid.appendChild(newIcon);
+    saveIconOrder(grid);
+  }
+  dockEl.remove();
+  showToast('移到桌面啦', 'success');
+}
+
+function moveToDock(desktopIconEl) {
+  const appId = desktopIconEl.dataset.appId;
+  const reg = getRegistrySync();
+  const app = reg?.APPS.find((a) => a.id === appId);
+  if (!app) return;
+  if (getDockOrder().length >= getConfig('ui.dockMax', 6)) {
+    showToast('Dock 装满啦，先移走一个嘛', 'error');
+    return;
+  }
+  // 从桌面移除
+  const grid = desktopIconEl.parentElement;
+  desktopIconEl.remove();
+  if (grid) saveIconOrder(grid);
+  // 加入 dock
+  const newIcon = createDockIcon({ ...app, dock: true });
+  dockEl.appendChild(newIcon);
+  const dockOrder = getDockOrder();
+  dockOrder.push(appId);
+  saveDockOrderArr(dockOrder);
+  showToast('放到 Dock 啦', 'success');
+}
+
 function saveIconOrder(grid) {
   const ids = [...grid.querySelectorAll('.desktop-icon[data-app-id]')].map((n) => n.dataset.appId);
-  setData('app_icon_order_' + (grid.dataset.iconGrid || '0'), ids);
+  setData(KEYS.appIconOrder(grid.dataset.iconGrid || '0'), ids);
+}
+
+function saveDockOrderArr(arr) {
+  setData(KEYS.appDockOrder, arr);
+}
+function saveDockOrder(dockEl) {
+  const ids = [...dockEl.querySelectorAll('.dock-icon[data-app-id]')].map((n) => n.dataset.appId);
+  saveDockOrderArr(ids);
+}
+
+// ════════════════════════════════════════
+// Widget 拖拽（长按进入编辑态，同页内换位，跨页移动）
+// ════════════════════════════════════════
+function handleWidgetPointerDown(event, element, widget) {
+  if (event.button !== undefined && event.button !== 0) return;
+  const pressMs = getConfig('ui.iconEditPressMs', 620);
+  const startX = event.clientX, startY = event.clientY;
+  let pressTimer = setTimeout(() => {
+    if (!moved) { editing = true; updateEditingClass(); showToast('拖动可以换位置，松开试试'); }
+  }, pressMs);
+  let moved = false;
+  let dragGhost = null;
+
+  const onMove = (e) => {
+    const dx = e.clientX - startX, dy = e.clientY - startY;
+    if (!moved && Math.hypot(dx, dy) < 4) return;
+    if (!moved) {
+      moved = true;
+      clearTimeout(pressTimer);
+      editing = true;
+      document.querySelectorAll('.widget').forEach((el) => el.classList.add('editing'));
+      const rect = element.getBoundingClientRect();
+      dragGhost = element.cloneNode(true);
+      dragGhost.style.position = 'fixed';
+      dragGhost.style.zIndex = '999';
+      dragGhost.style.pointerEvents = 'none';
+      dragGhost.style.opacity = '0.85';
+      dragGhost.style.width = rect.width + 'px';
+      dragGhost.style.transform = 'scale(1.05)';
+      document.body.appendChild(dragGhost);
+      element.style.opacity = '0.3';
+    }
+    e.preventDefault();
+    if (dragGhost) {
+      dragGhost.style.left = (e.clientX - dragGhost.offsetWidth / 2) + 'px';
+      dragGhost.style.top = (e.clientY - dragGhost.offsetHeight / 2) + 'px';
+    }
+    const target = document.elementFromPoint(e.clientX, e.clientY)?.closest('.widget[data-widget-id]');
+    document.querySelectorAll('.widget.drop-target').forEach((n) => n.classList.remove('drop-target'));
+    if (target && target !== element) target.classList.add('drop-target');
+  };
+
+  const onUp = (e) => {
+    clearTimeout(pressTimer);
+    window.removeEventListener('pointermove', onMove);
+    window.removeEventListener('pointerup', onUp);
+    window.removeEventListener('pointercancel', onUp);
+    document.querySelectorAll('.widget.drop-target').forEach((n) => n.classList.remove('drop-target'));
+    if (dragGhost) dragGhost.remove();
+    element.style.opacity = '';
+    if (!moved) return;
+    const target = document.elementFromPoint(e.clientX, e.clientY)?.closest('.widget[data-widget-id]');
+    const targetArea = document.elementFromPoint(e.clientX, e.clientY)?.closest('[data-widget-area]');
+    if (target && target !== element) {
+      // 同页换位：交换 order
+      const targetId = target.dataset.widgetId;
+      swapWidgetOrder(widget.id, targetId);
+      renderWidgets().then(() => { updateClock(); updateWeather(); updateAnniversaryWidget(); updateVinylWidget(); });
+      showToast('位置换好啦', 'success');
+    } else if (targetArea) {
+      // 跨页移动
+      const newPage = Number(targetArea.dataset.widgetArea);
+      if (!Number.isNaN(newPage) && newPage !== widget.page) {
+        moveWidgetToPage(widget.id, newPage);
+        renderWidgets().then(() => { updateClock(); updateWeather(); updateAnniversaryWidget(); updateVinylWidget(); });
+        showToast('移到第 ' + (newPage + 1) + ' 页啦', 'success');
+      }
+    }
+    setTimeout(() => { editing = false; updateEditingClass(); document.querySelectorAll('.widget').forEach((el) => el.classList.remove('editing')); }, 100);
+  };
+
+  window.addEventListener('pointermove', onMove, { passive: false });
+  window.addEventListener('pointerup', onUp, { passive: true });
+  window.addEventListener('pointercancel', onUp, { passive: true });
+}
+
+function swapWidgetOrder(idA, idB) {
+  const layout = getWidgetLayout();
+  const a = layout[idA] || { order: 999 };
+  const b = layout[idB] || { order: 999 };
+  layout[idA] = { ...a, order: b.order };
+  layout[idB] = { ...b, order: a.order };
+  saveWidgetLayout(layout);
+}
+
+function moveWidgetToPage(widgetId, page) {
+  const layout = getWidgetLayout();
+  layout[widgetId] = { ...(layout[widgetId] || {}), page };
+  saveWidgetLayout(layout);
+}
+
+function setWidgetHidden(widgetId, hidden) {
+  const layout = getWidgetLayout();
+  layout[widgetId] = { ...(layout[widgetId] || {}), hidden: !!hidden };
+  saveWidgetLayout(layout);
 }
 
 function updateEditingClass() {
@@ -390,7 +619,7 @@ function bindEvents() {
   });
 
   // 窗口尺寸变化重排
-  window.addEventListener('resize', debounce(() => { renderAll(); applyAllImages(); }, 260));
+  window.addEventListener('resize', debounce(async () => { rebuildDesktopPages(); await renderAll(); await applyAllImages(); }, 260));
 
   // 锁屏键盘
   lockPadEl.addEventListener('click', onLockKeyClick);
@@ -413,15 +642,24 @@ function onLockKeyClick(e) {
 }
 
 function renderLockDots() {
-  const pwd = getData(KEYS.appLockPassword, '0326');
+  const pwd = String(getData(KEYS.appLockPassword, '0326'));
+  const need = pwd.length;
+  // 动态生成 dot，数量跟随密码长度
+  if (lockDotsEl.children.length !== need) {
+    lockDotsEl.innerHTML = '';
+    for (let i = 0; i < need; i++) {
+      const s = document.createElement('span');
+      s.className = 'lock-dot';
+      lockDotsEl.appendChild(s);
+    }
+  }
   [...lockDotsEl.children].forEach((dot, i) => dot.classList.toggle('filled', i < lockInput.length));
-  void pwd;
 }
 
 function checkLockPassword() {
   const pwd = getData(KEYS.appLockPassword, '0326');
   if (lockInput === String(pwd)) {
-    setData('app_lock_unlocked', true);
+    setData(KEYS.appLockUnlocked, true);
     lockScreenEl.classList.add('unlocked');
     setTimeout(() => lockScreenEl.classList.add('hidden'), 360);
     showToast('解锁啦，见到你真好', 'success');
@@ -436,7 +674,7 @@ function checkLockPassword() {
 
 async function refreshLockScreen() {
   // 已解锁就不显示
-  const unlocked = getData('app_lock_unlocked', false);
+  const unlocked = getData(KEYS.appLockUnlocked, false);
   if (unlocked) {
     lockScreenEl.classList.add('unlocked', 'hidden');
   } else {
@@ -494,21 +732,24 @@ function updateClock() {
 async function updateWeather() {
   const el = $('w-weather');
   if (!el) return;
-  const cached = getData(KEYS.weatherCache, null);
+  const city = getData(KEYS.weatherCity, '');
+  const cacheKey = city ? `${KEYS.weatherCache}_${city}` : KEYS.weatherCache;
+  const cached = getData(cacheKey, null);
   const now = Date.now();
   if (cached?.text && now - Number(cached.updatedAt || 0) < 30 * 60 * 1000) {
     el.textContent = cached.text; return;
   }
   try {
-    const resp = await fetch('https://wttr.in/?format=j1', { cache: 'no-store' });
+    const url = city ? `https://wttr.in/${encodeURIComponent(city)}?format=j1` : 'https://wttr.in/?format=j1';
+    const resp = await fetch(url, { cache: 'no-store' });
     const data = await resp.json();
     const cur = data?.current_condition?.[0] || {};
-    const area = data?.nearest_area?.[0]?.areaName?.[0]?.value || '';
+    const area = data?.nearest_area?.[0]?.areaName?.[0]?.value || (city || '');
     const temp = cur.temp_C ? `${cur.temp_C}℃` : '';
     const desc = cur.lang_zh?.[0]?.value || cur.weatherDesc?.[0]?.value || '';
     const text = [area, temp, desc].filter(Boolean).join(' · ') || '天气躲起来了';
     el.textContent = text;
-    setData(KEYS.weatherCache, { text, updatedAt: now });
+    setData(cacheKey, { text, updatedAt: now });
   } catch (e) {
     console.warn('[weather]', e);
     el.textContent = cached?.text || '天气躲起来了';
@@ -534,11 +775,58 @@ function updateAnniversaryWidget() {
 }
 
 function getAllAnniversaries() {
-  for (const k of ['anniversaries', 'app_anniversaries']) {
-    const v = getData(k, null);
-    if (Array.isArray(v)) return v;
-  }
-  return [];
+  const v = getData(KEYS.appAnniversaries, null);
+  return Array.isArray(v) ? v : [];
+}
+function saveAnniversaries(list) { setData(KEYS.appAnniversaries, list || []); }
+
+function addAnniversaryPrompt() {
+  const body = document.createElement('div');
+  body.innerHTML = `<input class="input" id="ann-name" placeholder="纪念日名字（如 生日）" style="width:100%;margin-bottom:8px">
+    <input type="date" id="ann-date" style="width:100%;margin-bottom:8px;padding:8px;border-radius:var(--radius-sm);background:var(--bg-secondary);color:var(--text-primary)">
+    <div style="display:flex;gap:8px;margin-bottom:10px">
+      ${getAnniversaryListHtml()}
+    </div>
+    <button class="btn primary block" id="ann-ok">加上</button>`;
+  showBottomSheet({ title: '纪念日', bodyElement: body, dismissible: true });
+  refreshAnniversaryList(body);
+  body.querySelector('#ann-ok').addEventListener('click', () => {
+    const name = body.querySelector('#ann-name').value.trim();
+    const date = body.querySelector('#ann-date').value;
+    if (!name) { showToast('起个名字嘛', 'error'); return; }
+    if (!date) { showToast('选个日期嘛', 'error'); return; }
+    const list = getAllAnniversaries();
+    list.push({ id: `ann_${Date.now()}`, title: name, date });
+    saveAnniversaries(list);
+    document.querySelector('.popo-sheet-close')?.click();
+    updateAnniversaryWidget();
+    showToast('纪念日记好啦', 'success');
+  });
+}
+
+function getAnniversaryListHtml() {
+  const list = getAllAnniversaries();
+  if (!list.length) return '<div style="font-size:var(--font-size-small);color:var(--text-hint);flex:1">还没有纪念日</div>';
+  return '<div style="flex:1;max-height:160px;overflow-y:auto">' + list.map((a) =>
+    `<div class="card-row" data-ann-id="${a.id}"><span class="card-row-label">${escapeHtml(a.title)} · ${a.date}</span><button class="btn ghost" data-ann-del>删</button></div>`
+  ).join('') + '</div>';
+}
+
+function refreshAnniversaryList(container) {
+  const wrap = container.querySelector('[style*="flex:1"]');
+  if (!wrap) return;
+  wrap.innerHTML = getAllAnniversaries().length ? getAllAnniversaries().map((a) =>
+    `<div class="card-row" data-ann-id="${a.id}"><span class="card-row-label">${escapeHtml(a.title)} · ${a.date}</span><button class="btn ghost" data-ann-del>删</button></div>`
+  ).join('') : '<div style="font-size:var(--font-size-small);color:var(--text-hint)">还没有纪念日</div>';
+  wrap.querySelectorAll('[data-ann-del]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const id = btn.closest('[data-ann-id]').dataset.annId;
+      const list = getAllAnniversaries().filter((a) => a.id !== id);
+      saveAnniversaries(list);
+      refreshAnniversaryList(container);
+      updateAnniversaryWidget();
+    });
+  });
 }
 function parseDate(v) { if (!v) return null; const d = new Date(v); return Number.isNaN(d.getTime()) ? null : d; }
 function startOfDay(d) { return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
@@ -548,16 +836,74 @@ function updateVinylWidget() {
   const title = $('w-vinyl-title');
   const artist = $('w-vinyl-artist');
   const playBtn = $('w-vinyl-play');
-  const player = window.musicPlayer;
-  const isPlaying = player?.isPlaying?.() || false;
-  const song = player?.getCurrentSong?.() || null;
+  const isPlaying = !!vinylAudio && !vinylAudio.paused;
+  const song = getVinylCurrent();
   if (disc) disc.classList.toggle('playing', isPlaying);
   if (title) title.textContent = song?.title || '还没有歌曲呢';
-  if (artist) artist.textContent = song ? (song.artist || '未知艺术家') : '去音乐里挑一首吧';
+  if (artist) artist.textContent = song ? (song.artist || '本地歌曲') : '点这里挑一首本地歌';
   if (playBtn) {
     playBtn.innerHTML = '';
     playBtn.appendChild(createIcon(isPlaying ? 'pause' : 'play', 14));
   }
+}
+
+// ════════════════════════════════════════
+// 本地音乐最小播放器（黑胶 widget）
+// ════════════════════════════════════════
+let vinylAudio = null;
+let vinylIndex = -1;
+// 会话内带 url 的歌曲列表（blob URL 不持久化，刷新后失效）
+const vinylSession = [];
+function getVinylSongs() { const v = getData(KEYS.appVinylSongs, []); return Array.isArray(v) ? v : []; }
+function getVinylCurrent() { return vinylIndex >= 0 ? vinylSession[vinylIndex] : null; }
+
+async function pickLocalSong() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'audio/*';
+  input.style.display = 'none';
+  document.body.appendChild(input);
+  await new Promise((res) => { input.onchange = () => res(); input.click(); });
+  const file = input.files?.[0];
+  input.remove();
+  if (!file) return;
+  const url = URL.createObjectURL(file);
+  const song = { id: `vinyl_${Date.now()}`, title: file.name.replace(/\.[^.]+$/, ''), artist: '本地', url, size: file.size, addedAt: new Date().toISOString() };
+  // 会话列表存带 url 的完整对象，用于切歌
+  vinylSession.push(song);
+  // 持久化只存元数据（blob URL 刷新后失效）
+  const persistList = getVinylSongs().concat([{ id: song.id, title: song.title, artist: song.artist, addedAt: song.addedAt }]);
+  setData(KEYS.appVinylSongs, persistList);
+  playVinylSong(song);
+  showToast('挑好啦，正在播放', 'success');
+}
+
+function playVinylSong(song) {
+  if (!song || !song.url) { showToast('这首歌的链接失效啦，重新挑一首嘛', 'error'); return; }
+  if (!vinylAudio) {
+    vinylAudio = new Audio();
+    vinylAudio.addEventListener('ended', () => playVinylAt(vinylIndex + 1));
+  }
+  vinylAudio.src = song.url;
+  vinylAudio.play().catch(() => showToast('播放不出来嘛，换个格式试试', 'error'));
+  // 在会话列表里定位索引
+  vinylIndex = vinylSession.findIndex((s) => s.id === song.id);
+  updateVinylWidget();
+}
+
+function playVinylAt(idx) {
+  if (!vinylSession.length) { pickLocalSong(); return; }
+  // 循环切歌：超出范围回到首/尾
+  if (idx < 0) idx = vinylSession.length - 1;
+  if (idx >= vinylSession.length) idx = 0;
+  playVinylSong(vinylSession[idx]);
+}
+
+function toggleVinylPlay() {
+  if (!vinylAudio) { pickLocalSong(); return; }
+  if (vinylAudio.paused) vinylAudio.play().catch(() => {});
+  else vinylAudio.pause();
+  updateVinylWidget();
 }
 
 // ════════════════════════════════════════
@@ -576,12 +922,16 @@ async function applyAllImages() {
 async function applyWallpaper() {
   const rec = await getDB(STORES.blobs, KEYS.appWallpaper);
   const url = rec?.value || rec?.source || rec?.data || '';
-  const opacity = Number(rec?.opacity ?? 100) / 100;
+  // 用户语义：opacity 100 = 完全显示壁纸，0 = 完全遮住壁纸
+  // --wallpaper-soft 是遮罩层不透明度：1 = 全遮，0 = 全显
+  // 转换：maskOpacity = (100 - userOpacity) / 100
+  const userOpacity = Number(rec?.opacity ?? 100);
+  const maskOpacity = Math.max(0, Math.min(1, (100 - userOpacity) / 100));
   if (isUsableImage(url)) {
     desktopEl.style.backgroundImage = `url("${cssUrl(url)}")`;
     desktopEl.style.backgroundSize = 'cover';
     desktopEl.style.backgroundPosition = 'center';
-    document.documentElement.style.setProperty('--wallpaper-soft', String(opacity));
+    document.documentElement.style.setProperty('--wallpaper-soft', String(maskOpacity));
   } else {
     desktopEl.style.backgroundImage = '';
     document.documentElement.style.setProperty('--wallpaper-soft', '0.10');
@@ -589,8 +939,15 @@ async function applyWallpaper() {
 }
 
 async function applyLockBackground() {
-  const rec = await getDB(STORES.blobs, KEYS.appLockWallpaper);
-  const url = rec?.value || rec?.source || rec?.data || '';
+  const useWallpaper = getData(KEYS.appLockUseWallpaper, false);
+  let url = '';
+  if (useWallpaper) {
+    const wp = await getDB(STORES.blobs, KEYS.appWallpaper);
+    url = wp?.value || wp?.source || wp?.data || '';
+  } else {
+    const rec = await getDB(STORES.blobs, KEYS.appLockWallpaper);
+    url = rec?.value || rec?.source || rec?.data || '';
+  }
   if (isUsableImage(url)) {
     lockScreenEl.style.backgroundImage = `url("${cssUrl(url)}")`;
     lockScreenEl.style.backgroundSize = 'cover';
@@ -640,11 +997,11 @@ function refreshBadges() {
 
 function getBadgeMap() {
   const map = {};
-  const direct = getData('app_badges', null);
+  const direct = getData(KEYS.appBadges, null);
   if (direct && typeof direct === 'object') Object.assign(map, direct);
-  const chatUnread = getData('chat_unread_count', 0);
+  const chatUnread = getData(KEYS.chatUnreadCount, 0);
   if (Number(chatUnread) > 0) map.chat = Number(chatUnread);
-  const momentsUnread = getData('moments_unread_count', 0);
+  const momentsUnread = getData(KEYS.momentsUnreadCount, 0);
   if (Number(momentsUnread) > 0) map.moments = Number(momentsUnread);
   return map;
 }
@@ -655,6 +1012,7 @@ function getBadgeMap() {
 function subscribeBus() {
   bus.on('desktop:refresh', async () => {
     loadTheme();
+    restoreCustomColors();
     applyDesktopScaleFromConfig();
     await applyCustomFont();
     await renderAll();
@@ -669,6 +1027,61 @@ function subscribeBus() {
   });
   bus.on('app:installed', async () => { await renderAll(); await applyAllImages(); });
   bus.on('router:closed', refreshBadges);
+  bus.on('weather:refresh', () => { updateWeather(); });
+}
+
+// ════════════════════════════════════════
+// PWA 安装提示
+// ════════════════════════════════════════
+function setupPwaInstallPrompt() {
+  window.popoInstallPrompt = null;
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    window.popoInstallPrompt = e;
+    if (!getData(KEYS.appInstallPrompted, false)) {
+      showToast('可以把泡泡装到桌面啦，去设置里看看', 'default', 3000);
+      setData(KEYS.appInstallPrompted, true);
+    }
+  });
+  window.addEventListener('appinstalled', () => {
+    window.popoInstallPrompt = null;
+    showToast('装好啦，以后能直接从桌面打开我啦', 'success');
+  });
+}
+
+// ════════════════════════════════════════
+// 桌面分页增删
+// ════════════════════════════════════════
+function getDesktopPageCount() {
+  const n = Number(getData(KEYS.appDesktopPages, 2));
+  if (!Number.isFinite(n) || n < 1) return 1;
+  if (n > 6) return 6;
+  return n;
+}
+function setDesktopPageCount(n) {
+  const clamped = Math.max(1, Math.min(6, Math.floor(Number(n) || 2)));
+  setData(KEYS.appDesktopPages, clamped);
+  rebuildDesktopPages();
+  renderAll();
+}
+function rebuildDesktopPages() {
+  const count = getDesktopPageCount();
+  pagesEl.innerHTML = '';
+  for (let i = 0; i < count; i++) {
+    const page = document.createElement('section');
+    page.className = 'desktop-page';
+    page.dataset.page = String(i);
+    page.innerHTML = `<div class="widget-area" data-widget-area="${i}"></div>
+      <div class="icon-grid" data-icon-grid="${i}"></div>`;
+    pagesEl.appendChild(page);
+  }
+  // 重建 page dots
+  pageDotsEl.innerHTML = '';
+  for (let i = 0; i < count; i++) {
+    const dot = document.createElement('span');
+    dot.className = 'page-dot';
+    pageDotsEl.appendChild(dot);
+  }
 }
 
 // ════════════════════════════════════════
@@ -679,9 +1092,11 @@ function escapeHtml(s) {
 }
 
 // 暴露给设置 App 用（图片写入后触发刷新）
-window.popoRefreshDesktop = async () => { await renderAll(); await applyAllImages(); refreshBadges(); };
+window.popoRefreshDesktop = async () => { rebuildDesktopPages(); await renderAll(); await applyAllImages(); refreshBadges(); };
 window.popoRefreshLock = refreshLockScreen;
-window.popoLock = () => { setData('app_lock_unlocked', false); lockScreenEl.classList.remove('unlocked', 'hidden'); lockInput = ''; lockErrorEl.textContent = ''; renderLockDots(); };
+window.popoGetPageCount = getDesktopPageCount;
+window.popoSetPageCount = setDesktopPageCount;
+window.popoLock = () => { setData(KEYS.appLockUnlocked, false); lockScreenEl.classList.remove('unlocked', 'hidden'); lockInput = ''; lockErrorEl.textContent = ''; renderLockDots(); };
 
 // 启动
 boot();

@@ -5,6 +5,7 @@
 
 import { showToast } from './ui.js';
 import bus from './events.js';
+import { KEYS } from './storage-keys.js';
 
 let currentApp = null;
 let currentContainer = null;
@@ -56,7 +57,7 @@ export async function openApp(appId, params = {}) {
     currentApp = { id: appId, def, module: mod, params };
     container.classList.add('app-open');
     bus.emit('router:opened', { appId, params });
-    try { localStorage.setItem('app_last_opened_app', appId); } catch (e) {}
+    try { localStorage.setItem(KEYS.appLastOpenedApp, appId); } catch (e) {}
   } catch (e) {
     console.warn('[router] 打开失败', appId, e);
     showToast('哎呀，打开出了点问题');
