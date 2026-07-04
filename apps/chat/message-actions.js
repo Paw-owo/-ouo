@@ -9,7 +9,7 @@ import { getData, setData, getDB, setDB, deleteDB, getAllDB, generateId, getNow,
 import { showToast, showConfirm, showBottomSheet, createIcon } from '../../core/ui.js';
 import bus from '../../core/events.js';
 import { downloadBlob, isUsableImage, cssUrl, clamp, pickImageFile } from '../../core/util.js';
-import { getState, render, applySessionWallpaper, setQuoteToInput, enterChat } from './index.js';
+import { getState, render, applySessionWallpaper, setQuoteToInput, enterChat, openForwardSheet } from './index.js';
 import { escapeHTML, escapeAttr } from './shared-utils.js';
 import { playTTS, stopAllTTS } from '../../core/tts.js';
 import { retrySendMessage } from './sending.js';
@@ -22,35 +22,39 @@ const RECALL_WINDOW_MS = 2 * 60 * 1000;
 // ════════════════════════════════════════
 
 /**
- * 长按消息弹操作菜单。菜单项根据消息类型/角色动态显示。
+ * 长按消息弹操作菜单（网格布局，圆形按钮 + 文字）。菜单项根据消息类型/角色动态显示。
  * @param {object} msg 消息对象
  */
 export function openMessageActionSheet(msg) {
   const isUser = msg.role === 'user';
   const isImage = msg.type === 'image';
+  const isVoice = msg.type === 'voice' || msg.type === 'audio';
   // 撤回：仅自己的消息且在 2 分钟内
   const canRecall = isUser && (Date.now() - new Date(msg.timestamp || msg.createdAt).getTime()) < RECALL_WINDOW_MS;
   // 重发：仅 failed 状态的消息
   const canResend = msg.status === 'failed';
+  // 转发：图片/语音暂不支持转发媒体本身（仅转发文字描述）
+  const canForward = !isImage && !isVoice;
 
   const actions = [
-    { key: 'speak',   label: '念给我听',  icon: 'volume',  show: !isUser && !isImage, onClick: () => speakMessage(msg) },
+    { key: 'speak',   label: '念给我听',  icon: 'volume',  show: !isUser && !isImage && !isVoice, onClick: () => speakMessage(msg) },
     { key: 'resend',  label: '重发',     icon: 'refresh', show: canResend, onClick: () => resendMessage(msg) },
-    { key: 'copy',    label: '复制',     icon: 'memo',  show: !isImage, onClick: () => copyMessage(msg) },
-    { key: 'quote',   label: '引用',      icon: 'chat',  show: true,    onClick: () => quoteMessage(msg) },
-    { key: 'recall',  label: '撤回',      icon: 'back',  show: canRecall, onClick: () => recallMessage(msg) },
-    { key: 'star',    label: '收藏',      icon: 'star',  show: true,    onClick: () => starMessage(msg) },
-    { key: 'delete',  label: '删除',      icon: 'trash', show: true, danger: true, onClick: () => deleteMessage(msg) }
+    { key: 'copy',    label: '复制',     icon: 'memo',    show: !isImage && !isVoice, onClick: () => copyMessage(msg) },
+    { key: 'forward', label: '转发',     icon: 'forward', show: canForward, onClick: () => forwardMessage(msg) },
+    { key: 'quote',   label: '引用',      icon: 'chat',    show: !isImage && !isVoice, onClick: () => quoteMessage(msg) },
+    { key: 'recall',  label: '撤回',      icon: 'back',    show: canRecall, onClick: () => recallMessage(msg) },
+    { key: 'star',    label: '收藏',      icon: 'star',    show: true,    onClick: () => starMessage(msg) },
+    { key: 'delete',  label: '删除',      icon: 'trash',   show: true, danger: true, onClick: () => deleteMessage(msg) }
   ].filter((a) => a.show);
 
   if (!actions.length) return;
 
   const body = document.createElement('div');
-  body.className = 'chat-action-list';
+  body.className = 'chat-action-grid';
   body.innerHTML = actions.map((a) => `
-    <button class="chat-action-item ${a.danger ? 'danger' : ''}" data-key="${a.key}" role="menuitem">
-      ${createIcon(a.icon, 20).outerHTML}
-      <span>${escapeHTML(a.label)}</span>
+    <button class="chat-action-grid-item ${a.danger ? 'danger' : ''}" data-key="${a.key}" type="button" role="menuitem">
+      <span class="chat-action-grid-icon">${createIcon(a.icon, 22).outerHTML}</span>
+      <span class="chat-action-grid-label">${escapeHTML(a.label)}</span>
     </button>
   `).join('');
 
@@ -60,7 +64,7 @@ export function openMessageActionSheet(msg) {
     dismissible: true
   });
 
-  body.querySelectorAll('.chat-action-item').forEach((btn) => {
+  body.querySelectorAll('.chat-action-grid-item').forEach((btn) => {
     btn.addEventListener('click', () => {
       const key = btn.dataset.key;
       const action = actions.find((a) => a.key === key);
@@ -136,6 +140,7 @@ function fallbackCopy(text) {
 }
 
 // ── 引用 ──
+// 截断长文本作为引用预览，并带上原消息 id + 发送者名，渲染时生成可点击引用卡片
 function quoteMessage(msg) {
   const text = String(msg.content || '');
   if (!text) {
@@ -144,8 +149,23 @@ function quoteMessage(msg) {
   }
   // 截断长文本，引用只取前 40 字
   const snippet = text.length > 40 ? text.slice(0, 40) + '...' : text;
-  setQuoteToInput(snippet);
+  // 发送者名：用户消息标"我"，AI 消息标角色名
+  const state = getState();
+  const sender = msg.role === 'user'
+    ? '我'
+    : (state.currentCharacter?.name || state.currentCharacter?.nickname || '她');
+  setQuoteToInput(snippet, { id: msg.id, sender });
   showToast('已引用，写好回复就发吧', 'default', 1400);
+}
+
+// ── 转发 ──
+// 调用 extras.js 的 openForwardSheet 弹出会话选择面板
+function forwardMessage(msg) {
+  if (typeof openForwardSheet !== 'function') {
+    showToast('转发功能暂不可用', 'default', 1400);
+    return;
+  }
+  openForwardSheet(msg);
 }
 
 // ── 撤回 ──

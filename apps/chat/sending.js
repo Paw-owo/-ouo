@@ -1,5 +1,5 @@
 // apps/chat/sending.js
-// 发送消息 + AI 流式回复核心——文字/图片发送、流式渲染、本地兜底、失败重试、取消、写记忆。
+// 发送消息 + AI 流式回复核心——文字/图片/语音发送、流式渲染、本地兜底、失败重试、取消、写记忆。
 // 依赖：core/storage.js, core/storage-keys.js, core/ui.js, core/events.js,
 //       core/ai-client.js, core/memory.js, core/inbox.js, core/util.js, ./local-replies.js
 // 状态由 index.js 持有，通过 getState 拿；发送函数 export 给 detail-view.js 调用。
@@ -16,12 +16,12 @@ import { getLocalReply, pickReplyCategory, inferMood, inferImportance } from './
 // 新流程：回复完成后跑情绪检测 + 自动提取记忆 + 归档老记忆
 import { handleEmotion } from '../../js/ai/ai-emotion.js';
 import { autoRecordMemories, archiveOldMemories } from '../../js/ai/ai-memory.js';
-import { getState } from './index.js';
+import { getState, markUserMessagesRead } from './index.js';
 import {
   appendMessageEl, updateChatHeader, scrollToBottom, isNearBottom,
   showTypingIndicator, hideTypingIndicator,
   clearQuote, autoResizeInput, flushDraft, updateMessageStatus,
-  updateThinkingUI
+  updateThinkingUI, updateSendButtonState
 } from './detail-view.js';
 import { renderMarkdown } from './markdown.js';
 import { escapeHTML } from './shared-utils.js';
@@ -40,13 +40,17 @@ export async function sendMessage() {
   const text = state.inputEl.value.trim();
   if (!text) return;
 
-  // 取出引用（发送后清空）
-  const quote = state.pendingQuote || null;
+  // 取出引用（发送后清空）。pendingQuote 现在是 { text, id, sender } 对象
+  const quoteObj = state.pendingQuote || null;
+  const quote = quoteObj?.text || null;
+  const quoteId = quoteObj?.id || null;
+  const quoteSender = quoteObj?.sender || null;
   clearQuote();
 
   // 清空输入框并重置高度
   state.inputEl.value = '';
   autoResizeInput();
+  updateSendButtonState();
   // 落盘空草稿（覆盖旧草稿）
   if (state.saveDraftDebounced) state.saveDraftDebounced.cancel?.();
   await flushDraft();
@@ -62,6 +66,8 @@ export async function sendMessage() {
     content: text,
     type: 'text',
     quote,
+    quoteId,
+    quoteSender,
     status: 'sending',
     timestamp: getNow()
   };
@@ -160,6 +166,75 @@ export async function sendImageMessage() {
   await triggerAIReply(userMsg);
 }
 
+// ════════════════════════════════════════
+// 发送语音消息
+// ════════════════════════════════════════
+
+/**
+ * 发送语音消息（type='voice'）。extras.js 里的录音器停录后通过动态 import 调到这里。
+ * 写 DB + 渲染 + 更新会话 + 触发 AI 回复。
+ * @param {string} dataUrl 录音数据 URL（通常为 audio/webm;base64,...）
+ * @param {number} duration 录音时长（秒）
+ */
+export async function sendVoiceMessage(dataUrl, duration) {
+  const state = getState();
+  if (state.isReplying) {
+    showToast('等她回完再发语音嘛', 'default', 1400);
+    return;
+  }
+  const session = state.currentSession;
+  if (!session) return;
+  if (!dataUrl || !duration || duration <= 0) {
+    showToast('录的太短啦，长一点试试', 'default', 1200);
+    return;
+  }
+
+  // 语音消息预览文案
+  const preview = `[语音 ${Math.round(duration)}"]`;
+  const userMsg = {
+    id: generateId('msg'),
+    sessionId: session.id,
+    characterId: session.characterId,
+    role: 'user',
+    content: preview,
+    type: 'voice',
+    mediaUrl: dataUrl,
+    duration: Math.round(duration),
+    status: 'sending',
+    timestamp: getNow()
+  };
+
+  // 先渲染（status: sending）再写 DB
+  appendMessageEl(userMsg);
+  updateChatHeader(userMsg.timestamp);
+  scrollToBottom();
+
+  try {
+    await setDB(STORES.messages, userMsg.id, userMsg);
+    userMsg.status = 'sent';
+    try { await setDB(STORES.messages, userMsg.id, userMsg); } catch (e) {}
+    updateMessageStatus(userMsg.id, 'sent');
+  } catch (e) {
+    console.warn('[chat] 保存语音消息失败', e);
+    userMsg.status = 'failed';
+    try { await setDB(STORES.messages, userMsg.id, userMsg); } catch (e2) {}
+    updateMessageStatus(userMsg.id, 'failed', userMsg);
+    showToast('语音没发出去，再试一下嘛', 'error');
+    return;
+  }
+
+  // 更新会话 lastMessage/lastAt
+  await bumpSession(session, preview, userMsg.timestamp);
+  bus.emit('chat:user-message', {
+    characterId: session.characterId,
+    sessionId: session.id,
+    preview
+  });
+
+  // 触发 AI 回复（AI 看到的 userText 用自然语言描述，提示对方发了语音）
+  await triggerAIReply(userMsg);
+}
+
 /**
  * 重试发送失败的消息：把状态重置为 sent，并重新触发 AI 回复。
  * 由 detail-view.js 中失败状态图标点击时调用。
@@ -206,6 +281,15 @@ async function triggerAIReply(userMsg) {
   setReplying(true);
   state.streamCancelled = false;
   if (viewingThis) {
+    // 用户消息从 sent -> delivered：AI 开始处理即视为送达
+    try {
+      const cur = await getDB(STORES.messages, userMsg.id);
+      if (cur && cur.status === 'sent') {
+        cur.status = 'delivered';
+        await setDB(STORES.messages, userMsg.id, cur);
+        updateMessageStatus(userMsg.id, 'delivered');
+      }
+    } catch (e) {}
     showTypingIndicator();
     scrollToBottom();
   }
@@ -571,6 +655,10 @@ async function finishAIMessage(sess, character, aiMsg, msgEl, bubbleEl, finalTex
   archiveOldMemories(sess.characterId).catch((e) => {
     console.warn('[chat] 归档老记忆失败', e);
   });
+
+  // AI 回复完成即视为对方已读用户的消息——标记该会话所有用户消息为 read
+  // （markUserMessagesRead 内部会刷新当前会话可见消息的状态图标 + emit chat:messages-read）
+  try { await markUserMessagesRead(sess.id); } catch (e) {}
 
   setReplying(false);
   state.streamCancelled = false;
