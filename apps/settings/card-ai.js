@@ -32,6 +32,12 @@ injectStyle('popo-settings-ai-card', `
   .ai-card-model-btn:disabled{opacity:0.5;cursor:not-allowed}
   .ai-card-model-btn.spinning .popo-icon-svg{animation:popo-ai-spin 0.8s linear infinite}
   @keyframes popo-ai-spin{to{transform:rotate(360deg)}}
+  .ai-card-row-hint{font-size:var(--font-size-small);color:var(--text-hint);line-height:1.5;margin:-6px 0 12px 0}
+  .ai-card-details{margin-top:6px;margin-bottom:14px;border-top:1px solid var(--border);padding-top:10px}
+  .ai-card-summary{font-size:var(--font-size-small);color:var(--text-secondary);cursor:pointer;padding:6px 0;list-style:none;display:flex;align-items:center;gap:6px}
+  .ai-card-summary::-webkit-details-marker{display:none}
+  .ai-card-summary-arrow{display:inline-block;transition:transform var(--motion);color:var(--text-hint)}
+  .ai-card-details[open] .ai-card-summary-arrow{transform:rotate(90deg)}
 `);
 
 // 简单转义，input 的 value 和 textarea 内容都能用
@@ -58,6 +64,10 @@ export function renderAICard() {
   const configured = isAIConfigured();
   // 上下文条数走的是 core/config.js 的 ai.contextMessageLimit
   const contextLimit = getConfig('ai.contextMessageLimit', 20);
+  // 自定义 headers：可能是字符串或对象，textarea 统一展示成字符串
+  const customHeadersText = cfg.customHeaders
+    ? (typeof cfg.customHeaders === 'string' ? cfg.customHeaders : JSON.stringify(cfg.customHeaders, null, 2))
+    : '';
   const card = document.createElement('div');
   card.className = 'card';
   card.innerHTML = `
@@ -91,6 +101,7 @@ export function renderAICard() {
       <span class="card-row-label">思维链</span>
       <input type="checkbox" id="ai-chain" ${cfg.enableChain ? 'checked' : ''}>
     </div>
+    <div class="ai-card-row-hint">让 TA 先想一想再回复（部分模型支持）</div>
     <div class="ai-card-field">
       <span class="ai-card-field-label">我的活泼程度（越高越皮）</span>
       <div class="ai-card-range-row">
@@ -112,6 +123,16 @@ export function renderAICard() {
         <span class="ai-card-range-val" id="ai-ctx-limit-val">${Number(contextLimit) || 20}</span>
       </div>
     </div>
+    <details class="ai-card-details">
+      <summary class="ai-card-summary">
+        <span class="ai-card-summary-arrow">${createIcon('chevron-down', 14).outerHTML}</span>
+        <span>额外请求头（高级）</span>
+      </summary>
+      <div class="ai-card-field">
+        <span class="ai-card-field-label">JSON 格式，会原样合并到请求头里</span>
+        <textarea class="textarea ai-card-textarea" id="ai-custom-headers" placeholder='{"X-Title": "我的泡泡"}'>${escapeAttr(customHeadersText)}</textarea>
+      </div>
+    </details>
     <div class="ai-card-actions">
       <button class="btn primary" id="ai-save" type="button">存起来</button>
       <button class="btn" id="ai-test" type="button">试一下嘛</button>
@@ -222,7 +243,9 @@ export function renderAICard() {
     enableChain: !!card.querySelector('#ai-chain').checked,
     temperature: Number(card.querySelector('#ai-temp').value),
     maxTokens: Number(card.querySelector('#ai-max-tokens').value),
-    contextLimit: Number(card.querySelector('#ai-ctx-limit').value)
+    contextLimit: Number(card.querySelector('#ai-ctx-limit').value),
+    // 自定义 headers：原样存字符串，ai-client.js 解析时容错
+    customHeaders: card.querySelector('#ai-custom-headers').value.trim()
   });
 
   // 根据是否填好，更新顶部提示

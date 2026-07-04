@@ -170,6 +170,42 @@ function setUserBalance(state, value) {
   state.balance = state.globalBalance;
 }
 
+/**
+ * 给用户发一笔游戏奖励金币（赢游戏时调用）。
+ * 金币数 = 得分 / 10（向下取整），写入小金库 + push 一条 income 交易 + emit 'wallet:changed'。
+ * @param {number} score 本局得分
+ * @param {string} gameLabel 游戏名（用于交易备注）
+ * @returns {number} 实际发出的金币数
+ */
+export function grantGameReward(score, gameLabel) {
+  try {
+    // 金币数 = 得分 / 10，向下取整
+    const reward = Math.max(0, Math.floor((Number(score) || 0) / 10));
+    if (reward <= 0) return 0;
+    const s = ensureState();
+    addTransaction(s, {
+      id: generateId('tx'),
+      type: 'income',
+      amount: reward,
+      note: gameLabel ? `玩${gameLabel}赢的` : '玩游戏赢的',
+      category: '游戏',
+      createdAt: getNow()
+    });
+    saveState(s);
+    bus.emit('wallet:changed', {
+      delta: reward,
+      amount: reward,
+      note: '游戏奖励',
+      fromUser: false,
+      source: 'game'
+    });
+    return reward;
+  } catch (e) {
+    console.warn('[wallet] 游戏奖励发放失败', e);
+    return 0;
+  }
+}
+
 // 确保某角色余额存在（首次显示时初始化 5000），返回是否新建
 function ensureCharacterBalance(state, charId) {
   if (state.characters[charId] === undefined || state.characters[charId] === null) {

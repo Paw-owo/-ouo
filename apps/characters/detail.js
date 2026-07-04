@@ -316,16 +316,19 @@ async function fetchGrudges(characterId) {
 }
 
 // 钱包余额：兼容 wallet 增强后的角色独立余额字段
-// walletState 结构可能为 {balance, transactions, characterBalances:{[id]:number}}
+// walletState 结构：{globalBalance, balance, characters:{[id]:number}, transactions:[...]}
+// 旧版可能写作 characterBalances（已废弃），这里同时兼容
 // 没有角色独立余额时回退到全局余额
 function fetchWalletBalance(characterId) {
   try {
     const s = getData(KEYS.walletState, null);
     if (!s || typeof s !== 'object') return 0;
-    if (s.characterBalances && Object.prototype.hasOwnProperty.call(s.characterBalances, characterId)) {
-      return Number(s.characterBalances[characterId]) || 0;
+    // 新字段名：s.characters（与 wallet/index.js 一致）
+    const charMap = s.characters || s.characterBalances;
+    if (charMap && Object.prototype.hasOwnProperty.call(charMap, characterId)) {
+      return Number(charMap[characterId]) || 0;
     }
-    return Number(s.balance) || 0;
+    return Number(s.globalBalance != null ? s.globalBalance : s.balance) || 0;
   } catch (e) {
     return 0;
   }

@@ -35,7 +35,7 @@ img { display: block; max-width: 100%; }
   position: fixed; inset: 0; z-index: 100;
   background: var(--bg-primary);
   transform: translateY(100%);
-  transition: transform var(--motion) var(--motion-spring);
+  transition: var(--motion);
   display: flex; flex-direction: column;
   overflow: hidden;
 }
@@ -48,7 +48,7 @@ img { display: block; max-width: 100%; }
   position: fixed; inset: 0; z-index: 9999;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   background: var(--bg-primary);
-  transition: opacity var(--motion);
+  transition: var(--motion);
 }
 .boot-screen.hide { opacity: 0; pointer-events: none; }
 .boot-logo {
@@ -72,7 +72,7 @@ img { display: block; max-width: 100%; }
   position: fixed; inset: 0; z-index: 200;
   display: flex; flex-direction: column; align-items: center;
   background-size: cover; background-position: center;
-  transition: transform 360ms var(--motion-spring), opacity 360ms ease;
+  transition: transform 360ms var(--motion-spring), opacity 360ms var(--motion-spring);
 }
 .lock-screen::before {
   content: ''; position: absolute; inset: 0;
@@ -105,13 +105,13 @@ img { display: block; max-width: 100%; }
   position: relative; z-index: 1;
   margin-top: 16px; color: var(--text-on-wallpaper);
   font-size: var(--font-size-title); font-weight: 600;
-  text-shadow: 0 1px 8px rgba(0,0,0,0.4);
+  text-shadow: 0 1px 8px rgba(48,40,48,0.45);
 }
 .lock-hint {
   position: relative; z-index: 1;
   margin-top: 4px; color: rgba(255,255,255,0.85);
   font-size: var(--font-size-small);
-  text-shadow: 0 1px 4px rgba(0,0,0,0.4);
+  text-shadow: 0 1px 4px rgba(48,40,48,0.45);
 }
 .lock-dots {
   position: relative; z-index: 1;
@@ -169,7 +169,7 @@ img { display: block; max-width: 100%; }
   gap: 8px;
 }
 .status-bar-capsule {
-  flex: 1; height: 32px; border-radius: 999px;
+  flex: 1; height: 32px; border-radius: var(--radius-full);
   background: color-mix(in srgb, var(--bg-card) 78%, transparent);
   backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur));
   display: flex; align-items: center; gap: 10px;
@@ -328,6 +328,9 @@ img { display: block; max-width: 100%; }
   background: color-mix(in srgb, var(--accent-light) 60%, transparent);
   color: var(--accent-dark);
   display: flex; align-items: center; justify-content: center;
+  /* 图标按钮 neumorphism 凸起阴影 */
+  box-shadow: var(--shadow-neu-out);
+  transition: var(--motion);
 }
 .widget-vinyl-controls button svg { width: 14px; height: 14px; }
 
@@ -450,6 +453,9 @@ img { display: block; max-width: 100%; }
   background: color-mix(in srgb, var(--accent-light) 50%, transparent);
   color: var(--accent-dark);
   display: flex; align-items: center; justify-content: center;
+  /* 图标按钮 neumorphism 凸起阴影 */
+  box-shadow: var(--shadow-neu-out);
+  transition: var(--motion);
 }
 .app-header button svg { width: 20px; height: 20px; }
 /* header 设置入口齿轮：透明底，提示色，按下转主题色 */
@@ -471,7 +477,9 @@ img { display: block; max-width: 100%; }
   background: var(--bg-card);
   border-radius: var(--radius-card);
   padding: var(--spacing-lg);
-  box-shadow: var(--shadow-sm);
+  /* 同色系柔和阴影：rgba fallback（暖灰，非纯黑）+ color-mix 主色系 */
+  box-shadow: 0 4px 20px rgba(60,50,60,0.08);
+  box-shadow: var(--shadow-card);
   margin-bottom: var(--spacing-md);
   border: none;
 }
@@ -487,7 +495,7 @@ img { display: block; max-width: 100%; }
 
 /* 按钮（胶囊状） */
 .btn {
-  padding: 10px 20px; border-radius: 999px;
+  padding: 10px 20px; border-radius: var(--radius-full);
   background: color-mix(in srgb, var(--bg-secondary) 80%, transparent);
   color: var(--text-primary);
   font-size: var(--font-size-base); font-weight: 500; letter-spacing: 0.2px;
@@ -496,7 +504,7 @@ img { display: block; max-width: 100%; }
   border: none;
 }
 .btn:active { transform: scale(var(--press-scale)); }
-.btn.primary { background: var(--accent); color: var(--bubble-user-text); }
+.btn.primary { background: linear-gradient(135deg, var(--accent) 0%, var(--accent-dark) 100%); color: var(--bubble-user-text); box-shadow: var(--shadow-soft); }
 .btn.danger { background: var(--danger); color: #fff; }
 .btn.ghost { background: transparent; color: var(--accent-dark); }
 .btn.block { width: 100%; justify-content: center; }
@@ -513,7 +521,8 @@ img { display: block; max-width: 100%; }
 .input:focus, .textarea:focus, .select:focus {
   border-color: var(--accent);
   background: var(--bg-card);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent);
+  /* focus 主色光晕：扩散环 + 同色系柔和阴影 */
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent), var(--shadow-soft);
 }
 .textarea { min-height: 80px; resize: vertical; }
 

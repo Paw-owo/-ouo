@@ -9,9 +9,10 @@ import { getData, setData, getDB, setDB, deleteDB, getAllDB, generateId, getNow,
 import { showToast, showConfirm, showBottomSheet, createIcon } from '../../core/ui.js';
 import bus from '../../core/events.js';
 import { downloadBlob, isUsableImage, cssUrl, clamp, pickImageFile } from '../../core/util.js';
-import { getState, render, applySessionWallpaper, setQuoteToInput } from './index.js';
+import { getState, render, applySessionWallpaper, setQuoteToInput, enterChat } from './index.js';
 import { escapeHTML, escapeAttr } from './shared-utils.js';
 import { playTTS, stopAllTTS } from '../../core/tts.js';
+import { retrySendMessage } from './sending.js';
 
 // 撤回时间窗（毫秒）：仅自己的消息 2 分钟内可撤回
 const RECALL_WINDOW_MS = 2 * 60 * 1000;
@@ -29,9 +30,12 @@ export function openMessageActionSheet(msg) {
   const isImage = msg.type === 'image';
   // 撤回：仅自己的消息且在 2 分钟内
   const canRecall = isUser && (Date.now() - new Date(msg.timestamp || msg.createdAt).getTime()) < RECALL_WINDOW_MS;
+  // 重发：仅 failed 状态的消息
+  const canResend = msg.status === 'failed';
 
   const actions = [
-    { key: 'speak',  label: '念给我听',  icon: 'volume', show: !isUser && !isImage, onClick: () => speakMessage(msg) },
+    { key: 'speak',   label: '念给我听',  icon: 'volume',  show: !isUser && !isImage, onClick: () => speakMessage(msg) },
+    { key: 'resend',  label: '重发',     icon: 'refresh', show: canResend, onClick: () => resendMessage(msg) },
     { key: 'copy',    label: '复制',     icon: 'memo',  show: !isImage, onClick: () => copyMessage(msg) },
     { key: 'quote',   label: '引用',      icon: 'chat',  show: true,    onClick: () => quoteMessage(msg) },
     { key: 'recall',  label: '撤回',      icon: 'back',  show: canRecall, onClick: () => recallMessage(msg) },
@@ -83,6 +87,15 @@ async function speakMessage(msg) {
   } catch (e) {
     console.warn('[chat] 念给我听失败', e);
     showToast('念不出来呀，检查一下「我的声音」配置嘛', 'error');
+  }
+}
+
+// ── 重发失败的消息 ──
+function resendMessage(msg) {
+  if (typeof retrySendMessage === 'function') {
+    retrySendMessage(msg);
+  } else {
+    showToast('暂时没法重发呀，等一下再试', 'error');
   }
 }
 
@@ -220,6 +233,7 @@ export function openChatMoreMenu() {
   const actions = [
     { key: 'mode',      label: mode === 'bubble' ? '切换为对话模式' : '切换为气泡模式', icon: 'edit',     onClick: () => toggleChatMode(mode) },
     { key: 'wallpaper', label: '聊天背景',     icon: 'camera',   onClick: () => openWallpaperSheet(session) },
+    { key: 'switch',    label: '换个角色聊',   icon: 'smile',    onClick: () => openSwitchCharacterSheet(session) },
     { key: 'mute',      label: isMuted ? '取消免打扰' : '免打扰',  icon: 'moon',      onClick: () => toggleSessionMute(session, isMuted) },
     { key: 'export',    label: '导出记录',     icon: 'download', onClick: () => exportChatRecords(session) },
     { key: 'clear',     label: '清空记录',     icon: 'trash',    danger: true, onClick: () => clearChatRecords(session) }
@@ -259,6 +273,91 @@ async function toggleChatMode(curMode) {
   setData(KEYS.chatMode, next);
   showToast(next === 'bubble' ? '已切回气泡模式' : '已切换为对话模式，像剧本一样', 'default', 1400);
   await render();
+}
+
+// ── 换个角色聊：选角色后切换当前会话的角色，并清空当前对话 ──
+function openSwitchCharacterSheet(session) {
+  showConfirm({
+    title: '换个角色聊？',
+    body: '切换角色会清空当前对话，确定吗？',
+    confirmText: '换一个',
+    cancelText: '再想想',
+    onConfirm: async () => {
+      let characters = [];
+      try { characters = await getAllDB(STORES.characters); } catch (e) {}
+      // 过滤掉当前角色
+      const list = characters.filter((c) => c.id !== session.characterId);
+      if (!list.length) {
+        showToast('暂时没有别的角色呀，去角色 App 里创建一个嘛', 'default', 1600);
+        return;
+      }
+      const body = document.createElement('div');
+      body.className = 'chat-char-list';
+      body.innerHTML = list.map((c) => `
+        <div class="chat-char-item" data-id="${escapeAttr(c.id)}" role="button" tabindex="0" aria-label="切换到 ${escapeAttr(c.name || c.nickname || '角色')}">
+          ${renderSwitchCharAvatar(c, 44)}
+          <div class="chat-char-info">
+            <div class="chat-char-name">${escapeHTML(c.name || c.nickname || '未命名')}</div>
+            <div class="chat-char-persona">${escapeHTML((c.persona || '还没有人设呢').slice(0, 40))}</div>
+          </div>
+        </div>
+      `).join('');
+      const sheet = showBottomSheet({
+        title: '选一个角色',
+        bodyElement: body,
+        dismissible: true
+      });
+      body.querySelectorAll('.chat-char-item').forEach((item) => {
+        item.addEventListener('click', async () => {
+          const id = item.dataset.id;
+          sheet.close();
+          await switchSessionCharacter(session, id);
+        });
+      });
+    }
+  });
+}
+
+/** 切换会话角色：清空旧消息，更新 characterId，重新进入 */
+async function switchSessionCharacter(session, characterId) {
+  try {
+    // 清空旧消息
+    const all = await getAllDB(STORES.messages);
+    const toDelete = all.filter((m) => m.sessionId === session.id || (!m.sessionId && m.characterId === session.characterId));
+    for (const m of toDelete) {
+      try { await deleteDB(STORES.messages, m.id); } catch (e) {}
+    }
+    // 读新角色
+    const character = await getDB(STORES.characters, characterId);
+    if (!character) {
+      showToast('找不到这个角色呀', 'error');
+      return;
+    }
+    // 更新会话
+    const now = getNow();
+    await setDB(STORES.chatSessions, session.id, {
+      ...session,
+      characterId,
+      title: character.name || character.nickname || '聊天',
+      lastMessage: '',
+      lastAt: now
+    });
+    setData(KEYS.chatCurrentCharacter, characterId);
+    showToast(`已切换到 ${character.name || character.nickname || '新角色'}，重新开始聊吧`, 'success', 1600);
+    // 重新进入会话（会刷新角色缓存 + 重新渲染）
+    await enterChat(session.id);
+  } catch (e) {
+    console.warn('[chat] 切换角色失败', e);
+    showToast('切换出错了，再试一下嘛', 'error');
+  }
+}
+
+function renderSwitchCharAvatar(char, size) {
+  const av = char.avatar;
+  if (av && isUsableImage(av)) {
+    return `<div class="chat-char-avatar" style="width:${size}px;height:${size}px;background-image:${cssUrl(av)};background-size:cover;background-position:center"></div>`;
+  }
+  return `<div class="chat-char-avatar" style="width:${size}px;height:${size}px">${createIcon('smile', Math.round(size * 0.55)).outerHTML}</div>`;
 }
 
 // ── 切换免打扰 ──

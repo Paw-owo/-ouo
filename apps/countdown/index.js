@@ -13,7 +13,7 @@
 // 依赖：core/storage.js, core/storage-keys.js, core/ui.js, core/events.js, core/util.js
 
 import { STORES } from '../../core/storage-keys.js';
-import { setDB, deleteDB, getAllDB, generateId, getNow } from '../../core/storage.js';
+import { setDB, deleteDB, getAllDB, getData, setData, generateId, getNow } from '../../core/storage.js';
 import { showToast, showConfirm, showBottomSheet, createIcon } from '../../core/ui.js';
 import bus from '../../core/events.js';
 import { formatDate, injectStyle } from '../../core/util.js';
@@ -21,6 +21,8 @@ import { openApp } from '../../core/router.js';
 import { applyAppBg } from '../../core/app-bg.js';
 
 let containerEl = null;
+// 到期检查的定时器（unmount 时清掉）
+let dueCheckTimer = null;
 
 // 5 个马卡龙色：用户给倒计时打的标签色，属于内容数据（非主题色）
 const MACARON_COLORS = [
@@ -155,11 +157,16 @@ export async function mount(container, context) {
   // 齿轮跳到设置「数据与系统」分组
   container.querySelector('#cd-settings').addEventListener('click', () => openApp('settings', { deepLink: { tab: 'system' } }));
   await render();
+  // 进入时检查一遍今天到期的倒计时，给个 toast 提醒
+  checkDueCountdowns();
+  // 每 10 分钟再检查一次（避免长时间挂着错过提醒）
+  dueCheckTimer = setInterval(checkDueCountdowns, 10 * 60 * 1000);
   applyAppBg(container, 'countdown');
 }
 
 export function unmount() {
   containerEl = null;
+  if (dueCheckTimer) { clearInterval(dueCheckTimer); dueCheckTimer = null; }
 }
 
 // ════════════════════════════════════════
@@ -334,6 +341,7 @@ function confirmDelete(cd) {
         await deleteDB(STORES.countdowns, cd.id);
         showToast('删掉啦', 'default', 1200);
         await render();
+        bus.emit('countdown:changed', { id: cd.id, action: 'delete' });
       } catch (e) {
         console.warn('[countdown] 删除失败', e);
         showToast('没删掉，再试一下嘛', 'error');
@@ -414,6 +422,7 @@ function openEditor(cd) {
       sheet.close();
       showToast(editing ? '改好啦，已帮你更新' : '加好啦，我会帮你盯着这个日子', 'success', 1400);
       await render();
+      bus.emit('countdown:changed', { id, action: editing ? 'update' : 'add' });
     } catch (e) {
       console.warn('[countdown] 保存失败', e);
       showToast('没保存成功，再试一下嘛', 'error');
@@ -436,4 +445,62 @@ function escapeAttr(s) { return escapeHTML(s); }
 function cssEscape(s) {
   if (typeof CSS !== 'undefined' && CSS.escape) return CSS.escape(String(s));
   return String(s).replace(/["\\]/g, '\\$&');
+}
+
+// ════════════════════════════════════════
+// 到期通知 + 桌面 widget 数据
+// ════════════════════════════════════════
+
+// localStorage key 前缀：记录某倒计时今天已通知过，避免重复打扰
+const LS_NOTIFIED_PREFIX = 'cd_notified_';
+
+// 检查今天到期的倒计时：每个今天到期的提示一次「XXX 到啦！」
+async function checkDueCountdowns() {
+  try {
+    const all = await getAllDB(STORES.countdowns);
+    if (!Array.isArray(all) || all.length === 0) return;
+    const todayStr = new Date().toISOString().slice(0, 10);
+    for (const cd of all) {
+      if (!cd || !cd.id) continue;
+      const next = computeNextDate(cd);
+      const days = getDaysUntil(next);
+      if (days !== 0) continue;
+      // 同一天只通知一次
+      const k = LS_NOTIFIED_PREFIX + cd.id + '_' + todayStr;
+      if (getData(k, false)) continue;
+      setData(k, true);
+      showToast(`${cd.title} 到啦！`, 'success', 2400);
+      bus.emit('countdown:due', { id: cd.id, title: cd.title });
+    }
+  } catch (e) {
+    console.warn('[countdown] 到期检查失败', e);
+  }
+}
+
+/**
+ * 取最近的一个倒计时（供桌面 widget 用）。
+ * @returns {Promise<{title:string, days:number, date:Date}|null>}
+ */
+export async function getUpcomingCountdown() {
+  try {
+    const all = await getAllDB(STORES.countdowns);
+    if (!Array.isArray(all) || all.length === 0) return null;
+    const enriched = all.map((cd) => ({
+      cd,
+      next: computeNextDate(cd),
+      days: getDaysUntil(computeNextDate(cd))
+    }));
+    // 按距今天数绝对值升序排（最近的最靠前）
+    enriched.sort((a, b) => Math.abs(a.days) - Math.abs(b.days));
+    const top = enriched[0];
+    if (!top) return null;
+    return {
+      title: top.cd.title || '倒计时',
+      days: top.days,
+      date: top.next
+    };
+  } catch (e) {
+    console.warn('[countdown] 取最近倒计时失败', e);
+    return null;
+  }
 }

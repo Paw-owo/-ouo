@@ -18,9 +18,10 @@ import { handleEmotion } from '../../js/ai/ai-emotion.js';
 import { autoRecordMemories, archiveOldMemories } from '../../js/ai/ai-memory.js';
 import { getState } from './index.js';
 import {
-  appendMessageEl, updateChatHeader, scrollToBottom,
+  appendMessageEl, updateChatHeader, scrollToBottom, isNearBottom,
   showTypingIndicator, hideTypingIndicator,
-  clearQuote, autoResizeInput, flushDraft, updateMessageStatus
+  clearQuote, autoResizeInput, flushDraft, updateMessageStatus,
+  updateThinkingUI
 } from './detail-view.js';
 import { renderMarkdown } from './markdown.js';
 import { escapeHTML } from './shared-utils.js';
@@ -278,26 +279,30 @@ async function triggerAIReply(userMsg) {
   }
 
   let accText = '';
+  let thinkingText = '';
 
   // ── 走 AI 流式 ──
   if (isAIConfigured()) {
-    const result = await runAIStream(bubbleEl, messages, sess, () => accText, (t) => { accText = t; });
+    const result = await runAIStream(bubbleEl, messages, sess,
+      () => accText, (t) => { accText = t; },
+      () => thinkingText, (t) => { thinkingText = t; },
+      msgEl, aiMsg);
     if (result.ok) {
-      await finishAIMessage(sess, character, aiMsg, msgEl, bubbleEl, accText, userMsg);
+      await finishAIMessage(sess, character, aiMsg, msgEl, bubbleEl, accText, userMsg, thinkingText);
       return;
     }
     if (result.reason === 'not_configured') {
       // 配置中途被改了，走本地兜底
     } else if (result.reason === 'cancelled') {
       // 用户取消，保留已流式部分（若有）
-      await finishAIMessage(sess, character, aiMsg, msgEl, bubbleEl, accText, userMsg);
+      await finishAIMessage(sess, character, aiMsg, msgEl, bubbleEl, accText, userMsg, thinkingText);
       return;
     } else {
       // fetch_failed 且用户没点重试（关掉了），保留空气泡或移除
       if (!accText && msgEl.isConnected) {
         msgEl.remove();
       } else {
-        await finishAIMessage(sess, character, aiMsg, msgEl, bubbleEl, accText, userMsg);
+        await finishAIMessage(sess, character, aiMsg, msgEl, bubbleEl, accText, userMsg, thinkingText);
       }
       setReplying(false);
       return;
@@ -311,15 +316,24 @@ async function triggerAIReply(userMsg) {
   });
   state.lastReply = replyText;
   accText = await streamLocalReply(bubbleEl, replyText);
-  await finishAIMessage(sess, character, aiMsg, msgEl, bubbleEl, accText, userMsg);
+  await finishAIMessage(sess, character, aiMsg, msgEl, bubbleEl, accText, userMsg, thinkingText);
 }
 
 /**
  * 跑一次 AI 流式请求。失败时在气泡里显示重试按钮，等用户决定。
  * 重试时保留已流式的内容，在已有内容基础上继续。
+ * @param {HTMLElement} bubbleEl 气泡元素
+ * @param {Array} messages 发给 AI 的消息数组
+ * @param {object} sess 当前会话
+ * @param {() => string} getAcc 拿累积主内容
+ * @param {(t: string) => void} setAcc 写累积主内容
+ * @param {() => string} getThinking 拿累积思维链
+ * @param {(t: string) => void} setThinking 写累积思维链
+ * @param {HTMLElement} msgEl 消息行元素（用于实时更新思维链 UI）
+ * @param {object} aiMsg AI 消息对象
  * @returns {Promise<{ok:boolean, reason?:string}>}
  */
-async function runAIStream(bubbleEl, messages, sess, getAcc, setAcc) {
+async function runAIStream(bubbleEl, messages, sess, getAcc, setAcc, getThinking, setThinking, msgEl, aiMsg) {
   const state = getState();
   while (true) {
     state.abortController = new AbortController();
@@ -331,15 +345,24 @@ async function runAIStream(bubbleEl, messages, sess, getAcc, setAcc) {
     }
     const result = await streamChat({
       messages,
-      onToken: (delta) => {
+      onChunk: (delta) => {
         acc += delta;
         setAcc(acc);
         if (bubbleEl.isConnected) {
           // 流式性能优化：用 textContent 增量追加到 textNode，避免每次 innerHTML 重排
-          // 这里仍用 innerHTML 是因为要保留光标元素；但只重建文本部分，减少解析开销
-          // 更优做法：维护一个 textNode，仅 appendChild 新 delta
           renderStreamToken(bubbleEl, acc);
-          scrollToBottom();
+          // 用户在底部才跟随滚动，上滑读历史时不打扰
+          if (isNearBottom()) scrollToBottom();
+        }
+      },
+      onThinking: (delta) => {
+        if (!delta) return;
+        const next = (getThinking() || '') + delta;
+        setThinking(next);
+        // 实时更新思维链区域（流式中保持展开，让主人看到思考过程）
+        if (msgEl && msgEl.isConnected) {
+          updateThinkingUI(msgEl, next, { streaming: true });
+          if (isNearBottom()) scrollToBottom();
         }
       },
       signal: state.abortController.signal
@@ -435,7 +458,7 @@ function streamLocalReply(bubbleEl, fullText) {
       // 流式性能优化：用 textNode 增量追加，避免每次 innerHTML 重排
       if (bubbleEl.isConnected) {
         renderStreamToken(bubbleEl, acc);
-        scrollToBottom();
+        if (isNearBottom()) scrollToBottom();
       }
       state.typingTimer = setTimeout(tick, 50);
     }
@@ -444,7 +467,7 @@ function streamLocalReply(bubbleEl, fullText) {
 }
 
 /** AI 回复完成：保存、更新会话、emit 事件、写记忆 */
-async function finishAIMessage(sess, character, aiMsg, msgEl, bubbleEl, finalText, userMsg) {
+async function finishAIMessage(sess, character, aiMsg, msgEl, bubbleEl, finalText, userMsg, thinkingText = '') {
   const state = getState();
   // 没有任何文本（被取消且没流到字）-> 移除空气泡
   if (!finalText || !finalText.trim()) {
@@ -458,6 +481,14 @@ async function finishAIMessage(sess, character, aiMsg, msgEl, bubbleEl, finalTex
     bubbleEl.innerHTML = renderMarkdown(finalText);
   }
   aiMsg.content = finalText;
+  // 思维链单独存储（下一轮历史只传 content，不传 thinking）
+  if (thinkingText && thinkingText.trim()) {
+    aiMsg.thinking = thinkingText;
+    // 流式结束后把思维链区域固定为折叠态（保留内容）
+    if (msgEl && msgEl.isConnected) {
+      updateThinkingUI(msgEl, thinkingText, { streaming: false });
+    }
+  }
   try { await setDB(STORES.messages, aiMsg.id, aiMsg); } catch (e) {
     console.warn('[chat] 保存 AI 消息失败', e);
   }

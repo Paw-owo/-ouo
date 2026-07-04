@@ -9,7 +9,7 @@
 // 依赖：core/storage.js, core/storage-keys.js, core/ui.js, core/events.js, core/util.js, core/router.js
 
 import { KEYS, STORES } from '../../core/storage-keys.js';
-import { getData, setData, generateId, getNow, compressImage, getAllDB, deleteDB } from '../../core/storage.js';
+import { getData, setData, setDB, generateId, getNow, compressImage, getAllDB, deleteDB } from '../../core/storage.js';
 import { showToast, showConfirm, showBottomSheet, createIcon } from '../../core/ui.js';
 import bus from '../../core/events.js';
 import { injectStyle, pickImageFile, isUsableImage, formatRelative, debounce } from '../../core/util.js';
@@ -308,6 +308,8 @@ async function render() {
     if (jumpBtn) jumpBtn.addEventListener('click', (e) => { e.stopPropagation(); jumpToChatSession(it); });
     const editBtn = card.querySelector('.coll-edit');
     if (editBtn) editBtn.addEventListener('click', (e) => { e.stopPropagation(); openEditor(it); });
+    const memoBtn = card.querySelector('.coll-memo');
+    if (memoBtn) memoBtn.addEventListener('click', (e) => { e.stopPropagation(); forwardToMemo(it); });
     const delBtn = card.querySelector('.coll-del');
     if (delBtn) delBtn.addEventListener('click', (e) => { e.stopPropagation(); if (isChat) confirmDeleteChatFavorite(it); else confirmDelete(it); });
   });
@@ -323,6 +325,7 @@ function renderCard(it) {
   const trashIcon = createIcon('trash', 16).outerHTML;
   const openIcon = createIcon('next', 16).outerHTML;
   const jumpIcon = createIcon('chat', 16).outerHTML;
+  const memoIcon = createIcon('memo', 16).outerHTML;
 
   let contentHTML = '';
   if (it.type === 'image') {
@@ -365,6 +368,7 @@ function renderCard(it) {
           ${openBtn}
           ${jumpBtn}
           ${editBtn}
+          <button class="coll-icon-btn coll-memo" aria-label="转到备忘录" title="转到备忘录">${memoIcon}</button>
           <button class="coll-icon-btn coll-del" aria-label="删除" title="删除">${trashIcon}</button>
         </div>
       </div>
@@ -405,6 +409,38 @@ function confirmDelete(it) {
       render();
     }
   });
+}
+
+// 转到备忘录：把这条收藏复制一份写进 STORES.notes，方便在备忘录里继续整理
+// 图片类型没法直接存文字，content 里标一下来源；链接/文字/聊天都把原文搬过去
+async function forwardToMemo(it) {
+  try {
+    const id = generateId('note');
+    let content = '';
+    if (it.type === 'image') {
+      content = it.content ? '[来自收藏夹的图片]' : '';
+    } else {
+      content = it.content || '';
+    }
+    const record = {
+      id,
+      title: it.title || '从收藏夹转过来的',
+      content,
+      category: '收藏',
+      pinned: false,
+      done: false,
+      color: 'sakura',
+      remindAt: '',
+      reminded: false,
+      createdAt: getNow()
+    };
+    await setDB(STORES.notes, id, record);
+    bus.emit('memo:changed', { id, action: 'add' });
+    showToast('已存到备忘录', 'success', 1400);
+  } catch (e) {
+    console.warn('[collections] 转到备忘录失败', e);
+    showToast('没存成功，再试一下嘛', 'error');
+  }
 }
 
 // ════════════════════════════════════════

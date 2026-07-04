@@ -14,6 +14,7 @@ import bus from './core/events.js';
 import { openApp, goHome } from './core/router.js';
 import { seedDefaultCharacter, getDefaultCharacter } from './core/seed.js';
 import { initInbox } from './core/inbox.js';
+import { getUpcomingCountdown } from './apps/countdown/index.js';
 
 // ════════════════════════════════════════
 // DOM 引用
@@ -42,6 +43,7 @@ let lockInput = '';
 let clockTimer = null;
 let weatherTimer = null;
 let vinylTimer = null;
+let countdownTimer = null;
 let currentCharacter = null;
 
 // 锁屏密码安全：默认密码 / 盐 / 哈希 / 失败锁定
@@ -62,6 +64,7 @@ const WIDGET_DEFS = [
   { id: 'weather', type: 'weather', shape: 'square', page: 0 },
   { id: 'anniversary', type: 'anniversary', shape: 'square', page: 0 },
   { id: 'focus', type: 'focus', shape: 'wide', page: 0 },
+  { id: 'countdown', type: 'countdown', shape: 'square', page: 1 },
   { id: 'vinyl', type: 'vinyl', shape: 'wide', page: 1 }
 ];
 // 向后兼容旧引用
@@ -287,6 +290,9 @@ async function createWidget(w) {
   } else if (w.type === 'focus') {
     const focus = getData(KEYS.appFocusWidget, { title: '今天也要好好休息', text: '打开设置，看看我能帮你做什么' });
     el.innerHTML = `<div class="widget-title">今日提示</div><div class="widget-value" id="w-focus-title">${escapeHtml(focus.title || '今天也要好好休息')}</div><div class="widget-sub" id="w-focus-text">${escapeHtml(focus.text || '')}</div>`;
+  } else if (w.type === 'countdown') {
+    el.innerHTML = `<div class="widget-title">最近的日子</div><div class="widget-value" id="w-countdown-title">还没有倒计时呢</div><div class="widget-sub" id="w-countdown-days">加一个重要日子嘛</div>`;
+    el.addEventListener('click', () => { if (!editing) openApp('countdown'); });
   } else if (w.type === 'vinyl') {
     el.innerHTML = `
       <div class="widget-vinyl">
@@ -325,7 +331,7 @@ async function createWidget(w) {
     showConfirm({
       title: '把这个 widget 藏起来吗？', body: '藏起来后可以在设置里找回哦',
       confirmText: '藏起来', cancelText: '不要',
-      onConfirm: () => { setWidgetHidden(w.id, true); renderWidgets().then(() => { updateClock(); updateWeather(); updateAnniversaryWidget(); updateVinylWidget(); }); showToast('藏好啦'); }
+      onConfirm: () => { setWidgetHidden(w.id, true); renderWidgets().then(() => { updateClock(); updateWeather(); updateAnniversaryWidget(); updateCountdownWidget(); updateVinylWidget(); }); showToast('藏好啦'); }
     });
   });
   el.appendChild(del);
@@ -610,14 +616,14 @@ function handleWidgetPointerDown(event, element, widget) {
       // 同页换位：交换 order
       const targetId = target.dataset.widgetId;
       swapWidgetOrder(widget.id, targetId);
-      renderWidgets().then(() => { updateClock(); updateWeather(); updateAnniversaryWidget(); updateVinylWidget(); });
+      renderWidgets().then(() => { updateClock(); updateWeather(); updateAnniversaryWidget(); updateCountdownWidget(); updateVinylWidget(); });
       showToast('位置换好啦', 'success');
     } else if (targetArea) {
       // 跨页移动
       const newPage = Number(targetArea.dataset.widgetArea);
       if (!Number.isNaN(newPage) && newPage !== widget.page) {
         moveWidgetToPage(widget.id, newPage);
-        renderWidgets().then(() => { updateClock(); updateWeather(); updateAnniversaryWidget(); updateVinylWidget(); });
+        renderWidgets().then(() => { updateClock(); updateWeather(); updateAnniversaryWidget(); updateCountdownWidget(); updateVinylWidget(); });
         showToast('移到第 ' + (newPage + 1) + ' 页啦', 'success');
       }
     }
@@ -869,8 +875,12 @@ function initWidgets() {
   clearInterval(weatherTimer);
   weatherTimer = setInterval(updateWeather, 30 * 60 * 1000);
   updateAnniversaryWidget();
+  updateCountdownWidget();
   updateVinylWidget();
   // vinyl widget 由音频事件驱动（play/pause/timeupdate），不再每秒 setInterval 轮询
+  // 倒计时 widget 每分钟刷一次，避免跨日时数字不准
+  clearInterval(countdownTimer);
+  countdownTimer = setInterval(updateCountdownWidget, 60 * 1000);
 }
 
 function updateClock() {
@@ -925,6 +935,29 @@ function updateAnniversaryWidget() {
   if (!next) { el.textContent = '还没有纪念日呢'; return; }
   const name = next.title || next.name || '纪念日';
   el.textContent = next.days === 0 ? `${name} 就是今天` : `${name} 还有 ${next.days} 天`;
+}
+
+// 倒计时 widget：取最近一个倒计时，显示标题 + 剩余天数
+async function updateCountdownWidget() {
+  const titleEl = $('w-countdown-title');
+  const daysEl = $('w-countdown-days');
+  if (!titleEl && !daysEl) return;
+  try {
+    const up = await getUpcomingCountdown();
+    if (!up) {
+      if (titleEl) titleEl.textContent = '还没有倒计时呢';
+      if (daysEl) daysEl.textContent = '加一个重要日子嘛';
+      return;
+    }
+    if (titleEl) titleEl.textContent = up.title;
+    if (daysEl) {
+      if (up.days === 0) daysEl.textContent = '就是今天呀';
+      else if (up.days > 0) daysEl.textContent = `还有 ${up.days} 天`;
+      else daysEl.textContent = `已过 ${Math.abs(up.days)} 天`;
+    }
+  } catch (e) {
+    console.warn('[countdown widget]', e);
+  }
 }
 
 function getAllAnniversaries() {
@@ -1206,9 +1239,17 @@ function subscribeBus() {
     currentCharacter = await getDefaultCharacter();
     refreshLockScreen();
   });
+  // 头像定制后刷新锁屏头像（character.avatar 已被 avatar App 同步更新）
+  bus.on('avatar:updated', async () => {
+    currentCharacter = await getDefaultCharacter();
+    refreshLockScreen();
+  });
   bus.on('app:installed', async () => { await renderAll(); await applyAllImages(); });
   bus.on('router:closed', refreshBadges);
   bus.on('weather:refresh', () => { updateWeather(); });
+  // 倒计时到期 / 增删改后刷新桌面 widget
+  bus.on('countdown:due', () => { updateCountdownWidget(); });
+  bus.on('countdown:changed', () => { updateCountdownWidget(); });
 }
 
 // ════════════════════════════════════════

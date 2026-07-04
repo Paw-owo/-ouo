@@ -10,7 +10,7 @@ import bus from '../../core/events.js';
 import { injectStyle, debounce } from '../../core/util.js';
 import { applyAppBg } from '../../core/app-bg.js';
 import { renderSessionListPage, renderSessionListItems } from './session-list.js';
-import { renderChatDetailView, flushDraft, stopChatTTS } from './detail-view.js';
+import { renderChatDetailView, flushDraft, stopChatTTS, refreshAvatar } from './detail-view.js';
 import { cancelStreaming } from './sending.js';
 
 // re-export 给 message-actions.js / session-list.js 等子文件用（保持原 import 路径不变）
@@ -352,7 +352,7 @@ injectStyle('app-chat-style', `
     padding:14px 16px;
     margin-bottom:12px;
     box-shadow:var(--shadow-sm);
-    max-width:85%;
+    max-width:100%;
   }
   .chat-dialog-card-header{
     display:flex; align-items:center; gap:8px;
@@ -378,15 +378,30 @@ injectStyle('app-chat-style', `
     line-height:1.6;
   }
 
-  /* 用户消息：简洁，无卡片背景 */
+  /* 用户消息：与 AI 卡片对称 —— 内容 + 时间 + 名字 + 头像(右) */
   .chat-dialog-user{
+    display:flex; flex-direction:column; align-items:flex-end; gap:4px;
     padding:8px 14px;
     margin-bottom:8px;
-    max-width:80%;
+    max-width:100%;
+  }
+  .chat-dialog-user .chat-bubble{
+    background:var(--bubble-user-bg); color:var(--bubble-user-text);
+    padding:10px 14px; border-radius:var(--bubble-radius);
+    border-bottom-right-radius:var(--bubble-radius-tail);
+    box-shadow:var(--shadow-sm);
+    max-width:100%;
+  }
+  .chat-dialog-user-meta{
+    display:flex; align-items:center; gap:6px;
+    font-size:var(--font-size-caption); color:var(--text-hint);
   }
   .chat-dialog-user-name{
     font-size:var(--font-size-small); font-weight:600;
     color:var(--text-secondary);
+  }
+  .chat-dialog-user-avatar{
+    width:28px; height:28px;
   }
 
   /* dialog 模式下打字呼吸气泡也走卡片背景，与 AI 消息卡片一致 */
@@ -561,6 +576,15 @@ export async function mount(container, context) {
   };
   bus.on('chat:message-received', onMsgReceived);
   state.busListeners.push(['chat:message-received', onMsgReceived]);
+
+  // 监听角色头像更新：在详情页时实时刷新 AI 头像
+  const onAvatarUpdated = () => {
+    if (state.view === 'chat') {
+      try { refreshAvatar(); } catch (e) { console.warn('[chat] 刷新头像失败', e); }
+    }
+  };
+  bus.on('avatar:updated', onAvatarUpdated);
+  state.busListeners.push(['avatar:updated', onAvatarUpdated]);
 
   // 旧数据迁移：把没有 sessionId 的消息归到按角色生成的会话里
   await maybeMigrateLegacyMessages();

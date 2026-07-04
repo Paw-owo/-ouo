@@ -31,6 +31,10 @@ export const CONTEXT_SECTIONS = {
   GRUDGE: '【我还在意的事】',
   EVENTS: '【小手机世界里最近发生的事】',
   USER_PROFILE: '【关于我的主人】',
+  HEALTH: '【健康打卡】',     // 主人今天的喝水/睡眠/步数等健康打卡
+  DREAMS: '【最近梦境】',      // 主人最近做的梦，让 AI 能聊聊梦境
+  ASTRO: '【星座运势】',       // 主人今日星座运势
+  COUNTDOWN: '【倒计时】',     // 即将到来的重要日子
 };
 
 // ════════════════════════════════════════
@@ -89,7 +93,9 @@ export const FALLBACK_REPLIES = [
 
 export const CONTEXT_ORDER = [
   'system', 'persona', 'speechStyle', 'memory', 'worldbook',
-  'grudge', 'events', 'userProfile', 'history', 'userMessage'
+  'grudge', 'events', 'userProfile',
+  'health', 'dreams', 'astro', 'countdown',  // 主人资料之后、历史之前：APP 数据接入
+  'history', 'userMessage'
 ];
 
 // ════════════════════════════════════════

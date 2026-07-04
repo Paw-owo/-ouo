@@ -76,15 +76,38 @@ export async function renderSessionListItems(keyword = '') {
     return;
   }
 
-  // 关键词过滤（按标题 + 最后消息预览）
+  // 关键词过滤：先按 title/lastMessage 快速匹配，未命中的再搜历史消息正文
   const kw = String(keyword || '').toLowerCase();
-  const filtered = kw
-    ? sessions.filter((s) => {
-        const t = (s.title || '').toLowerCase();
-        const lm = (s.lastMessage || '').toLowerCase();
-        return t.includes(kw) || lm.includes(kw);
-      })
-    : sessions;
+  let filtered;
+  if (kw) {
+    const matchedIds = new Set();
+    const quickMatches = sessions.filter((s) => {
+      const t = (s.title || '').toLowerCase();
+      const lm = (s.lastMessage || '').toLowerCase();
+      if (t.includes(kw) || lm.includes(kw)) {
+        matchedIds.add(s.id);
+        return true;
+      }
+      return false;
+    });
+    // 对未命中的会话，搜历史消息 content（较慢，故只在快速匹配不足时跑）
+    const unmatched = sessions.filter((s) => !matchedIds.has(s.id));
+    if (unmatched.length) {
+      let allMessages = [];
+      try { allMessages = await getAllDB(STORES.messages); } catch (e) {}
+      const msgMatches = unmatched.filter((s) => {
+        return allMessages.some((m) =>
+          (m.sessionId === s.id || (!m.sessionId && m.characterId === s.characterId)) &&
+          String(m.content || '').toLowerCase().includes(kw)
+        );
+      });
+      filtered = [...quickMatches, ...msgMatches];
+    } else {
+      filtered = quickMatches;
+    }
+  } else {
+    filtered = sessions;
+  }
 
   // 排序：置顶优先，其次 lastAt 倒序
   filtered.sort((a, b) => {

@@ -16,6 +16,9 @@ import { applyAppBg } from '../../core/app-bg.js';
 import { recordInteraction } from '../../core/memory.js';
 
 let containerEl = null;
+// 月历视图当前展示的年/月（0-based month），翻页时更新；进 App 时默认当月
+let calYear = new Date().getFullYear();
+let calMonth = new Date().getMonth();
 
 // 五档心情，从难过得想抱抱到开心得想转圈圈
 // key 用于写入记忆的 mood 字段（与 core/memory.js 的 moodLabel 表对齐）
@@ -254,6 +257,96 @@ injectStyle('app-mood-style', `
   }
   .mood-edit-actions { display: flex; gap: 8px; margin-top: 10px; }
   .mood-edit-actions .btn.primary { flex: 1; justify-content: center; }
+
+  /* 趋势图 + 月历区块共用外壳 */
+  .mood-section{
+    background:var(--bg-card);
+    border:1px solid color-mix(in srgb, var(--text-hint) 14%, transparent);
+    border-radius:var(--radius-card);
+    padding:14px 16px;
+    margin-bottom:16px;
+    box-shadow:var(--shadow-sm);
+  }
+  .mood-section-title{
+    display:flex; align-items:center; gap:6px;
+    font-size:var(--font-size-base); font-weight:600;
+    color:var(--text-secondary); margin-bottom:12px;
+  }
+  .mood-section-title .popo-icon{ color:var(--accent-dark); }
+
+  /* 本周心情趋势图：7 根柱子横向铺开 */
+  .mood-trend-chart{
+    display:flex; align-items:flex-end; justify-content:space-between;
+    gap:6px; height:110px;
+  }
+  .mood-trend-col{
+    flex:1; display:flex; flex-direction:column;
+    align-items:center; gap:6px; height:100%;
+  }
+  .mood-trend-bar-wrap{
+    flex:1; width:100%;
+    display:flex; align-items:flex-end; justify-content:center;
+  }
+  .mood-trend-bar{
+    width:70%; max-width:22px; min-height:4px;
+    border-radius:6px 6px 2px 2px;
+    transition:height var(--motion) var(--motion-spring);
+  }
+  .mood-trend-bar.empty{
+    height:4px !important;
+    background:color-mix(in srgb, var(--text-hint) 28%, transparent) !important;
+  }
+  .mood-trend-label{
+    font-size:var(--font-size-small); color:var(--text-hint); line-height:1;
+  }
+
+  /* 月历视图 */
+  .mood-cal-head{
+    display:flex; align-items:center; justify-content:space-between;
+    margin-bottom:10px;
+  }
+  .mood-cal-title{
+    font-size:var(--font-size-base); font-weight:600; color:var(--text-primary);
+  }
+  .mood-cal-nav{
+    width:32px; height:32px; border-radius:50%;
+    background:color-mix(in srgb, var(--accent-light) 40%, transparent);
+    color:var(--accent-dark); border:none;
+    display:flex; align-items:center; justify-content:center;
+    cursor:pointer; transition:var(--motion);
+  }
+  .mood-cal-nav:active{ transform:scale(var(--press-scale)); }
+  .mood-cal-weekhead{
+    display:grid; grid-template-columns:repeat(7,1fr); margin-bottom:6px;
+  }
+  .mood-cal-weekhead span{
+    text-align:center; font-size:var(--font-size-small); color:var(--text-hint);
+  }
+  .mood-cal-grid{
+    display:grid; grid-template-columns:repeat(7,1fr); gap:4px;
+  }
+  .mood-cal-cell{
+    aspect-ratio:1; border-radius:var(--radius-sm);
+    background:color-mix(in srgb, var(--bg-secondary) 60%, transparent);
+    border:1px solid transparent;
+    display:flex; flex-direction:column;
+    align-items:center; justify-content:center; gap:3px;
+    cursor:pointer; transition:var(--motion); padding:0;
+  }
+  .mood-cal-cell.empty{ background:transparent; cursor:default; }
+  .mood-cal-cell:disabled{ cursor:default; }
+  .mood-cal-cell.has-entry:active{ transform:scale(var(--press-scale)); }
+  .mood-cal-cell.today{ border-color:var(--accent); }
+  .mood-cal-cell.has-entry{
+    background:color-mix(in srgb, var(--accent-light) 35%, transparent);
+  }
+  .mood-cal-day{
+    font-size:var(--font-size-small); color:var(--text-secondary); line-height:1;
+  }
+  .mood-cal-cell.has-entry .mood-cal-day{
+    color:var(--accent-dark); font-weight:600;
+  }
+  .mood-cal-dot{ width:6px; height:6px; border-radius:50%; }
 `);
 
 // ════════════════════════════════════════
@@ -353,6 +446,8 @@ async function render() {
   body.innerHTML = `
     ${renderToday(todayEntry)}
     ${renderStats(stats)}
+    ${renderTrendChart(sorted)}
+    ${renderCalendar(sorted)}
     <div class="mood-list-head">
       <span class="mood-list-head-title">历史心情</span>
       <span class="mood-list-head-count">共 ${sorted.length} 条</span>
@@ -362,6 +457,27 @@ async function render() {
 
   // 今天的卡片交互
   wireTodayCard(body, todayEntry);
+
+  // 月历翻页 + 点击日期查看详情
+  const prevBtn = body.querySelector('#mood-cal-prev');
+  const nextBtn = body.querySelector('#mood-cal-next');
+  if (prevBtn) prevBtn.addEventListener('click', () => {
+    calMonth--;
+    if (calMonth < 0) { calMonth = 11; calYear--; }
+    render();
+  });
+  if (nextBtn) nextBtn.addEventListener('click', () => {
+    calMonth++;
+    if (calMonth > 11) { calMonth = 0; calYear++; }
+    render();
+  });
+  body.querySelectorAll('.mood-cal-cell.has-entry').forEach((cell) => {
+    cell.addEventListener('click', () => {
+      const date = cell.dataset.date;
+      const target = sorted.find((x) => x.date === date);
+      if (target) openHistoryForm(target);
+    });
+  });
 
   // 历史列表
   const listEl = body.querySelector('#mood-list');
@@ -611,6 +727,105 @@ function openHistoryForm(entry) {
       }
     });
   });
+}
+
+// ════════════════════════════════════════
+// 本周心情趋势图 + 月历视图
+// ════════════════════════════════════════
+
+// 心情分数对应颜色（走 CSS 变量，主题变了也跟着变）
+// 1 难过红，2 低落暖橙，3 平静灰蓝，4 开心accent，5 超开心accent-dark
+function moodColor(score) {
+  switch (score) {
+    case 1: return 'var(--danger)';
+    case 2: return 'color-mix(in srgb, var(--danger) 55%, #F5B86A 45%)';
+    case 3: return 'color-mix(in srgb, var(--text-hint) 55%, var(--accent) 45%)';
+    case 4: return 'var(--accent)';
+    case 5: return 'var(--accent-dark)';
+    default: return 'var(--text-hint)';
+  }
+}
+
+// 本周 7 天心情趋势柱状图（含今天，往前数 6 天）
+// 柱子高度按 score 映射到 12~100%，没记录的那天画个矮灰兜底
+function renderTrendChart(sorted) {
+  const byDate = new Map();
+  sorted.forEach((e) => byDate.set(e.date, e));
+  const today = new Date();
+  const weekdayNames = ['日', '一', '二', '三', '四', '五', '六'];
+  const cols = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() - i);
+    const key = dateKey(d);
+    const entry = byDate.get(key);
+    const score = entry ? entry.score : 0;
+    const height = score === 0 ? 0 : Math.max(12, (score / 5) * 100);
+    const cls = score === 0 ? 'mood-trend-bar empty' : 'mood-trend-bar';
+    const bg = score === 0 ? '' : `background:${moodColor(score)}`;
+    const tip = score === 0 ? '没记' : moodFor(score).label;
+    cols.push(`
+      <div class="mood-trend-col" title="${tip}">
+        <div class="mood-trend-bar-wrap">
+          <div class="${cls}" style="height:${height}%;${bg}"></div>
+        </div>
+        <div class="mood-trend-label">${weekdayNames[d.getDay()]}</div>
+      </div>
+    `);
+  }
+  return `
+    <div class="mood-section">
+      <div class="mood-section-title">${createIcon('smile', 18).outerHTML}本周心情</div>
+      <div class="mood-trend-chart">${cols.join('')}</div>
+    </div>
+  `;
+}
+
+// 月历视图：当月每一天一格，有记录的格子里画一个小色点，点一下打开详情
+function renderCalendar(sorted) {
+  const byDate = new Map();
+  sorted.forEach((e) => byDate.set(e.date, e));
+  const today = todayStr();
+  const firstDay = new Date(calYear, calMonth, 1);
+  const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+  const startWeekday = firstDay.getDay(); // 周日 = 0
+  const weekdayHeads = ['日', '一', '二', '三', '四', '五', '六'];
+
+  const cells = [];
+  // 月首前面的空白格，让 1 号对齐到正确的星期列
+  for (let i = 0; i < startWeekday; i++) {
+    cells.push('<div class="mood-cal-cell empty"></div>');
+  }
+  for (let d = 1; d <= daysInMonth; d++) {
+    const key = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    const entry = byDate.get(key);
+    const isToday = key === today;
+    const cls = ['mood-cal-cell'];
+    if (isToday) cls.push('today');
+    if (entry) cls.push('has-entry');
+    const dot = entry
+      ? `<span class="mood-cal-dot" style="background:${moodColor(entry.score)}"></span>`
+      : '';
+    cells.push(`
+      <button class="${cls.join(' ')}" data-date="${entry ? key : ''}" ${entry ? '' : 'disabled'}>
+        <span class="mood-cal-day">${d}</span>
+        ${dot}
+      </button>
+    `);
+  }
+
+  return `
+    <div class="mood-section">
+      <div class="mood-cal-head">
+        <button class="mood-cal-nav" id="mood-cal-prev" aria-label="上个月">${createIcon('back', 16).outerHTML}</button>
+        <div class="mood-cal-title">${calYear}年${calMonth + 1}月</div>
+        <button class="mood-cal-nav" id="mood-cal-next" aria-label="下个月">${createIcon('next', 16).outerHTML}</button>
+      </div>
+      <div class="mood-cal-weekhead">
+        ${weekdayHeads.map((w) => `<span>${w}</span>`).join('')}
+      </div>
+      <div class="mood-cal-grid">${cells.join('')}</div>
+    </div>
+  `;
 }
 
 // ════════════════════════════════════════

@@ -21,6 +21,14 @@ import { applyAppBg } from '../../core/app-bg.js';
 let containerEl = null;
 let timer = null;
 
+// 白噪音状态（Web Audio API 生成，不依赖外部音频文件）
+//   noiseCtx: AudioContext（懒创建，用户首次点白噪音时才建）
+//   currentSource: 当前正在播的 BufferSource 节点
+//   currentNoise: 当前选中的白噪音类型（rain/waves/forest/quiet）
+let noiseCtx = null;
+let currentSource = null;
+let currentNoise = 'quiet';
+
 // 番茄钟运行状态（模块级，跨 mount/unmount 保留）
 //   mode: 'work' | 'break'
 //   remaining: 剩余秒数
@@ -41,6 +49,14 @@ const RING_C = 2 * Math.PI * RING_R;
 const PRESETS = [
   { work: 25, brk: 5 },
   { work: 50, brk: 10 }
+];
+
+// 白噪音选项：雨声 / 海浪 / 森林 / 安静（图标全走 SVG 线稿，禁止 emoji）
+const NOISE_OPTIONS = [
+  { key: 'rain',   label: '雨声', icon: 'weather' },
+  { key: 'waves',  label: '海浪', icon: 'music' },
+  { key: 'forest', label: '森林', icon: 'home' },
+  { key: 'quiet',  label: '安静', icon: 'moon' }
 ];
 
 // ════════════════════════════════════════
@@ -76,6 +92,12 @@ export async function mount(container) {
     .pomo-preset.active { background: var(--accent-light); color: var(--accent-dark); font-weight: 600; }
     .pomo-preset:active { transform: scale(var(--press-scale)); }
     .pomo-hint { font-size: var(--font-size-small); color: var(--text-hint); text-align: center; margin-top: 14px; line-height: 1.5; }
+    .pomo-noise-row { display: flex; gap: 8px; justify-content: center; margin-top: 14px; flex-wrap: wrap; }
+    .pomo-noise-btn { padding: 7px 14px; border-radius: 999px; background: color-mix(in srgb, var(--bg-secondary) 60%, transparent); color: var(--text-secondary); font-size: var(--font-size-small); border: none; transition: var(--motion); cursor: pointer; display: inline-flex; align-items: center; gap: 5px; }
+    .pomo-noise-btn:active { transform: scale(var(--press-scale)); }
+    .pomo-noise-btn.active { background: var(--accent-light); color: var(--accent-dark); font-weight: 600; }
+    .pomo-noise-btn svg { width: 14px; height: 14px; }
+    .pomo-noise-label { font-size: var(--font-size-small); color: var(--text-hint); text-align: center; margin-top: 8px; }
   `);
 
   container.innerHTML = `
@@ -99,6 +121,8 @@ export function unmount() {
   state.running = false; // 离开就停住，回来再按开始嘛
   // 离开前把剩余时间和模式存起来，回来能接着上次的进度
   saveRuntimeState();
+  // 停掉白噪音，避免离开后还在响
+  stopNoise();
   containerEl = null;
 }
 
@@ -274,6 +298,11 @@ function render() {
           return `<button class="pomo-preset ${active ? 'active' : ''}" data-w="${p.work}" data-b="${p.brk}">${p.work} / ${p.brk}</button>`;
         }).join('')}
       </div>
+      <div class="pomo-noise-row" id="pomo-noise-row">
+        ${NOISE_OPTIONS.map((n) => `
+          <button class="pomo-noise-btn ${currentNoise === n.key ? 'active' : ''}" data-noise="${n.key}">${createIcon(n.icon, 14).outerHTML}${escapeHTML(n.label)}</button>
+        `).join('')}
+      </div>
       <div class="pomo-hint" id="pomo-hint">${state.mode === 'work' ? '专注一会儿嘛，加油呀～' : '歇口气，喝口水嘛～'}</div>
     </div>
   `;
@@ -282,6 +311,9 @@ function render() {
   body.querySelector('#pomo-skip').addEventListener('click', skipSession);
   body.querySelectorAll('.pomo-preset').forEach((btn) => {
     btn.addEventListener('click', () => applyPreset(Number(btn.dataset.w), Number(btn.dataset.b)));
+  });
+  body.querySelectorAll('.pomo-noise-btn').forEach((btn) => {
+    btn.addEventListener('click', () => selectNoise(btn.dataset.noise));
   });
   // 初始圆环（无动画）
   updateRing(false);
@@ -348,10 +380,13 @@ function toggleRun() {
 function startTicking() {
   if (timer) clearInterval(timer);
   timer = setInterval(tick, 1000);
+  // 通知外面：专注 / 休息开始（消息中心、AI 记忆等可订阅）
+  bus.emit('pomodoro:start', { mode: state.mode, remaining: state.remaining });
 }
 
 function stopTicking() {
   if (timer) { clearInterval(timer); timer = null; }
+  bus.emit('pomodoro:stop', { mode: state.mode });
 }
 
 function tick() {
@@ -440,4 +475,133 @@ function fmtTime(sec) {
   const m = Math.floor(sec / 60);
   const s = sec % 60;
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+
+// ════════════════════════════════════════
+// 白噪音（Web Audio API 生成，不依赖外部音频文件）
+//   雨声：白噪声 + 低通（偏高频，沙沙感）
+//   海浪：棕噪声 + LFO 调制音量（潮起潮落）
+//   森林：粉噪声 + 低通（柔和高频）
+//   安静：停掉所有噪音
+// ════════════════════════════════════════
+
+function ensureNoiseCtx() {
+  if (typeof window === 'undefined') return null;
+  if (!noiseCtx) {
+    try {
+      const Ctor = window.AudioContext || window.webkitAudioContext;
+      if (!Ctor) return null;
+      noiseCtx = new Ctor();
+    } catch (e) {
+      console.warn('[pomodoro] AudioContext 创建失败', e);
+      return null;
+    }
+  }
+  // 浏览器策略：用户交互后才能 resume
+  if (noiseCtx.state === 'suspended') {
+    try { noiseCtx.resume(); } catch (e) {}
+  }
+  return noiseCtx;
+}
+
+// 生成 2 秒循环噪音 buffer
+function makeNoiseBuffer(ctx, type) {
+  const len = Math.floor(ctx.sampleRate * 2);
+  const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+  const data = buf.getChannelData(0);
+  if (type === 'rain') {
+    // 白噪声：均匀随机
+    for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
+  } else if (type === 'waves') {
+    // 棕噪声：积分法，低频更厚
+    let last = 0;
+    for (let i = 0; i < len; i++) {
+      const white = Math.random() * 2 - 1;
+      last = (last + 0.02 * white) / 1.02;
+      data[i] = last * 3.5;
+    }
+  } else if (type === 'forest') {
+    // 粉噪声：Voss-McCartney 简化版，中频丰满
+    let b0 = 0, b1 = 0, b2 = 0;
+    for (let i = 0; i < len; i++) {
+      const white = Math.random() * 2 - 1;
+      b0 = 0.99765 * b0 + white * 0.099045;
+      b1 = 0.96300 * b1 + white * 0.299335;
+      b2 = 0.57000 * b2 + white * 1.057050;
+      data[i] = (b0 + b1 + b2 + white * 0.18) * 0.15;
+    }
+  } else {
+    for (let i = 0; i < len; i++) data[i] = 0;
+  }
+  return buf;
+}
+
+// 开始播某种白噪音
+function startNoise(type) {
+  const ctx = ensureNoiseCtx();
+  if (!ctx) return;
+  stopNoise();
+  const src = ctx.createBufferSource();
+  src.buffer = makeNoiseBuffer(ctx, type);
+  src.loop = true;
+  const gain = ctx.createGain();
+  gain.gain.value = 0.16;
+  // 低通滤波，让声音更柔和、不刺耳
+  const filter = ctx.createBiquadFilter();
+  filter.type = 'lowpass';
+  filter.frequency.value = type === 'rain' ? 8000 : (type === 'waves' ? 600 : 4000);
+  src.connect(filter);
+  filter.connect(gain);
+  gain.connect(ctx.destination);
+  src.start();
+  currentSource = src;
+  currentSource._gain = gain;
+  // 海浪：加 LFO 调制音量，模拟潮起潮落
+  if (type === 'waves') {
+    const lfo = ctx.createOscillator();
+    lfo.frequency.value = 0.15; // 约 6-7 秒一个周期
+    const lfoGain = ctx.createGain();
+    lfoGain.gain.value = 0.10;
+    lfo.connect(lfoGain);
+    lfoGain.connect(gain.gain);
+    lfo.start();
+    currentSource._lfo = lfo;
+  }
+}
+
+// 停掉当前白噪音
+function stopNoise() {
+  if (currentSource) {
+    try { if (currentSource._lfo) currentSource._lfo.stop(); } catch (e) {}
+    try { currentSource.stop(); } catch (e) {}
+    currentSource = null;
+  }
+}
+
+// UI：选中某种白噪音（点击按钮时调用）
+function selectNoise(type) {
+  const next = type || 'quiet';
+  currentNoise = next;
+  // 更新按钮高亮
+  containerEl?.querySelectorAll('.pomo-noise-btn').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.noise === next);
+  });
+  if (next === 'quiet') {
+    stopNoise();
+    showToast('安静下来啦', 'default', 1000);
+  } else {
+    startNoise(next);
+    const label = NOISE_OPTIONS.find((n) => n.key === next)?.label || '白噪音';
+    showToast(`${label}响起来啦`, 'success', 1000);
+  }
+}
+
+// ════════════════════════════════════════
+// 小工具
+// ════════════════════════════════════════
+
+function escapeHTML(s) {
+  return String(s ?? '').replace(/[&<>"']/g, (c) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[c]));
 }

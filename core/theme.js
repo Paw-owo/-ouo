@@ -1,5 +1,6 @@
 // core/theme.js
 // 主题系统：6 套预设 + 自定义颜色 + 导入导出。
+// 风格：Soft Cozy Minimal（温柔软萌极简风）—— 柔和低饱和、同色系阴影、软萌圆角、呼吸感动效。
 // 修复原 bug：
 //  1) getCurrentTheme 深拷贝（避免污染预设）
 //  2) importTheme 的 JSON.parse 加 try-catch
@@ -16,29 +17,29 @@ const PRESETS = {
   sky: {
     id: 'sky', name: '海盐蓝', mode: 'light',
     vars: {
-      '--bg-primary': '#EEF6FB',
-      '--bg-secondary': '#DDEDF6',
+      '--bg-primary': '#F8FAFD',
+      '--bg-secondary': '#EAF1F8',
       '--bg-card': '#FFFFFF',
-      '--bg-overlay': 'rgba(0,0,0,0.24)',
-      '--accent': '#7EC4E0',
-      '--accent-light': '#CFE9F2',
-      '--accent-dark': '#5AA6C6',
-      '--text-primary': '#2A3A44',
-      '--text-secondary': '#7A8E9A',
-      '--text-hint': '#B8C8D0',
-      '--bubble-user-bg': '#7EC4E0',
+      '--bg-overlay': 'rgba(42,48,64,0.30)',
+      '--accent': '#A8CCE8',
+      '--accent-light': '#DCEAF4',
+      '--accent-dark': '#7EB0D0',
+      '--text-primary': '#2A3040',
+      '--text-secondary': '#6A7A8C',
+      '--text-hint': '#A8B8C8',
+      '--bubble-user-bg': '#A8CCE8',
       '--bubble-user-text': '#FFFFFF',
       '--bubble-ai-bg': '#FFFFFF',
-      '--bubble-ai-text': '#2A3A44',
-      '--shadow-glow': '0 0 20px rgba(126,196,224,0.40)',
-      // 语义色
-      '--success': '#5BB89E',
-      '--warning': '#F5C247',
-      '--info': '#7AA2D6',
-      '--danger': '#E8888C',
-      '--success-light': 'rgba(91,184,158,0.12)',
-      '--warning-light': 'rgba(245,194,71,0.12)',
-      '--danger-light': 'rgba(232,136,140,0.12)',
+      '--bubble-ai-text': '#2A3040',
+      '--shadow-glow': '0 0 20px rgba(168,204,232,0.40)',
+      // 语义色（低饱和柔和版本）
+      '--success': '#6BC4A6',
+      '--warning': '#F0CB5E',
+      '--info': '#8AAAD8',
+      '--danger': '#EC9094',
+      '--success-light': 'rgba(107,196,166,0.12)',
+      '--warning-light': 'rgba(240,203,94,0.12)',
+      '--danger-light': 'rgba(236,144,148,0.12)',
       // 锁屏等壁纸上的文字色
       '--text-on-wallpaper': '#fff'
     }
@@ -46,29 +47,29 @@ const PRESETS = {
   sakura: {
     id: 'sakura', name: '草莓牛奶', mode: 'light',
     vars: {
-      '--bg-primary': '#FDEEF1',
-      '--bg-secondary': '#F8DEE5',
+      '--bg-primary': '#FFF8F6',
+      '--bg-secondary': '#FBEEE8',
       '--bg-card': '#FFFFFF',
-      '--bg-overlay': 'rgba(0,0,0,0.22)',
-      '--accent': '#F5A0B0',
-      '--accent-light': '#FBDFE6',
-      '--accent-dark': '#E07C90',
-      '--text-primary': '#3A2630',
-      '--text-secondary': '#9A8088',
+      '--bg-overlay': 'rgba(61,43,46,0.28)',
+      '--accent': '#F0A5B5',
+      '--accent-light': '#FADDE4',
+      '--accent-dark': '#E092A4',
+      '--text-primary': '#3D2B2E',
+      '--text-secondary': '#8E707A',
       '--text-hint': '#D0B8BE',
-      '--bubble-user-bg': '#F5A0B0',
+      '--bubble-user-bg': '#F0A5B5',
       '--bubble-user-text': '#FFFFFF',
       '--bubble-ai-bg': '#FFFFFF',
-      '--bubble-ai-text': '#3A2630',
-      '--shadow-glow': '0 0 20px rgba(245,160,176,0.40)',
-      // 语义色
-      '--success': '#5BB89E',
-      '--warning': '#F5C247',
-      '--info': '#7AA2D6',
-      '--danger': '#E8888C',
-      '--success-light': 'rgba(91,184,158,0.12)',
-      '--warning-light': 'rgba(245,194,71,0.12)',
-      '--danger-light': 'rgba(232,136,140,0.12)',
+      '--bubble-ai-text': '#3D2B2E',
+      '--shadow-glow': '0 0 20px rgba(240,165,181,0.40)',
+      // 语义色（低饱和柔和版本）
+      '--success': '#6BC4A6',
+      '--warning': '#F0CB5E',
+      '--info': '#8AAAD8',
+      '--danger': '#EC9094',
+      '--success-light': 'rgba(107,196,166,0.12)',
+      '--warning-light': 'rgba(240,203,94,0.12)',
+      '--danger-light': 'rgba(236,144,148,0.12)',
       // 锁屏等壁纸上的文字色
       '--text-on-wallpaper': '#fff'
     }
@@ -76,29 +77,29 @@ const PRESETS = {
   lavender: {
     id: 'lavender', name: '焦糖拿铁', mode: 'light',
     vars: {
-      '--bg-primary': '#F7F0E6',
-      '--bg-secondary': '#EDE0CC',
+      '--bg-primary': '#FAF8F5',
+      '--bg-secondary': '#F2EDE4',
       '--bg-card': '#FFFFFF',
-      '--bg-overlay': 'rgba(0,0,0,0.24)',
-      '--accent': '#D4A87A',
-      '--accent-light': '#EEDCC2',
-      '--accent-dark': '#B08658',
-      '--text-primary': '#3A2A1A',
+      '--bg-overlay': 'rgba(61,53,48,0.30)',
+      '--accent': '#D8BCA0',
+      '--accent-light': '#EEDDC8',
+      '--accent-dark': '#C09A78',
+      '--text-primary': '#3D3530',
       '--text-secondary': '#8A7C68',
       '--text-hint': '#C8B8A0',
-      '--bubble-user-bg': '#D4A87A',
+      '--bubble-user-bg': '#D8BCA0',
       '--bubble-user-text': '#FFFFFF',
       '--bubble-ai-bg': '#FFFFFF',
-      '--bubble-ai-text': '#3A2A1A',
-      '--shadow-glow': '0 0 20px rgba(212,168,122,0.40)',
-      // 语义色
-      '--success': '#5BB89E',
-      '--warning': '#F5C247',
-      '--info': '#7AA2D6',
-      '--danger': '#E8888C',
-      '--success-light': 'rgba(91,184,158,0.12)',
-      '--warning-light': 'rgba(245,194,71,0.12)',
-      '--danger-light': 'rgba(232,136,140,0.12)',
+      '--bubble-ai-text': '#3D3530',
+      '--shadow-glow': '0 0 20px rgba(216,188,160,0.40)',
+      // 语义色（低饱和柔和版本）
+      '--success': '#6BC4A6',
+      '--warning': '#F0CB5E',
+      '--info': '#8AAAD8',
+      '--danger': '#EC9094',
+      '--success-light': 'rgba(107,196,166,0.12)',
+      '--warning-light': 'rgba(240,203,94,0.12)',
+      '--danger-light': 'rgba(236,144,148,0.12)',
       // 锁屏等壁纸上的文字色
       '--text-on-wallpaper': '#fff'
     }
@@ -106,21 +107,21 @@ const PRESETS = {
   skyDark: {
     id: 'skyDark', name: '夜海蓝', mode: 'dark',
     vars: {
-      '--bg-primary': '#15212C',
-      '--bg-secondary': '#1E2D3C',
-      '--bg-card': '#243648',
-      '--bg-overlay': 'rgba(0,0,0,0.55)',
-      '--accent': '#8FD0E8',
-      '--accent-light': '#2A4050',
-      '--accent-dark': '#6AAEC8',
-      '--text-primary': '#E8F0F6',
-      '--text-secondary': '#9AB0BC',
-      '--text-hint': '#5C7080',
-      '--bubble-user-bg': '#6AAEC8',
+      '--bg-primary': '#1A1E26',
+      '--bg-secondary': '#222834',
+      '--bg-card': '#2A3040',
+      '--bg-overlay': 'rgba(10,14,20,0.55)',
+      '--accent': '#9CD6EC',
+      '--accent-light': '#2E3848',
+      '--accent-dark': '#7AB8D0',
+      '--text-primary': '#E8E4E8',
+      '--text-secondary': '#A0B0BC',
+      '--text-hint': '#6A7888',
+      '--bubble-user-bg': '#7AB8D0',
       '--bubble-user-text': '#FFFFFF',
-      '--bubble-ai-bg': '#36536B',
-      '--bubble-ai-text': '#E8F0F6',
-      '--shadow-glow': '0 0 20px rgba(143,208,232,0.40)',
+      '--bubble-ai-bg': '#2E3848',
+      '--bubble-ai-text': '#E8E4E8',
+      '--shadow-glow': '0 0 20px rgba(156,214,236,0.40)',
       // 语义色（暗色提亮 +10% lightness）
       '--success': '#7FC8B3',
       '--warning': '#F8D277',
@@ -136,21 +137,21 @@ const PRESETS = {
   sakuraDark: {
     id: 'sakuraDark', name: '夜莓粉', mode: 'dark',
     vars: {
-      '--bg-primary': '#231820',
-      '--bg-secondary': '#2E2028',
-      '--bg-card': '#3A2832',
-      '--bg-overlay': 'rgba(0,0,0,0.55)',
+      '--bg-primary': '#221A20',
+      '--bg-secondary': '#2C2228',
+      '--bg-card': '#2E2428',
+      '--bg-overlay': 'rgba(10,8,10,0.55)',
       '--accent': '#F5B5C2',
       '--accent-light': 'rgba(245,165,176,0.18)',
       '--accent-dark': '#E07C90',
-      '--text-primary': '#F6E4EA',
-      '--text-secondary': '#B098A0',
-      '--text-hint': '#6C5860',
+      '--text-primary': '#F0E4E8',
+      '--text-secondary': '#B8A0A8',
+      '--text-hint': '#7A626A',
       '--bubble-user-bg': '#E07C90',
       '--bubble-user-text': '#FFFFFF',
-      '--bubble-ai-bg': '#563A46',
-      '--bubble-ai-text': '#F6E4EA',
-      '--shadow-glow': '0 0 20px rgba(245,160,176,0.40)',
+      '--bubble-ai-bg': '#3A2C32',
+      '--bubble-ai-text': '#F0E4E8',
+      '--shadow-glow': '0 0 20px rgba(245,181,194,0.40)',
       // 语义色（暗色提亮 +10% lightness）
       '--success': '#7FC8B3',
       '--warning': '#F8D277',
@@ -166,20 +167,20 @@ const PRESETS = {
   lavenderDark: {
     id: 'lavenderDark', name: '夜焦糖', mode: 'dark',
     vars: {
-      '--bg-primary': '#22180E',
-      '--bg-secondary': '#2C2018',
-      '--bg-card': '#382A1E',
-      '--bg-overlay': 'rgba(0,0,0,0.55)',
+      '--bg-primary': '#221C14',
+      '--bg-secondary': '#2A2218',
+      '--bg-card': '#2E2418',
+      '--bg-overlay': 'rgba(10,8,6,0.55)',
       '--accent': '#E0B888',
-      '--accent-light': '#3A2C20',
+      '--accent-light': '#382C20',
       '--accent-dark': '#B88E58',
-      '--text-primary': '#F4E8D8',
-      '--text-secondary': '#B8A488',
-      '--text-hint': '#706048',
+      '--text-primary': '#ECE4D4',
+      '--text-secondary': '#B8A888',
+      '--text-hint': '#806E50',
       '--bubble-user-bg': '#B88E58',
       '--bubble-user-text': '#FFFFFF',
-      '--bubble-ai-bg': '#564432',
-      '--bubble-ai-text': '#F4E8D8',
+      '--bubble-ai-bg': '#3A2E20',
+      '--bubble-ai-text': '#ECE4D4',
       '--shadow-glow': '0 0 20px rgba(224,184,136,0.40)',
       // 语义色（暗色提亮 +10% lightness）
       '--success': '#7FC8B3',
@@ -196,8 +197,10 @@ const PRESETS = {
 };
 
 // 全局共享变量（与主题无关，固定结构）
+// 阴影均使用 color-mix(in srgb, var(--accent) X%, transparent)，自动跟随各主题主色系，
+// 杜绝纯灰 rgba(0,0,0,x) 阴影；动效统一使用 spring 缓动 cubic-bezier(0.34, 1.56, 0.64, 1)。
 const SHARED_VARS = {
-  '--font-main': "'PingFang SC', 'Microsoft YaHei', sans-serif",
+  '--font-main': "'HarmonyOS Sans SC', 'PingFang SC', 'Noto Sans SC', system-ui, sans-serif",
   '--font-size-base': '15px',
   '--font-size-small': '13px',
   '--font-size-title': '17px',
@@ -208,27 +211,38 @@ const SHARED_VARS = {
   '--spacing-md': '18px',
   '--spacing-lg': '26px',
   '--spacing-xl': '36px',
-  '--radius-sm': '12px',
-  '--radius-md': '18px',
-  '--radius-lg': '26px',
+  '--radius-sm': '10px',
+  '--radius-md': '16px',
+  '--radius-lg': '20px',
+  '--radius-xl': '28px',
+  '--radius-full': '999px',
   '--radius-icon': '18px',
   '--radius-card': '24px',
   '--radius-sheet': '28px',
   '--radius-dock': '32px',
   '--bubble-radius': '20px',
   '--bubble-radius-tail': '6px',
-  '--shadow-sm': '0 2px 8px rgba(0,0,0,0.04)',
-  '--shadow-md': '0 4px 16px rgba(0,0,0,0.06)',
-  '--shadow-lg': '0 8px 28px rgba(0,0,0,0.10)',
+  // 同色系柔和阴影（替代原 rgba(0,0,0,x) 灰色阴影）
+  '--shadow-sm': '0 2px 12px color-mix(in srgb, var(--accent) 6%, transparent)',
+  '--shadow-md': '0 4px 16px color-mix(in srgb, var(--accent) 8%, transparent)',
+  '--shadow-lg': '0 8px 28px color-mix(in srgb, var(--accent) 12%, transparent)',
+  // 新增：层次化同色系阴影
+  '--shadow-soft': '0 2px 12px color-mix(in srgb, var(--accent) 8%, transparent)',
+  '--shadow-card': '0 4px 20px color-mix(in srgb, var(--accent) 10%, transparent)',
+  '--shadow-float': '0 8px 32px color-mix(in srgb, var(--accent) 14%, transparent)',
+  // 新增：neumorphism 凸起 / 凹入阴影（亮面 + 暗面双向）
+  '--shadow-neu-out': '0 4px 12px color-mix(in srgb, var(--accent) 8%, transparent), 0 -2px 8px color-mix(in srgb, var(--accent) 4%, transparent)',
+  '--shadow-neu-in': 'inset 0 2px 8px color-mix(in srgb, var(--accent) 8%, transparent), inset 0 -1px 4px color-mix(in srgb, var(--accent) 4%, transparent)',
   '--glass-blur': '14px',
   '--glass-blur-strong': '20px',
   '--wallpaper-soft': '0.10',
-  '--press-scale': '0.94',
-  // 修复性能反模式：避免 transition: all，显式列出常用属性
-  '--motion': 'transform 220ms ease, opacity 220ms ease, background 220ms ease, border-color 220ms ease, box-shadow 220ms ease',
+  '--press-scale': '0.97',
+  // 修复性能反模式：避免 transition: all，显式列出常用属性；
+  // 全部使用 spring 缓动 + 0.25s（200-300ms 区间），禁止 linear / ease。
+  '--motion': 'transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), border-color 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.25s cubic-bezier(0.34, 1.56, 0.64, 1)',
   '--motion-spring': 'cubic-bezier(0.34, 1.56, 0.64, 1)',
-  '--motion-fast': '120ms ease',
-  '--motion-slow': '400ms ease',
+  '--motion-fast': '120ms cubic-bezier(0.34, 1.56, 0.64, 1)',
+  '--motion-slow': '400ms cubic-bezier(0.34, 1.56, 0.64, 1)',
   // 字号补充
   '--font-size-display': '28px',
   '--font-size-caption': '11px',
@@ -369,7 +383,7 @@ export function applyFontFamily(fontFamily, blobUrl) {
     style.id = 'custom-font-face';
     style.textContent = `@font-face { font-family: 'PopoCustom'; src: url('${blobUrl}'); }`;
     document.head.appendChild(style);
-    document.documentElement.style.setProperty('--font-main', "'PopoCustom', 'PingFang SC', 'Microsoft YaHei', sans-serif");
+    document.documentElement.style.setProperty('--font-main', "'PopoCustom', 'HarmonyOS Sans SC', 'PingFang SC', 'Noto Sans SC', system-ui, sans-serif");
   } else if (fontFamily) {
     document.documentElement.style.setProperty('--font-main', fontFamily);
   }

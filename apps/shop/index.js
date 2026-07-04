@@ -20,6 +20,8 @@ import { openApp } from '../../core/router.js';
 import { applyAppBg } from '../../core/app-bg.js';
 import { recordInteraction } from '../../core/memory.js';
 import { addAffection } from '../../core/affection.js';
+import { injectStyle } from '../../core/util.js';
+import { normalizeMoment } from '../moments/shared.js';
 import { injectShopStyles } from './styles.js';
 import {
   CATEGORIES,
@@ -38,6 +40,29 @@ import { openBackpack } from './backpack.js';
 let containerEl = null;
 let currentFilter = '全部';
 const RECHARGE_AMOUNT = 100;
+
+// 购买成功时的庆祝动画：softPop（按钮轻弹）+ 撒花（彩色粒子四散）
+injectStyle('app-shop-celebrate-style', `
+  @keyframes shopSoftPop{
+    0%{ transform:scale(1); }
+    35%{ transform:scale(1.14); }
+    100%{ transform:scale(1); }
+  }
+  .shop-soft-pop{ animation:shopSoftPop 420ms var(--motion-spring); }
+  .shop-confetti-layer{
+    position:fixed; left:50%; top:42%;
+    z-index:9999; pointer-events:none;
+  }
+  .shop-confetti-piece{
+    position:absolute; width:8px; height:8px;
+    border-radius:50%;
+    animation:shopConfettiFly 720ms var(--motion-spring) forwards;
+  }
+  @keyframes shopConfettiFly{
+    0%{ transform:translate(0,0) scale(1); opacity:1; }
+    100%{ transform:translate(var(--dx),var(--dy)) scale(.3); opacity:0; }
+  }
+`);
 
 // ════════════════════════════════════════
 // mount / unmount
@@ -164,13 +189,15 @@ async function render() {
       const id = btn.dataset.id;
       const merged = getMergedProducts(readShopState());
       const p = merged.find((x) => x.id === id);
-      if (p) tryBuy(p);
+      if (p) tryBuy(p, btn);
     });
   });
 
   // 背包
-  bodyEl.querySelector('#shop-bag-entry').addEventListener('click', () => {
-    openBackpack({ onGive: handleGiveGift });
+  bodyEl.querySelector('#shop-bag-entry').addEventListener('click', async () => {
+    const sheet = await openBackpack({ onGive: handleGiveGift });
+    // 背包打开后给每行注入「使用」按钮（backpack.js 本身不支持，这里在 index.js 补）
+    if (sheet && sheet.bodyEl) injectUseButtons(sheet.bodyEl);
   });
 
   // 管理
@@ -194,7 +221,7 @@ async function render() {
 // 购买
 // ════════════════════════════════════════
 
-function tryBuy(product) {
+function tryBuy(product, btn) {
   const wallet = readWallet();
   if (Number(wallet.globalBalance) < product.price) {
     showAlert({
@@ -247,6 +274,8 @@ function tryBuy(product) {
       }
       bus.emit('shop:purchase', { itemId: product.id, name: product.name, price: product.price });
       showToast('买好啦，送给她吧', 'success', 1400);
+      // 庆祝动画：按钮轻弹 + 撒花
+      celebratePurchase(btn);
       render();
     }
   });
@@ -296,6 +325,8 @@ async function handleGiveGift(item, character) {
   } catch (e) {
     console.warn('[shop] 记忆/好感度写入失败', e);
   }
+  // 赠礼后让 TA 自动发一条朋友圈动态，记录这份小惊喜
+  postGiftMoment(character, item.name);
   showToast(`送好啦，${toName}会很开心的`, 'success', 1500);
 }
 
@@ -342,4 +373,139 @@ function handleToggleVisibility(p, visible, mgmt) {
   writeShopState(state);
   mgmt.refresh();
   render();
+}
+
+// ════════════════════════════════════════
+// 购买庆祝动画：softPop（按钮轻弹）+ 撒花
+// ════════════════════════════════════════
+
+function celebratePurchase(btn) {
+  try {
+    if (btn && btn.classList) {
+      btn.classList.remove('shop-soft-pop');
+      // 强制重排，让动画能重新触发
+      void btn.offsetWidth;
+      btn.classList.add('shop-soft-pop');
+    }
+    fireConfetti();
+  } catch (e) { /* 动画失败不影响购买流程 */ }
+}
+
+// 撒花：在屏幕中央生成一圈彩色小圆点，向外四散后消失
+function fireConfetti() {
+  try {
+    const colors = ['#F5A0B0', '#F5D88A', '#B5D9A0', '#A0C8E8', '#C8A8E0'];
+    const layer = document.createElement('div');
+    layer.className = 'shop-confetti-layer';
+    document.body.appendChild(layer);
+    const count = 18;
+    for (let i = 0; i < count; i++) {
+      const p = document.createElement('span');
+      p.className = 'shop-confetti-piece';
+      const angle = (Math.PI * 2 * i) / count + Math.random() * 0.3;
+      const dist = 80 + Math.random() * 100;
+      p.style.setProperty('--dx', Math.cos(angle) * dist + 'px');
+      p.style.setProperty('--dy', (Math.sin(angle) * dist - 40) + 'px');
+      p.style.background = colors[i % colors.length];
+      p.style.animationDelay = (Math.random() * 80) + 'ms';
+      layer.appendChild(p);
+    }
+    setTimeout(() => { try { layer.remove(); } catch (e) {} }, 900);
+  } catch (e) { /* 撒花失败就算了 */ }
+}
+
+// ════════════════════════════════════════
+// 赠礼后自动发朋友圈
+// ════════════════════════════════════════
+
+// 送出礼物后，让收礼的角色发一条朋友圈动态，记录这份小惊喜
+function postGiftMoment(character, itemName) {
+  try {
+    const author = charName(character) || '小伙伴';
+    const id = generateId('moment');
+    const content = `收到了${itemName || '一份小心意'}，好开心呀~`;
+    const record = normalizeMoment({
+      id,
+      author,
+      content,
+      images: [],
+      likes: 0,
+      likedByMe: false,
+      comments: [],
+      pinned: false,
+      visibility: 'public',
+      createdAt: getNow()
+    });
+    setDB(STORES.moments, id, record).then(() => {
+      bus.emit('moments:new', { author, preview: content.slice(0, 30), momentId: id });
+    }).catch(() => {});
+  } catch (e) {
+    console.warn('[shop] 发朋友圈失败', e);
+  }
+}
+
+// ════════════════════════════════════════
+// 背包道具「使用」
+// backpack.js 没有 onUse 回调，这里在背包打开后给每行注入「使用」按钮
+// ════════════════════════════════════════
+
+function injectUseButtons(bodyEl) {
+  if (!bodyEl) return;
+  const rows = bodyEl.querySelectorAll('.shop-bag-item');
+  rows.forEach((row) => {
+    if (row.querySelector('.shop-bag-btn.use')) return; // 已注入过
+    const actions = row.querySelector('.shop-bag-actions');
+    if (!actions) return;
+    const id = row.getAttribute('data-bag-id');
+    if (!id) return;
+    // 从 DOM 里读出物品名字（backpack.js 渲染时写了 .shop-bag-name）
+    const nameEl = row.querySelector('.shop-bag-name');
+    const itemName = nameEl ? (nameEl.textContent || '').trim() : '道具';
+    const useBtn = document.createElement('button');
+    useBtn.className = 'shop-bag-btn use';
+    useBtn.type = 'button';
+    useBtn.innerHTML = `${createIcon('star', 14).outerHTML}使用`;
+    useBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      await handleUseItem(id, itemName, row, bodyEl);
+    });
+    // 插到「送给她」前面
+    const giftBtn = actions.querySelector('.shop-bag-btn.gift');
+    if (giftBtn) actions.insertBefore(useBtn, giftBtn);
+    else actions.appendChild(useBtn);
+  });
+}
+
+// 使用道具：从背包删除 + toast + 写记忆；背包空了就显示空状态
+async function handleUseItem(invId, itemName, row, bodyEl) {
+  try {
+    await deleteDB(STORES.inventory, invId);
+  } catch (e) {
+    console.warn('[shop] 使用道具失败', e);
+    showToast('没使出来，再试一下嘛', 'error');
+    return;
+  }
+  bus.emit('shop:item-used', { name: itemName, itemId: invId });
+  showToast(`用掉了${itemName}，真开心~`, 'success', 1500);
+  // 写一条记忆，让 AI 知道主人用了什么
+  try {
+    await recordInteraction({
+      characterId: 'global',
+      role: 'user',
+      source: 'shop',
+      content: `使用了${itemName}`,
+      importance: 3,
+      relatedApp: 'shop'
+    });
+  } catch (e) { /* 记忆失败不影响使用 */ }
+  // 从 DOM 移除该行；全空了就显示空状态
+  if (row && row.parentNode) row.remove();
+  if (bodyEl && !bodyEl.querySelector('.shop-bag-item')) {
+    bodyEl.innerHTML = `
+      <div class="empty-state" style="padding:32px 12px">
+        <div class="shop-empty-icon">${createIcon('gift', 48).outerHTML}</div>
+        <div class="empty-state-text">背包空空如也~</div>
+      </div>
+    `;
+  }
 }

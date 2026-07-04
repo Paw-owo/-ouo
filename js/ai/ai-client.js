@@ -118,8 +118,12 @@ export async function buildMessages(opts = {}) {
 /**
  * 我做流式聊天。无配置返回 { ok:false, reason:'not_configured' }，调用方走本地兜底。
  * @param {object} opts
- *   { messages, characterId?, userText?, onToken(text), onDone(fullText), onError(err), signal }
+ *   { messages, characterId?, userText?, onChunk(text), onThinking(text), onDone(fullText), onError(err), signal }
+ *   - onChunk：主内容增量回调（旧名 onToken 也兼容，等价于 onChunk）
+ *   - onThinking：思维链增量回调（cfg.enableChain 开启时才会有内容）
  *   - characterId + userText 可选：传了的话，回复完成后我会自动跑情绪检测 + 记忆提取 + 归档
+ *   - 思维链不会污染历史：调用方应把 onChunk 存入 aiMsg.content，把 onThinking 存入 aiMsg.thinking，
+ *     下一轮历史只传 content。
  * @returns {Promise<{ok, reason?, fullText}>}
  */
 export async function streamChat(opts = {}) {
@@ -127,13 +131,15 @@ export async function streamChat(opts = {}) {
   if (!cfg.url || !cfg.apiKey) {
     return { ok: false, reason: 'not_configured', fullText: '' };
   }
-  const { messages, onToken, onDone, onError, signal, characterId, userText } = opts;
+  // onChunk 是新规范名；onToken 是旧名（兼容 sending.js），两者取其一
+  const { messages, onChunk, onThinking, onToken, onDone, onError, signal, characterId, userText } = opts;
+  const chunkCb = onChunk || onToken;
   const maxRetry = getConfig('ai.maxRetry', 2);
   let lastErr = null;
 
   for (let attempt = 0; attempt <= maxRetry; attempt++) {
     try {
-      const result = await doFetch(cfg, messages, { onToken, signal });
+      const result = await doFetch(cfg, messages, { onChunk: chunkCb, onThinking, signal });
       if (typeof onDone === 'function') onDone(result.fullText);
       // 回复完成后：情绪检测 + 记忆提取 + 归档（只在调用方提供 characterId + userText 时跑）
       // 注意：sending.js 的 finishAIMessage 也会跑一遍，这里只面向"直接调 streamChat 的调用方"。
@@ -157,6 +163,8 @@ export async function streamChat(opts = {}) {
     } catch (e) {
       lastErr = e;
       if (signal?.aborted) break; // 用户取消，不重试
+      // 401/403 等不可重试的错误直接跳出，重试也是浪费力气
+      if (e?.noRetry) break;
       if (attempt < maxRetry) {
         await new Promise((r) => setTimeout(r, 600 * (attempt + 1)));
         continue;
@@ -167,14 +175,41 @@ export async function streamChat(opts = {}) {
   return { ok: false, reason: 'fetch_failed', error: lastErr, fullText: '' };
 }
 
-async function doFetch(cfg, messages, { onToken, signal }) {
+async function doFetch(cfg, messages, { onChunk, onThinking, signal }) {
+  // 请求体：基础字段 + 可选参数（只在配置里有值时才加）
   const body = {
     model: cfg.model,
     messages,
-    stream: true,
-    temperature: Number(cfg.temperature) || 0.8,
-    max_tokens: Number(cfg.maxTokens) || 800
+    stream: !!onChunk,
+    temperature: cfg.temperature ?? 0.8,
+    max_tokens: cfg.maxTokens ?? 2000,
   };
+  // 思维链开关：让支持的模型先把"想一想"的过程吐出来
+  if (cfg.enableChain) {
+    body.enable_thinking = true;        // 兼容 DeepSeek 等
+    body.reasoning_effort = 'medium';   // 兼容 OpenAI o 系列
+  }
+  if (cfg.topP != null) body.top_p = cfg.topP;
+  if (cfg.presencePenalty != null) body.presence_penalty = cfg.presencePenalty;
+  if (cfg.frequencyPenalty != null) body.frequency_penalty = cfg.frequencyPenalty;
+  if (cfg.stop) body.stop = cfg.stop;
+
+  // headers：标准 + 自定义合并
+  const headers = {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${cfg.apiKey}`,
+  };
+  if (cfg.customHeaders) {
+    try {
+      const extra = typeof cfg.customHeaders === 'string'
+        ? JSON.parse(cfg.customHeaders)
+        : cfg.customHeaders;
+      if (extra && typeof extra === 'object') Object.assign(headers, extra);
+    } catch (e) {
+      console.warn('[ai-client] 我解析自定义 headers 失败', e);
+    }
+  }
+
   const ctrl = new AbortController();
   // 超时计时器：在每次读到 chunk 时重置，避免流式期间被误超时中断
   const timeoutMs = cfg.timeoutMs || 30000;
@@ -189,22 +224,57 @@ async function doFetch(cfg, messages, { onToken, signal }) {
 
   const resp = await fetch(cfg.url, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${cfg.apiKey}`
-    },
+    headers,
     body: JSON.stringify(body),
     signal: ctrl.signal
   });
 
   if (!resp.ok) {
     clearTimeout(timer);
-    const txt = await safeReadText(resp);
-    throw new Error(`AI 接口返回 ${resp.status}：${txt.slice(0, 200)}`);
+    // 友好的状态码文案，软萌语气
+    let errMsg = `AI 接口返回 ${resp.status}`;
+    if (resp.status === 401) errMsg = 'API 钥匙不对哦，检查一下嘛';
+    else if (resp.status === 403) errMsg = '没有权限访问这个模型呢';
+    else if (resp.status === 429) errMsg = '请求太频繁啦，等一下再试嘛';
+    else if (resp.status >= 500) errMsg = 'AI 服务器出问题了，等一下再试嘛';
+    // 401/403 不重试，429/5xx 可以重试
+    const err = new Error(errMsg);
+    err.statusCode = resp.status;
+    err.noRetry = (resp.status === 401 || resp.status === 403);
+    // 把响应原文挂在错误对象上，方便排查
+    try { err.bodyText = (await safeReadText(resp)).slice(0, 200); } catch (e) {}
+    throw err;
   }
   if (!resp.body) {
     clearTimeout(timer);
     throw new Error('AI 接口没返回流');
+  }
+
+  // 非流式（没传 onChunk）：一次性读完 JSON 再拆思维链
+  if (!onChunk) {
+    clearTimeout(timer);
+    const json = await resp.json();
+    const msg = json.choices?.[0]?.message || {};
+    let fullText = msg.content || '';
+    // 思维链：reasoning_content（DeepSeek 风格）或 reasoning（OpenAI o1 风格）
+    const reasoning = msg.reasoning_content || msg.reasoning || '';
+    if (reasoning && typeof onThinking === 'function') {
+      onThinking(reasoning);
+    }
+    // 兜底：拆 ~thinking~ 标签（本地兜底回复走 streamChat 时会用）
+    if (fullText.includes('~thinking~')) {
+      const segs = parseThinkingTags(fullText, false);
+      let rebuilt = '';
+      for (const seg of segs) {
+        if (seg.type === 'thinking') {
+          if (typeof onThinking === 'function') onThinking(seg.text);
+        } else {
+          rebuilt += seg.text;
+        }
+      }
+      fullText = rebuilt;
+    }
+    return { fullText };
   }
 
   // 注意：不要在进入 reader 循环前 clearTimeout，否则流式期间无超时保护
@@ -213,6 +283,63 @@ async function doFetch(cfg, messages, { onToken, signal }) {
   const decoder = new TextDecoder('utf-8');
   let buffer = '';
   let fullText = '';
+  // ~thinking~ 标签可能跨 chunk：累积所有 content，每次重新解析发增量
+  let contentAcc = '';
+  let emittedContentLen = 0;
+  let emittedThinkingLen = 0;
+
+  // 把新增的 content 喂进累积缓冲，再按 ~thinking~ 标签拆分发出增量
+  const THINKING_TAG = '~thinking~';
+  // 检查 buffer 末尾是否是 ~thinking~ 标签的形成中前缀（如 '~thin'），返回前缀长度
+  const trailingTagPrefixLen = (buf) => {
+    const max = Math.min(buf.length, THINKING_TAG.length - 1);
+    for (let i = max; i >= 1; i--) {
+      if (THINKING_TAG.startsWith(buf.slice(-i))) return i;
+    }
+    return 0;
+  };
+
+  const flushContent = (deltaText) => {
+    contentAcc += deltaText;
+    // 没有 ~thinking~ 标签时走快速路径：直接发 content 增量
+    if (!contentAcc.includes('~thinking~')) {
+      // 但要小心：buffer 末尾可能是正在形成中的标签前缀（如 '~thin'）
+      // 只有传了 onThinking 才需要保留前缀（否则标签也没用，全当 content 发出去更顺滑）
+      let safeLen = contentAcc.length;
+      if (typeof onThinking === 'function') {
+        const prefixLen = trailingTagPrefixLen(contentAcc);
+        safeLen = contentAcc.length - prefixLen;
+      }
+      if (safeLen > emittedContentLen) {
+        const delta = contentAcc.slice(emittedContentLen, safeLen);
+        fullText += delta;
+        onChunk(delta);
+        emittedContentLen = safeLen;
+      }
+      return;
+    }
+    // 有 ~thinking~ 标签：用 parseThinkingTags 拆分（流式模式：未闭合标签也当作 thinking）
+    const segs = parseThinkingTags(contentAcc, true);
+    let fullContent = '';
+    let fullThinking = '';
+    for (const seg of segs) {
+      if (seg.type === 'content') fullContent += seg.text;
+      else fullThinking += seg.text;
+    }
+    // 发 content 增量
+    if (fullContent.length > emittedContentLen) {
+      const delta = fullContent.slice(emittedContentLen);
+      fullText += delta;
+      onChunk(delta);
+      emittedContentLen = fullContent.length;
+    }
+    // 发 thinking 增量
+    if (fullThinking.length > emittedThinkingLen && typeof onThinking === 'function') {
+      const delta = fullThinking.slice(emittedThinkingLen);
+      onThinking(delta);
+      emittedThinkingLen = fullThinking.length;
+    }
+  };
 
   try {
     while (true) {
@@ -231,10 +358,16 @@ async function doFetch(cfg, messages, { onToken, signal }) {
         if (data === '[DONE]') continue;
         try {
           const json = JSON.parse(data);
-          const delta = json.choices?.[0]?.delta?.content || '';
-          if (delta) {
-            fullText += delta;
-            if (typeof onToken === 'function') onToken(delta);
+          const delta = json.choices?.[0]?.delta || {};
+          // 1. 思维链：reasoning_content / reasoning（直接走 onThinking，不进 fullText）
+          const reasoning = delta.reasoning_content || delta.reasoning || '';
+          if (reasoning && typeof onThinking === 'function') {
+            onThinking(reasoning);
+          }
+          // 2. 主内容：可能含 ~thinking~ 标签，进 flushContent 拆分
+          const deltaContent = delta.content || '';
+          if (deltaContent) {
+            flushContent(deltaContent);
           }
         } catch (e) {
           // 单块解析失败跳过，不中断整体
@@ -251,6 +384,72 @@ async function doFetch(cfg, messages, { onToken, signal }) {
 
 async function safeReadText(resp) {
   try { return await resp.text(); } catch (e) { return ''; }
+}
+
+// ════════════════════════════════════════
+// 思维链标签解析
+// ════════════════════════════════════════
+
+/**
+ * 我把一段文本按 ~thinking~...~thinking~ 标签拆成片段数组。
+ * 用于把"思维链"和"主内容"分离开，让 onThinking 接收 thinking，onChunk 接收 content。
+ * @param {string} text 待拆分的文本
+ * @param {boolean} [stream=false] 流式模式：未闭合的 ~thinking~ 标签内容也当作 thinking 段返回
+ *   （非流式模式下，未闭合的内容保守地当作 content）
+ * @returns {Array<{type: 'thinking'|'content', text: string}>}
+ */
+export function parseThinkingTags(text, stream = false) {
+  if (!text) return [];
+  const str = String(text);
+  const segments = [];
+  const TAG = '~thinking~';
+  let lastIdx = 0;            // 上次处理到的位置（下一段 content 的起点）
+  let inThinking = false;     // 当前是否在 thinking 段内
+  let thinkingStart = -1;     // 当前 thinking 段内容起点（开标签之后）
+  let thinkingTagStart = -1;  // 当前开标签开始的位置（未闭合时回退用）
+
+  // 手动扫描，避免正则全局状态问题
+  let pos = 0;
+  while (pos <= str.length - TAG.length) {
+    if (str.substr(pos, TAG.length) === TAG) {
+      if (!inThinking) {
+        // 开标签：前面的内容是 content
+        if (pos > lastIdx) {
+          segments.push({ type: 'content', text: str.slice(lastIdx, pos) });
+        }
+        thinkingTagStart = pos;            // 记住开标签位置
+        thinkingStart = pos + TAG.length;  // thinking 内容起点
+        inThinking = true;
+      } else {
+        // 闭标签：中间内容是 thinking
+        segments.push({ type: 'thinking', text: str.slice(thinkingStart, pos) });
+        lastIdx = pos + TAG.length;
+        inThinking = false;
+        thinkingStart = -1;
+        thinkingTagStart = -1;
+      }
+      pos += TAG.length;
+    } else {
+      pos++;
+    }
+  }
+
+  if (inThinking) {
+    // 还有未闭合的 ~thinking~ 标签
+    if (stream) {
+      // 流式模式：未闭合的内容当作 thinking（标签闭合后内容不变，增量正确）
+      segments.push({ type: 'thinking', text: str.slice(thinkingStart) });
+    } else {
+      // 非流式模式：保守处理，开标签 + 内容都当作 content（避免标签字符丢失）
+      if (thinkingTagStart < str.length) {
+        segments.push({ type: 'content', text: str.slice(thinkingTagStart) });
+      }
+    }
+  } else if (lastIdx < str.length) {
+    // 剩余的 content
+    segments.push({ type: 'content', text: str.slice(lastIdx) });
+  }
+  return segments;
 }
 
 // ════════════════════════════════════════

@@ -8,6 +8,7 @@ import { KEYS } from '../../core/storage-keys.js';
 import { getData, setData } from '../../core/storage.js';
 import { showToast, createIcon } from '../../core/ui.js';
 import bus from '../../core/events.js';
+import { grantGameReward } from '../wallet/index.js';
 
 // 5 个游戏 id（顺序固定，用于展示）
 export const GAME_IDS = ['tarot', 'truth', 'undercover', 'tavern', 'dice'];
@@ -109,6 +110,16 @@ export function reportScore(gameId, score, opts = {}) {
   });
   // 通知外面刷新积分卡（games/index.js 会监听）
   bus.emit('games:score-updated', { gameId, score: safeScore, newly });
+
+  // 赢分联动钱包：金币 = 得分 / 10，写入小金库 + emit 'wallet:changed'
+  if (safeScore > 0) {
+    try {
+      const reward = grantGameReward(safeScore, GAME_LABELS[gameId]);
+      if (reward > 0) showToast(`赢了 ${reward} 金币！`, 'success', 1400);
+    } catch (e) {
+      console.warn('[games] 钱包奖励发放失败', e);
+    }
+  }
   return newly;
 }
 

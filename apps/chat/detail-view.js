@@ -15,40 +15,108 @@ import { applySessionWallpaper } from './wallpaper.js';
 import { renderMarkdown } from './markdown.js';
 import { escapeHTML, escapeAttr, attachLongPress } from './shared-utils.js';
 import { openApp } from '../../core/router.js';
-import { playTTS, stopAllTTS } from '../../core/tts.js';
+import { stopAllTTS } from '../../core/tts.js';
 
 // 注册感叹号图标（用于消息发送失败状态）
 registerIcon('alert', 'M12 3v10 M12 17h.01');
 
-// 注入 TTS 小喇叭按钮样式（仅本模块用，全部走 CSS 变量）
-injectStyle('app-chat-tts-btn', `
-  .chat-tts-btn{
-    width:26px; height:26px; padding:0;
-    border:none; border-radius:50%;
-    background:color-mix(in srgb, var(--accent-light) 36%, transparent);
-    color:var(--accent-dark);
-    display:inline-flex; align-items:center; justify-content:center;
-    cursor:pointer; transition:var(--motion);
-    flex-shrink:0;
-  }
-  .chat-tts-btn:active{ transform:scale(var(--press-scale)); }
-  .chat-tts-btn.playing{
-    background:var(--accent); color:var(--bubble-user-text);
-    box-shadow:var(--shadow-sm);
-  }
-  /* 气泡模式：把按钮塞到 chat-meta 行 */
+// 注入思维链 / 滚动按钮 / 加载更多 样式（全部走 CSS 变量）
+injectStyle('app-chat-thinking-scroll', `
+  /* 气泡模式 meta 行（状态图标 / 时间） */
   .chat-meta{ display:flex; align-items:center; gap:6px; }
   .chat-meta:empty{ display:none; }
-  /* 对话模式：按钮浮在卡片右下角 */
-  .chat-dialog-card-body{ position:relative; }
-  .chat-dialog-card .chat-tts-btn{
-    position:absolute; right:6px; bottom:6px;
+
+  /* ── 思维链区域（消息内容上方，可折叠） ── */
+  .chat-thinking{
+    margin-bottom:6px; border-radius:var(--radius-md);
+    background:color-mix(in srgb, var(--accent) 6%, var(--bg-card));
+    overflow:hidden;
+    transition:var(--motion);
+  }
+  .chat-thinking-header{
+    display:flex; align-items:center; gap:6px;
+    padding:6px 10px; cursor:pointer;
+    font-size:var(--font-size-small); color:var(--text-hint);
+    user-select:none;
+  }
+  .chat-thinking-header:active{ transform:scale(var(--press-scale)); }
+  .chat-thinking-arrow{
+    display:inline-flex; transition:transform var(--motion);
+    color:var(--text-hint); flex-shrink:0;
+  }
+  .chat-thinking[data-collapsed="false"] .chat-thinking-arrow{ transform:rotate(180deg); }
+  .chat-thinking-label{ flex:1; min-width:0; }
+  .chat-thinking-body{
+    padding:0 10px 8px;
+    font-size:var(--font-size-small); line-height:1.55;
+    color:var(--text-hint);
+    max-height:240px; overflow-y:auto; -webkit-overflow-scrolling:touch;
+    word-break:break-word;
+  }
+  .chat-thinking[data-collapsed="true"] .chat-thinking-body{ display:none; }
+  /* 流式中给 header 加一点呼吸感，提示正在思考 */
+  .chat-thinking[data-streaming="true"] .chat-thinking-label{
+    color:var(--accent-dark);
+  }
+  .chat-thinking[data-streaming="true"] .chat-thinking-arrow{
+    animation:chatThinkingPulse 1.2s ease-in-out infinite;
+    color:var(--accent);
+  }
+  @keyframes chatThinkingPulse{
+    0%,100%{ opacity:0.5; }
+    50%{ opacity:1; }
+  }
+  /* 思维链内 markdown 样式继承 bubble */
+  .chat-thinking-body .md-p{ margin:0 0 4px; }
+  .chat-thinking-body .md-p:last-child{ margin-bottom:0; }
+  .chat-thinking-body .md-code{
+    font-family:var(--font-mono, ui-monospace, Menlo, Consolas, monospace);
+    background:color-mix(in srgb, var(--text-hint) 18%, transparent);
+    padding:1px 4px; border-radius:4px; font-size:0.9em;
+  }
+
+  /* ── 滚动到底部浮动按钮 ── */
+  .chat-scroll-btn{
+    position:absolute; right:14px; bottom:14px;
+    width:40px; height:40px; border-radius:50%;
+    background:var(--bg-card);
+    box-shadow:var(--shadow-md);
+    border:1px solid color-mix(in srgb, var(--text-hint) 14%, transparent);
+    display:flex; align-items:center; justify-content:center;
+    color:var(--accent-dark);
+    cursor:pointer; transition:var(--motion);
+    z-index:5;
+    opacity:0; transform:translateY(8px) scale(0.8); pointer-events:none;
+  }
+  .chat-scroll-btn.show{
+    opacity:1; transform:translateY(0) scale(1); pointer-events:auto;
+  }
+  .chat-scroll-btn:active{ transform:scale(var(--press-scale)); }
+  .chat-scroll-btn .chat-scroll-badge{
+    position:absolute; top:-4px; right:-4px;
+    min-width:18px; height:18px; padding:0 5px; border-radius:9px;
+    background:var(--accent); color:var(--bubble-user-text);
+    font-size:11px; font-weight:600; line-height:18px; text-align:center;
+    box-shadow:var(--shadow-sm);
+  }
+
+  /* ── 加载更多指示器 ── */
+  .chat-load-more{
+    align-self:center; text-align:center;
+    padding:8px 16px; color:var(--text-hint);
+    font-size:var(--font-size-small);
+  }
+  .chat-load-more-spinner{
+    display:inline-block; width:14px; height:14px;
+    border:1.5px solid var(--text-hint); border-top-color:transparent;
+    border-radius:50%;
+    animation:chatStatusSpin 0.8s linear infinite;
+    vertical-align:middle; margin-right:6px;
   }
 `);
 
-// 当前正在念的消息 id 与控制器（模块级，避免污染共享 state）
-let currentTTSMsgId = null;
-let currentTTSController = null;
+// 思维链区域是否被用户手动操作过（避免流式结束后覆盖用户意图）
+const thinkingUserToggled = new WeakSet();
 
 // ════════════════════════════════════════
 // 聊天详情页渲染
@@ -80,7 +148,10 @@ export async function renderChatDetailView() {
       <button class="app-header-gear" id="chat-settings" aria-label="聊天设置">${createIcon('settings', 18).outerHTML}</button>
       <button class="chat-more" id="chat-more" aria-label="聊天设置">${createIcon('more', 20).outerHTML}</button>
     </div>
-    <div class="chat-messages" id="chat-messages" data-mode="${escapeAttr(mode)}"></div>
+    <div class="chat-messages" id="chat-messages" data-mode="${escapeAttr(mode)}">
+      <div class="chat-load-more" id="chat-load-more" style="display:none"><span class="chat-load-more-spinner"></span>正在加载更多...</div>
+    </div>
+    <button class="chat-scroll-btn" id="chat-scroll-btn" type="button" aria-label="滚动到底部">${createIcon('chevron-down', 20).outerHTML}</button>
     <div class="chat-input-bar">
       <div class="chat-quote-preview" id="chat-quote-preview" style="display:none">
         <div class="chat-quote-preview-text" id="chat-quote-preview-text"></div>
@@ -98,6 +169,10 @@ export async function renderChatDetailView() {
   state.messageListEl = container.querySelector('#chat-messages');
   state.inputEl = container.querySelector('#chat-input');
   state.sendBtnEl = container.querySelector('#chat-send');
+  state.scrollBtnEl = container.querySelector('#chat-scroll-btn');
+  state.loadMoreEl = container.querySelector('#chat-load-more');
+  state.unseenNewCount = 0;
+  state.allMessagesLoaded = false;
 
   // 绑定事件
   container.querySelector('#chat-back').addEventListener('click', backToSessionList);
@@ -110,6 +185,14 @@ export async function renderChatDetailView() {
   state.inputEl.addEventListener('input', onInputChanged);
   container.querySelector('#chat-quote-close').addEventListener('click', () => clearQuote());
 
+  // 滚动监听：上滑显示"回到底部"按钮；滑到顶部触发加载更多
+  state.messageListEl.addEventListener('scroll', onMessagesScroll);
+  state.scrollBtnEl.addEventListener('click', () => {
+    state.unseenNewCount = 0;
+    updateScrollBtn();
+    state.messageListEl.scrollTo({ top: state.messageListEl.scrollHeight, behavior: 'smooth' });
+  });
+
   // 应用壁纸
   applySessionWallpaper();
 
@@ -121,6 +204,9 @@ export async function renderChatDetailView() {
   // 加载消息
   await loadAndRenderMessages();
 }
+
+// 分页：首次加载最近 50 条，滚到顶部再加载更早的
+const MESSAGE_PAGE_SIZE = 50;
 
 async function loadAndRenderMessages() {
   const state = getState();
@@ -142,16 +228,56 @@ async function loadAndRenderMessages() {
     return ta - tb;
   });
 
+  // 缓存全量消息，供"加载更多"使用
+  state.allMessages = messages;
+  state.allMessagesLoaded = messages.length <= MESSAGE_PAGE_SIZE;
+  state.visibleCount = Math.min(messages.length, MESSAGE_PAGE_SIZE);
+
+  // 清空列表（保留 load-more 占位）
   state.messageListEl.innerHTML = '';
+  if (state.loadMoreEl) state.messageListEl.appendChild(state.loadMoreEl);
+  updateLoadMoreIndicator();
+
   if (messages.length === 0) {
-    renderEmptyState();
-    updateChatHeader(null);
+    // 空会话：如果有问候语就显示为第一条 AI 消息（不落库，仅展示）
+    const greeting = state.currentCharacter?.greeting;
+    if (greeting && greeting.trim()) {
+      const greetingMsg = {
+        id: '__greeting__',
+        role: 'assistant',
+        content: greeting,
+        type: 'text',
+        timestamp: session.lastAt || session.createdAt || Date.now(),
+        _greeting: true
+      };
+      appendTimeDivider(new Date(greetingMsg.timestamp).getTime());
+      appendMessageEl(greetingMsg);
+      updateChatHeader(greetingMsg.timestamp);
+    } else {
+      renderEmptyState();
+      updateChatHeader(null);
+    }
     return;
   }
-  // 时间分组：相邻消息间隔 >5 分钟插入时间分隔条
+
+  renderVisibleMessages();
+  updateChatHeader(messages[messages.length - 1].timestamp || messages[messages.length - 1].createdAt);
+  scrollToBottom();
+}
+
+/** 渲染当前 visibleCount 范围内的消息（最后 N 条） */
+function renderVisibleMessages() {
+  const state = getState();
+  if (!state.messageListEl) return;
+  const messages = state.allMessages || [];
+  const visible = messages.slice(Math.max(0, messages.length - (state.visibleCount || MESSAGE_PAGE_SIZE)));
+  // 清空但保留 load-more 占位
+  state.messageListEl.innerHTML = '';
+  if (state.loadMoreEl) state.messageListEl.appendChild(state.loadMoreEl);
+  updateLoadMoreIndicator();
   let lastTime = 0;
   const GROUP_GAP_MS = 5 * 60 * 1000;
-  messages.forEach((msg) => {
+  visible.forEach((msg) => {
     const t = new Date(msg.timestamp || msg.createdAt || 0).getTime();
     if (t - lastTime > GROUP_GAP_MS) {
       appendTimeDivider(t);
@@ -159,8 +285,88 @@ async function loadAndRenderMessages() {
     appendMessageEl(msg);
     lastTime = t;
   });
-  updateChatHeader(messages[messages.length - 1].timestamp || messages[messages.length - 1].createdAt);
-  scrollToBottom();
+}
+
+/** 滚到顶部时加载更早的消息（保持滚动位置不跳到顶部） */
+async function loadMoreMessages() {
+  const state = getState();
+  if (!state.messageListEl || !state.allMessages) return;
+  if (state.allMessagesLoaded) return;
+  if (state.isLoadingMore) return;
+  if (state.isReplying) return; // 回复中不重渲染，避免冲掉流式气泡
+  state.isLoadingMore = true;
+  updateLoadMoreIndicator();
+  // 模拟一点延迟让 spinner 可见（实际 DB 读取很快）
+  await new Promise((r) => setTimeout(r, 80));
+  const listEl = state.messageListEl;
+  const oldScrollHeight = listEl.scrollHeight;
+  const oldScrollTop = listEl.scrollTop;
+  const total = state.allMessages.length;
+  const nextVisible = Math.min(total, (state.visibleCount || MESSAGE_PAGE_SIZE) + MESSAGE_PAGE_SIZE);
+  state.visibleCount = nextVisible;
+  state.allMessagesLoaded = nextVisible >= total;
+  renderVisibleMessages();
+  // 保持视图位置：新内容加在顶部，scrollHeight 增加，scrollTop 同步下移
+  const newScrollHeight = listEl.scrollHeight;
+  listEl.scrollTop = newScrollHeight - oldScrollHeight + oldScrollTop;
+  state.isLoadingMore = false;
+  updateLoadMoreIndicator();
+}
+
+/** 更新"加载更多"指示器显隐 */
+function updateLoadMoreIndicator() {
+  const state = getState();
+  if (!state.loadMoreEl) return;
+  // 还有更早的消息可加载时显示指示器（loading 中显示 spinner，否则显示提示）
+  const hasMore = !state.allMessagesLoaded && state.allMessages && state.allMessages.length > MESSAGE_PAGE_SIZE;
+  state.loadMoreEl.style.display = hasMore ? '' : 'none';
+}
+
+/** 滚动监听：上滑显示回到底部按钮 + 滑到顶部加载更多 */
+const _onScrollThrottled = throttle(() => {
+  const state = getState();
+  if (!state.messageListEl) return;
+  const el = state.messageListEl;
+  const distToBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+  // 距顶部 < 30 触发加载更多
+  if (el.scrollTop < 30 && !state.allMessagesLoaded) {
+    loadMoreMessages();
+  }
+  updateScrollBtn(distToBottom > 200);
+}, 80);
+
+function onMessagesScroll() {
+  _onScrollThrottled();
+}
+
+/** 更新"回到底部"按钮显隐 + 未读新消息徽章 */
+function updateScrollBtn(farFromBottom) {
+  const state = getState();
+  if (!state.scrollBtnEl) return;
+  const show = farFromBottom || (state.unseenNewCount || 0) > 0;
+  state.scrollBtnEl.classList.toggle('show', !!show);
+  // 徽章：有未看新消息时显示
+  let badge = state.scrollBtnEl.querySelector('.chat-scroll-badge');
+  const count = state.unseenNewCount || 0;
+  if (count > 0) {
+    if (!badge) {
+      badge = document.createElement('span');
+      badge.className = 'chat-scroll-badge';
+      state.scrollBtnEl.appendChild(badge);
+    }
+    badge.textContent = count > 99 ? '99+' : String(count);
+  } else if (badge) {
+    badge.remove();
+  }
+}
+
+/** 判断是否在底部附近（用于新消息到来时决定自动滚还是只提示） */
+export function isNearBottom() {
+  const state = getState();
+  if (!state.messageListEl) return true;
+  const el = state.messageListEl;
+  const distToBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+  return distToBottom < 120;
 }
 
 /** 插入时间分隔条（居中灰色胶囊小字） */
@@ -224,6 +430,14 @@ export function appendMessageEl(msg, opts = {}) {
   if (empty) empty.remove();
   const el = createMessageEl(msg, opts);
   state.messageListEl.appendChild(el);
+  // 新消息到来：流式中不在此处判定（由流式回调处理）；
+  // 非流式 AI 新消息且用户不在底部 -> 不自动滚，只显示"新消息"提示
+  if (!opts.stream && msg.role === 'assistant' && !msg._greeting) {
+    if (!isNearBottom()) {
+      state.unseenNewCount = (state.unseenNewCount || 0) + 1;
+      updateScrollBtn(true);
+    }
+  }
   return el;
 }
 
@@ -280,12 +494,16 @@ function createMessageEl(msg, opts = {}) {
     return el;
   }
 
+  // 1对1会话判断：当前所有会话都是单角色，未来支持群聊时扩展
+  const isOneOnOne = isOneOnOneSession(state.currentSession);
+  // 思维链 HTML：AI 消息且有 thinking 字段时渲染（流式中由 updateThinkingUI 动态创建）
+  const showThinking = !isUser && !opts.stream && !!(msg.thinking && msg.thinking.trim());
+  const thinkingHTML = showThinking ? renderThinkingHTML(msg.thinking, { streaming: false }) : '';
+
   const el = document.createElement('div');
 
   if (mode === 'dialog') {
     // 对话模式：Kelivo 风格富文本卡片流
-    // AI 消息渲染为独立卡片（背景/圆角/阴影 + 头像昵称 + markdown 正文 + 时间）
-    // 用户消息保持简洁：只有名字 + 内容，无卡片背景
     el.className = `chat-msg-row dialog ${isUser ? 'user' : 'ai'}`;
     el.dataset.id = msg.id;
     const name = isUser ? '我' : (state.currentCharacter?.name || state.currentCharacter?.nickname || '她');
@@ -310,19 +528,21 @@ function createMessageEl(msg, opts = {}) {
     }
 
     if (isUser) {
-      // 用户消息：简洁，无卡片背景，只有名字 + 内容
+      // 用户消息：与 AI 卡片对称 —— 头像(右) + 时间 + 名字 + 内容
+      const avatarHTML = renderUserAvatar();
       el.innerHTML = `
         <div class="chat-dialog-user">
-          <div class="chat-dialog-user-name">${escapeHTML(name)}</div>
           <div class="chat-bubble">${quoteHTML}${inner}</div>
+          <div class="chat-dialog-user-meta">
+            <span class="chat-dialog-user-time">${escapeHTML(time)}</span>
+            <span class="chat-dialog-user-name">${escapeHTML(name)}</span>
+          </div>
+          <div class="chat-dialog-card-avatar chat-dialog-user-avatar">${avatarHTML}</div>
         </div>
       `;
     } else {
-      // AI 消息：独立卡片，头像 + 昵称 + 时间 + markdown 正文
+      // AI 消息：独立卡片，头像 + 昵称 + 时间 + 思维链 + markdown 正文
       const avatarHTML = renderCharacterAvatar(state.currentCharacter);
-      // AI 文本消息：在卡片正文里塞小喇叭按钮（流式中、空内容、图片消息不显示）
-      const showTTSDialog = !isImage && !opts.stream && !!(msg.content);
-      const ttsHTML = showTTSDialog ? renderTTSButton(msg.id) : '';
       el.innerHTML = `
         <div class="chat-dialog-card">
           <div class="chat-dialog-card-header">
@@ -330,11 +550,12 @@ function createMessageEl(msg, opts = {}) {
             <div class="chat-dialog-card-name">${escapeHTML(name)}</div>
             <div class="chat-dialog-card-time">${escapeHTML(time)}</div>
           </div>
-          <div class="chat-bubble chat-dialog-card-body">${quoteHTML}${inner}${ttsHTML}</div>
+          ${thinkingHTML}
+          <div class="chat-bubble chat-dialog-card-body">${quoteHTML}${inner}</div>
         </div>
       `;
-      if (showTTSDialog) bindTTSButton(el, msg);
     }
+    if (showThinking) bindThinkingToggle(el);
     attachLongPress(el, () => openMessageActionSheet(msg));
     return el;
   }
@@ -345,8 +566,8 @@ function createMessageEl(msg, opts = {}) {
 
   // 头像：AI 用 character.avatar；用户用默认 smile icon
   const avatarHTML = isUser ? renderUserAvatar() : renderCharacterAvatar(state.currentCharacter);
-  // 多角色昵称：仅在 AI 消息且有角色名时显示
-  const nicknameHTML = (!isUser && state.currentCharacter?.name)
+  // 昵称：1对1会话不显示，多角色/群聊才显示
+  const nicknameHTML = (!isUser && !isOneOnOne && state.currentCharacter?.name)
     ? `<div class="chat-nickname">${escapeHTML(state.currentCharacter.name)}</div>`
     : '';
 
@@ -367,18 +588,16 @@ function createMessageEl(msg, opts = {}) {
     bubbleInner += isUser ? escapeHTML(content) : renderMarkdown(content);
   }
 
-  // 状态图标（仅用户消息显示）；AI 消息显示小喇叭按钮
+  // 状态图标（仅用户消息显示）
   const statusHTML = isUser ? renderStatusIndicator(msg) : '';
-  // AI 文本消息才显示小喇叭（流式中、空内容、图片消息不显示）
-  const showTTS = !isUser && !isImage && !opts.stream && !!(msg.content);
-  const ttsHTML = showTTS ? renderTTSButton(msg.id) : '';
 
   el.innerHTML = `
     <div class="chat-avatar">${avatarHTML}</div>
     <div class="chat-msg-main">
       ${nicknameHTML}
+      ${thinkingHTML}
       <div class="chat-bubble">${bubbleInner}</div>
-      <div class="chat-meta">${statusHTML}${ttsHTML}</div>
+      <div class="chat-meta">${statusHTML}</div>
     </div>
   `;
 
@@ -396,13 +615,120 @@ function createMessageEl(msg, opts = {}) {
       });
     }
   }
-  // 小喇叭按钮：点一下念 / 再点一下停
-  if (showTTS) {
-    bindTTSButton(el, msg);
-  }
-  // 长按操作
+  // 思维链折叠/展开
+  if (showThinking) bindThinkingToggle(el);
+  // 长按操作（TTS 已改为长按菜单，不再常驻按钮）
   attachLongPress(el, () => openMessageActionSheet(msg));
   return el;
+}
+
+/** 判断是否为 1对1 会话（非群聊）。当前所有会话都是单角色，未来扩展时改这里 */
+function isOneOnOneSession(session) {
+  if (!session) return true;
+  // 群聊字段（未来支持）：isGroup=true 或 participants.length > 1
+  if (session.isGroup) return false;
+  if (Array.isArray(session.participants) && session.participants.length > 1) return false;
+  return true;
+}
+
+/** 渲染思维链区域 HTML（默认折叠） */
+function renderThinkingHTML(thinking, opts = {}) {
+  const streaming = opts.streaming;
+  const collapsed = streaming ? 'false' : 'true';
+  const streamAttr = streaming !== undefined ? `data-streaming="${streaming ? 'true' : 'false'}"` : '';
+  return `
+    <div class="chat-thinking" data-collapsed="${collapsed}" ${streamAttr}>
+      <div class="chat-thinking-header">
+        <span class="chat-thinking-arrow">${createIcon('chevron-down', 14).outerHTML}</span>
+        <span class="chat-thinking-label">TA 想了想...</span>
+      </div>
+      <div class="chat-thinking-body">${renderMarkdown(thinking)}</div>
+    </div>
+  `;
+}
+
+/** 绑定思维链 header 点击折叠/展开 */
+function bindThinkingToggle(el) {
+  const thinkEl = el.querySelector('.chat-thinking');
+  if (!thinkEl) return;
+  const header = thinkEl.querySelector('.chat-thinking-header');
+  if (!header) return;
+  header.addEventListener('click', (e) => {
+    e.stopPropagation();
+    thinkingUserToggled.add(thinkEl);
+    const collapsed = thinkEl.dataset.collapsed === 'true';
+    thinkEl.dataset.collapsed = collapsed ? 'false' : 'true';
+  });
+}
+
+/**
+ * 实时更新思维链区域（流式中由 sending.js 调用）。
+ * - 区域不存在则创建并插入到 bubble 之前
+ * - 实时追加 thinking 文本（markdown 渲染）
+ * - 流式中保持展开；流式结束后折叠（除非用户手动展开过）
+ * @param {HTMLElement} msgEl 消息行元素
+ * @param {string} thinkingText 思维链全文
+ * @param {object} [opts] { streaming?: boolean }
+ */
+export function updateThinkingUI(msgEl, thinkingText, opts = {}) {
+  if (!msgEl || !msgEl.isConnected) return;
+  let thinkEl = msgEl.querySelector('.chat-thinking');
+  const bubbleEl = msgEl.querySelector('.chat-bubble');
+  if (!thinkingText || !thinkingText.trim()) {
+    if (thinkEl) thinkEl.remove();
+    return;
+  }
+  if (!thinkEl) {
+    // 创建思维链区域
+    const wrapper = document.createElement('div');
+    wrapper.innerHTML = renderThinkingHTML(thinkingText, { streaming: opts.streaming });
+    thinkEl = wrapper.firstElementChild;
+    if (!thinkEl) return;
+    // 绑定点击折叠/展开
+    const header = thinkEl.querySelector('.chat-thinking-header');
+    if (header) {
+      header.addEventListener('click', (e) => {
+        e.stopPropagation();
+        thinkingUserToggled.add(thinkEl);
+        const collapsed = thinkEl.dataset.collapsed === 'true';
+        thinkEl.dataset.collapsed = collapsed ? 'false' : 'true';
+      });
+    }
+    // 插入到 bubble 之前（气泡模式在 chat-msg-main 内；对话模式在 chat-dialog-card 内）
+    if (bubbleEl && bubbleEl.parentNode) {
+      bubbleEl.parentNode.insertBefore(thinkEl, bubbleEl);
+    } else {
+      msgEl.appendChild(thinkEl);
+    }
+  } else {
+    // 更新内容
+    const body = thinkEl.querySelector('.chat-thinking-body');
+    if (body) body.innerHTML = renderMarkdown(thinkingText);
+  }
+  // 流式状态：流式中展开（让主人看到思考过程），结束后折叠（除非用户手动操作过）
+  if (opts.streaming !== undefined) {
+    thinkEl.dataset.streaming = opts.streaming ? 'true' : 'false';
+    if (!thinkingUserToggled.has(thinkEl)) {
+      thinkEl.dataset.collapsed = opts.streaming ? 'false' : 'true';
+    }
+  }
+}
+
+/** 刷新当前详情页里所有 AI 头像（avatar:updated 事件触发） */
+export function refreshAvatar() {
+  const state = getState();
+  if (!state.containerEl || !state.currentCharacter) return;
+  const newAvatarHTML = renderCharacterAvatar(state.currentCharacter);
+  // 更新消息列表里所有 AI 头像
+  const avatars = state.containerEl.querySelectorAll('.chat-msg-row.ai .chat-avatar, .chat-dialog-card-avatar');
+  avatars.forEach((avEl) => {
+    // 跳过用户头像（chat-dialog-user-avatar）
+    if (avEl.classList.contains('chat-dialog-user-avatar')) return;
+    avEl.innerHTML = newAvatarHTML;
+  });
+  // 更新顶部 header 头像（如有）
+  const headerAv = state.containerEl.querySelector('#chat-header-avatar');
+  if (headerAv) headerAv.innerHTML = newAvatarHTML;
 }
 
 /** 渲染角色头像（36px 圆形） */
@@ -548,99 +874,12 @@ function openImagePreview(url) {
 }
 
 // ════════════════════════════════════════
-// TTS 小喇叭按钮：点一下念给我听 / 再点一下停
+// TTS：常驻按钮已移除，"念给我听"改为长按菜单项（见 message-actions.js）。
+// 这里只保留 stopChatTTS 供 unmount 时停掉正在念的。
 // ════════════════════════════════════════
-
-/** 渲染小喇叭按钮 HTML（默认未播放态） */
-function renderTTSButton(msgId) {
-  const playing = currentTTSMsgId === msgId;
-  return `<button class="chat-tts-btn${playing ? ' playing' : ''}" data-msg-id="${escapeAttr(msgId)}" data-act="tts" type="button" aria-label="${playing ? '停止' : '念给我听'}" aria-pressed="${playing ? 'true' : 'false'}">${createIcon(playing ? 'pause' : 'volume', 14).outerHTML}</button>`;
-}
-
-/** 给小喇叭按钮绑定点击事件 */
-function bindTTSButton(rowEl, msg) {
-  const btn = rowEl.querySelector('.chat-tts-btn[data-act="tts"]');
-  if (!btn) return;
-  btn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    // 正在念这一条 -> 停
-    if (currentTTSMsgId === msg.id && currentTTSController) {
-      stopCurrentTTS();
-      return;
-    }
-    // 否则开始念这一条（会先停掉旧的）
-    const text = String(msg.content || '');
-    if (!text) {
-      showToast('这条没什么可以念呀', 'default', 1200);
-      return;
-    }
-    startTTS(msg.id, text);
-  });
-}
-
-/** 开始念一条消息 */
-function startTTS(msgId, text) {
-  // 先停掉旧的
-  stopCurrentTTS();
-  // 标记为正在念，先把按钮换成 pause 图标（避免等远程合成时还显示 volume）
-  currentTTSMsgId = msgId;
-  updateTTSButton(msgId, true);
-  playTTS(text).then((ctrl) => {
-    if (!ctrl) {
-      // 没拿到控制器（空文本或被清洗为空）
-      currentTTSMsgId = null;
-      updateTTSButton(msgId, false);
-      return;
-    }
-    // 如果期间用户又点了别的，把这个停掉
-    if (currentTTSMsgId !== msgId) {
-      try { ctrl.stop(); } catch (e) {}
-      return;
-    }
-    currentTTSController = ctrl;
-    ctrl.onEnd = () => {
-      if (currentTTSMsgId === msgId) {
-        currentTTSMsgId = null;
-        currentTTSController = null;
-        updateTTSButton(msgId, false);
-      }
-    };
-  }).catch((e) => {
-    console.warn('[chat] TTS 播放失败', e);
-    currentTTSMsgId = null;
-    currentTTSController = null;
-    updateTTSButton(msgId, false);
-    showToast('念不出来呀，去「我的声音」看看配置嘛', 'error');
-  });
-}
-
-/** 停掉当前正在念的，并复位按钮 */
-function stopCurrentTTS() {
-  const prevId = currentTTSMsgId;
-  const prevCtrl = currentTTSController;
-  currentTTSMsgId = null;
-  currentTTSController = null;
-  if (prevCtrl) {
-    try { prevCtrl.stop(); } catch (e) {}
-  }
-  if (prevId) updateTTSButton(prevId, false);
-}
-
-/** 更新某个消息的小喇叭按钮播放态 */
-function updateTTSButton(msgId, playing) {
-  const listEl = getState().messageListEl;
-  if (!listEl) return;
-  const btn = listEl.querySelector(`.chat-tts-btn[data-msg-id="${cssEscape(msgId)}"]`);
-  if (!btn) return;
-  btn.classList.toggle('playing', !!playing);
-  btn.setAttribute('aria-pressed', playing ? 'true' : 'false');
-  btn.setAttribute('aria-label', playing ? '停止' : '念给我听');
-  btn.innerHTML = createIcon(playing ? 'pause' : 'volume', 14).outerHTML;
-}
 
 /** 离开聊天详情页时调一下，把正在念的停掉 */
 export function stopChatTTS() {
-  stopCurrentTTS();
   try { stopAllTTS(); } catch (e) {}
 }
 

@@ -6,7 +6,7 @@
 // 依赖：core/storage.js, core/storage-keys.js, core/ui.js, core/events.js, core/util.js
 
 import { KEYS, STORES } from '../../core/storage-keys.js';
-import { getData, setData, compressImage, setDB, generateId, getNow } from '../../core/storage.js';
+import { getData, setData, compressImage, setDB, getDB, generateId, getNow } from '../../core/storage.js';
 import { showToast, showConfirm, showBottomSheet, createIcon } from '../../core/ui.js';
 import bus from '../../core/events.js';
 import { injectStyle, pickImageFile, isUsableImage, clamp } from '../../core/util.js';
@@ -308,10 +308,24 @@ function bindControls() {
     renderPreview();
   });
   // 保存
-  containerEl.querySelector('#av-save').addEventListener('click', () => {
+  containerEl.querySelector('#av-save').addEventListener('click', async () => {
     setData(KEYS.avatarState, workingState);
+    // 同步更新当前角色的 avatar 字段，让桌面 / 钱包 / 角色卡都跟着换头像
+    try {
+      const cid = getData(KEYS.chatCurrentCharacter, null) || 'char_chuyi';
+      const character = await getDB(STORES.characters, cid);
+      if (character && typeof character === 'object') {
+        character.avatar = isUsableImage(workingState.image) ? workingState.image : '';
+        character.updatedAt = getNow();
+        await setDB(STORES.characters, cid, character);
+      }
+    } catch (e) {
+      console.warn('[avatar] 同步角色头像失败', e);
+    }
     showToast('头像换好啦', 'success', 1400);
     bus.emit('avatar:updated', { state: workingState });
+    // 顺便通知角色卡刷新（character.avatar 已变）
+    bus.emit('character:updated', { source: 'avatar' });
   });
   // 存成图片（打开 sheet 选「存到相册」/「下载到本地」）
   containerEl.querySelector('#av-export').addEventListener('click', () => openExportSheet());

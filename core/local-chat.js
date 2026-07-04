@@ -208,3 +208,30 @@ export async function localChat(userText, characterId = 'global') {
   // 兜底
   return getLocalReply(userText, characterId);
 }
+
+/**
+ * 我把本地兜底回复按 ~thinking~ 标签拆分，通过回调流式传出。
+ * 思维内容走 onThinking，主内容走 onChunk，互不污染历史。
+ * 调用方（如 sending.js）可以把 onChunk 的内容存进 aiMsg.content，把 onThinking 存进 aiMsg.thinking。
+ * 兼容旧调用：没传回调时退化为返回 { content, thinking } 对象，调用方自己取值。
+ * @param {object} opts { userText, characterId?, onChunk?, onThinking? }
+ * @returns {Promise<{content: string, thinking: string}>}
+ */
+export async function streamLocalReply(opts = {}) {
+  const { userText, characterId = 'global', onChunk, onThinking } = opts;
+  // 生成兜底回复（关键词 + 时段 + 去重）
+  const reply = getLocalReply(userText, characterId);
+  // 拆 ~thinking~ 标签：thinking 部分走 onThinking，content 部分走 onChunk
+  // parseThinkingTags 在本文件已定义，原本没人调用，这里接入
+  const parsed = parseThinkingTags(reply);
+  const content = parsed.content;
+  const thinking = parsed.thinking;
+  // 先发 thinking 再发 content，模拟"先想后说"
+  if (thinking && typeof onThinking === 'function') {
+    onThinking(thinking);
+  }
+  if (content && typeof onChunk === 'function') {
+    onChunk(content);
+  }
+  return { content, thinking };
+}

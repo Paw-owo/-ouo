@@ -11,14 +11,43 @@
 
 import { KEYS } from '../../core/storage-keys.js';
 import { getData, setData } from '../../core/storage.js';
-import { showToast, createIcon, showBottomSheet } from '../../core/ui.js';
+import { showToast, createIcon, showBottomSheet, showConfirm } from '../../core/ui.js';
 import bus from '../../core/events.js';
+import { injectStyle } from '../../core/util.js';
 import { openApp } from '../../core/router.js';
 import { applyAppBg } from '../../core/app-bg.js';
 
 let containerEl = null;
 let ctxRef = null;
 let keydownListener = null;
+// 科学计算面板是否展开
+let sciPanelOpen = false;
+
+// 科学计算键样式（横向滚动一行小按钮）
+injectStyle('app-calculator-sci-style', `
+  .calc-sci-keys{
+    display:flex; gap:6px; overflow-x:auto; padding:6px 2px 8px;
+    scrollbar-width:none; -webkit-overflow-scrolling:touch;
+  }
+  .calc-sci-keys::-webkit-scrollbar{ display:none; }
+  .calc-sci-key{
+    flex-shrink:0; min-width:44px; padding:8px 10px;
+    border-radius:var(--radius-md);
+    background:color-mix(in srgb, var(--accent-light) 30%, transparent);
+    color:var(--accent-dark); font-size:var(--font-size-small);
+    border:none; cursor:pointer; transition:var(--motion);
+  }
+  .calc-sci-key:active{ transform:scale(var(--press-scale)); }
+  .calc-fx-toggle{
+    background:transparent; color:var(--text-secondary);
+    border:none; cursor:pointer; padding:6px 8px;
+    border-radius:var(--radius-sm); transition:var(--motion);
+    font-size:var(--font-size-small);
+  }
+  .calc-fx-toggle.active{
+    background:var(--accent-light); color:var(--accent-dark); font-weight:600;
+  }
+`);
 
 // 计算器状态机
 //   display: 当前显示的字符串（用户正在输入）
@@ -42,11 +71,13 @@ export async function mount(container, context) {
     <div class="app-header">
       <button class="app-back" id="calc-back" aria-label="返回桌面">${createIcon('back', 20).outerHTML}</button>
       <div class="app-header-title">计算器</div>
+      <button class="calc-fx-toggle" id="calc-fx-toggle" aria-label="科学计算" title="科学计算">fx</button>
       <button class="app-header-gear" id="calc-settings" aria-label="计算器设置">${createIcon('settings', 18).outerHTML}</button>
       <button class="app-history" id="calc-history-btn" aria-label="看看历史记录">${createIcon('calendar', 20).outerHTML}</button>
     </div>
     <div class="app-body" id="calc-body">
       <div class="calc-display" id="calc-display" aria-live="polite">0</div>
+      <div class="calc-sci-keys" id="calc-sci-keys" style="display:none"></div>
       <div class="calc-keys" id="calc-keys"></div>
     </div>
   `;
@@ -55,8 +86,11 @@ export async function mount(container, context) {
   container.querySelector('#calc-history-btn').addEventListener('click', openHistorySheet);
   // 齿轮跳到设置「数据与系统」分组
   container.querySelector('#calc-settings').addEventListener('click', () => openApp('settings', { deepLink: { tab: 'system' } }));
+  // 科学面板展开 / 收起
+  container.querySelector('#calc-fx-toggle').addEventListener('click', toggleSciPanel);
 
   renderKeys();
+  renderSciKeys();
   updateDisplay();
 
   // 键盘可达（桌面调试也舒服）
@@ -72,6 +106,7 @@ export function unmount() {
   }
   containerEl = null;
   ctxRef = null;
+  sciPanelOpen = false;
 }
 
 // ════════════════════════════════════════
@@ -114,6 +149,95 @@ function renderKeys() {
     btn.addEventListener('click', () => onKey(k));
     wrap.appendChild(btn);
   });
+}
+
+// 科学计算键（横向滚动一行）：sin/cos/tan/log/ln/√/x²/π/e/( )
+// 三角函数用弧度制（与 JS Math 一致）
+const SCI_KEYS = [
+  { label: 'sin', action: 'sci', fn: 'sin' },
+  { label: 'cos', action: 'sci', fn: 'cos' },
+  { label: 'tan', action: 'sci', fn: 'tan' },
+  { label: 'log', action: 'sci', fn: 'log' },
+  { label: 'ln',  action: 'sci', fn: 'ln' },
+  { label: '√',   action: 'sci', fn: 'sqrt' },
+  { label: 'x²',  action: 'sci', fn: 'square' },
+  { label: 'π',   action: 'const', val: Math.PI },
+  { label: 'e',   action: 'const', val: Math.E },
+  { label: '(',   action: 'paren', ch: '(' },
+  { label: ')',   action: 'paren', ch: ')' }
+];
+
+function renderSciKeys() {
+  const wrap = containerEl.querySelector('#calc-sci-keys');
+  if (!wrap) return;
+  wrap.innerHTML = '';
+  SCI_KEYS.forEach((k) => {
+    const btn = document.createElement('button');
+    btn.className = 'calc-sci-key';
+    btn.textContent = k.label;
+    btn.setAttribute('aria-label', k.label);
+    btn.addEventListener('click', () => onSciKey(k));
+    wrap.appendChild(btn);
+  });
+}
+
+// 展开 / 收起科学面板
+function toggleSciPanel() {
+  sciPanelOpen = !sciPanelOpen;
+  const panel = containerEl?.querySelector('#calc-sci-keys');
+  const toggle = containerEl?.querySelector('#calc-fx-toggle');
+  if (panel) panel.style.display = sciPanelOpen ? 'flex' : 'none';
+  if (toggle) toggle.classList.toggle('active', sciPanelOpen);
+}
+
+// 科学键处理：一元函数 / 常数 / 括号
+function onSciKey(k) {
+  if (k.action === 'sci') {
+    const cur = parseNumber(state.display);
+    const r = applySciFn(k.fn, cur);
+    if (r === null) { updateDisplay(); return; }
+    state.display = formatNumber(r);
+    state.justEvaluated = true;
+  } else if (k.action === 'const') {
+    // 插入常数：清掉当前 display（若刚算完或还是 0），直接放常数值
+    state.display = formatNumber(k.val);
+    state.justEvaluated = true;
+  } else if (k.action === 'paren') {
+    // 括号：直接拼进 display（状态机不解析括号，仅作展示；parseFloat 会忽略非数字字符）
+    if (state.justEvaluated || state.display === '0') {
+      state.display = k.ch;
+    } else {
+      state.display += k.ch;
+    }
+    state.justEvaluated = false;
+  }
+  updateDisplay();
+}
+
+// 一元科学函数
+function applySciFn(fn, x) {
+  let r;
+  switch (fn) {
+    case 'sin': r = Math.sin(x); break;
+    case 'cos': r = Math.cos(x); break;
+    case 'tan': r = Math.tan(x); break;
+    case 'log':
+      if (x <= 0) { showToast('log 要正数才行哦', 'error', 1400); return null; }
+      r = Math.log10(x); break;
+    case 'ln':
+      if (x <= 0) { showToast('ln 要正数才行哦', 'error', 1400); return null; }
+      r = Math.log(x); break;
+    case 'sqrt':
+      if (x < 0) { showToast('负数开不出来呀', 'error', 1400); return null; }
+      r = Math.sqrt(x); break;
+    case 'square': r = x * x; break;
+    default: return null;
+  }
+  if (!Number.isFinite(r)) {
+    showToast('算不出来啦，这个数字好奇怪', 'error', 1600);
+    return null;
+  }
+  return r;
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -331,7 +455,7 @@ async function openHistorySheet() {
     clearBtn.textContent = '把历史记录都清掉';
     clearBtn.style.marginTop = '12px';
     clearBtn.addEventListener('click', () => {
-      ctxRef.showConfirm({
+      showConfirm({
         title: '真的要清掉吗？',
         body: '这些记录会全部不见啦，确定的话就点确认嘛',
         confirmText: '嗯，清掉吧',
