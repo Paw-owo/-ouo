@@ -6,6 +6,7 @@
 // 依赖：无（loader 是动态 import，懒加载）
 
 export const APPS = [
+  // ── dock ──
   {
     id: 'settings',
     name: '设置',
@@ -15,6 +16,8 @@ export const APPS = [
     page: 0,
     loader: () => import('./apps/settings/index.js')
   },
+
+  // ── page 0 ──
   {
     id: 'calculator',
     name: '计算器',
@@ -23,9 +26,101 @@ export const APPS = [
     dock: false,
     page: 0,
     loader: () => import('./apps/calculator/index.js')
+  },
+  {
+    id: 'memo',
+    name: '备忘录',
+    icon: 'memo',
+    iconColor: '#7AA2D6',
+    dock: false,
+    page: 0,
+    loader: () => import('./apps/memo/index.js')
+  },
+  {
+    id: 'countdown',
+    name: '倒计时',
+    icon: 'calendar',
+    iconColor: '#D4A87A',
+    dock: false,
+    page: 0,
+    loader: () => import('./apps/countdown/index.js')
+  },
+  {
+    id: 'anniversary',
+    name: '纪念日',
+    icon: 'heart',
+    iconColor: '#F5A0B0',
+    dock: false,
+    page: 0,
+    loader: () => import('./apps/anniversary/index.js')
+  },
+  {
+    id: 'mood',
+    name: '心情',
+    icon: 'smile',
+    iconColor: '#F5D88A',
+    dock: false,
+    page: 0,
+    loader: () => import('./apps/mood/index.js')
+  },
+  {
+    id: 'weather',
+    name: '天气',
+    icon: 'weather',
+    iconColor: '#7EC4E0',
+    dock: false,
+    page: 0,
+    loader: () => import('./apps/weather/index.js')
+  },
+
+  // ── page 1 ──
+  {
+    id: 'pomodoro',
+    name: '番茄钟',
+    icon: 'bell',
+    iconColor: '#E8888C',
+    dock: false,
+    page: 1,
+    loader: () => import('./apps/pomodoro/index.js')
+  },
+  {
+    id: 'flashcard',
+    name: '记忆卡',
+    icon: 'edit',
+    iconColor: '#B5D9A0',
+    dock: false,
+    page: 1,
+    loader: () => import('./apps/flashcard/index.js')
+  },
+  {
+    id: 'alarm',
+    name: '闹钟',
+    icon: 'sun',
+    iconColor: '#B89878',
+    dock: false,
+    page: 1,
+    loader: () => import('./apps/alarm/index.js')
+  },
+  {
+    id: 'astro',
+    name: '星座',
+    icon: 'moon',
+    iconColor: '#6B7FA0',
+    dock: false,
+    page: 1,
+    loader: () => import('./apps/astro/index.js')
+  },
+  {
+    id: 'health',
+    name: '健康',
+    icon: 'star',
+    iconColor: '#8FD0B9',
+    dock: false,
+    page: 1,
+    loader: () => import('./apps/health/index.js')
   }
-  // 后续 Phase 会追加：chat / characters / worldbook / wallet / shop / moments /
-  // memo / anniversary / gallery / games / music / dream / mood / avatar /
-  // countdown / collections / weather / health / widget-store / photos /
-  // pomodoro / flashcard / astro / alarm
+
+  // 后续批次会追加：chat / characters / worldbook / wallet / shop / moments /
+  // gallery / games / music / dream / avatar / collections /
+  // widget-store / photos
 ];
