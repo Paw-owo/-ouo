@@ -203,7 +203,7 @@ export async function mount(container, context) {
     .astro-hero-name{font-size:var(--font-size-title);font-weight:700}
     .astro-hero-date{font-size:var(--font-size-small);opacity:.85;margin-top:2px}
     .astro-hero-switch{
-      margin-left:auto;background:rgba(255,255,255,.22);color:inherit;
+      margin-left:auto;background:color-mix(in srgb,var(--bubble-user-text) 22%,transparent);color:inherit;
       border:none;border-radius:999px;padding:6px 12px;
       font-size:var(--font-size-small);cursor:pointer;
     }
@@ -255,7 +255,7 @@ export async function mount(container, context) {
       font-size:var(--font-size-small);font-weight:600;
       margin-bottom:6px;display:flex;align-items:center;gap:4px;
     }
-    .astro-yiji-head.yi{color:#3a8a55}
+    .astro-yiji-head.yi{color:var(--success)}
     .astro-yiji-head.ji{color:var(--danger)}
     .astro-yiji-text{font-size:var(--font-size-base);color:var(--text-primary);line-height:1.5}
     /* 详情卡：运势条目可点 */

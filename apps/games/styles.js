@@ -36,7 +36,7 @@ export function injectGameStyles() {
     gap:8px;margin-top:14px;
   }
   .games-score-game{
-    background:rgba(255,255,255,.18);
+    background:color-mix(in srgb,var(--bubble-user-text) 18%,transparent);
     border-radius:var(--radius-md);
     padding:8px 4px;text-align:center;
   }
@@ -60,13 +60,13 @@ export function injectGameStyles() {
     display:grid;grid-template-columns:repeat(4,1fr);gap:6px;
   }
   .games-score-achv-item{
-    background:rgba(255,255,255,.12);
+    background:color-mix(in srgb,var(--bubble-user-text) 12%,transparent);
     border-radius:var(--radius-sm);
     padding:8px 4px;text-align:center;
     opacity:.55;
   }
   .games-score-achv-item.on{
-    background:rgba(255,255,255,.28);
+    background:color-mix(in srgb,var(--bubble-user-text) 28%,transparent);
     opacity:1;
   }
   .games-score-achv-icon{
@@ -272,7 +272,7 @@ export function injectGameStyles() {
     display:flex;gap:8px;justify-content:center;flex-wrap:wrap;
   }
   .uc-result-words span{
-    background:rgba(255,255,255,.18);padding:2px 10px;border-radius:999px;
+    background:color-mix(in srgb,var(--bubble-user-text) 18%,transparent);padding:2px 10px;border-radius:999px;
   }
 
   /* ── 骗子酒馆 ── */

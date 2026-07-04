@@ -1246,6 +1246,7 @@ function subscribeBus() {
   });
   bus.on('app:installed', async () => { await renderAll(); await applyAllImages(); });
   bus.on('router:closed', refreshBadges);
+  bus.on('router:home', goHome);
   bus.on('weather:refresh', () => { updateWeather(); });
   // 倒计时到期 / 增删改后刷新桌面 widget
   bus.on('countdown:due', () => { updateCountdownWidget(); });

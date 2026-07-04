@@ -25,7 +25,10 @@ const CORE_ASSETS = [
   './core/mcp.js',
   './core/seed.js',
   './apps/settings/index.js',
-  './apps/calculator/index.js'
+  './apps/calculator/index.js',
+  './core/inbox.js',
+  './apps/countdown/index.js',
+  './core/app-bg.js'
 ];
 
 self.addEventListener('install', (event) => {

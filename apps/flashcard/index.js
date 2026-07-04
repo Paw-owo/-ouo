@@ -138,7 +138,7 @@ export async function mount(container) {
     .fc-stats-due-label{font-size:var(--font-size-small);opacity:.85}
     .fc-stats-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
     .fc-stats-cell{
-      background:rgba(255,255,255,.18);
+      background:color-mix(in srgb, var(--bubble-user-text) 18%, transparent);
       border-radius:var(--radius-md);padding:8px 4px;text-align:center;
     }
     .fc-stats-cell-val{font-size:var(--font-size-large);font-weight:700;line-height:1.2;font-variant-numeric:tabular-nums}

@@ -86,13 +86,13 @@ injectStyle('app-anniversary-style', `
   .ann-hero-bubble {
     position: absolute;
     border-radius: 50%;
-    background: rgba(255,255,255,.18);
+    background: color-mix(in srgb, var(--bubble-user-text) 18%, transparent);
     pointer-events: none;
     z-index:0;
   }
   .ann-hero-bubble.b1 { width: 90px; height: 90px; right: -24px; top: -28px; }
-  .ann-hero-bubble.b2 { width: 50px; height: 50px; right: 30px; bottom: -20px; background: rgba(255,255,255,.12); }
-  .ann-hero-bubble.b3 { width: 26px; height: 26px; right: 70px; top: 18px; background: rgba(255,255,255,.22); }
+  .ann-hero-bubble.b2 { width: 50px; height: 50px; right: 30px; bottom: -20px; background: color-mix(in srgb, var(--bubble-user-text) 12%, transparent); }
+  .ann-hero-bubble.b3 { width: 26px; height: 26px; right: 70px; top: 18px; background: color-mix(in srgb, var(--bubble-user-text) 22%, transparent); }
 
   .ann-list-head {
     display: flex;

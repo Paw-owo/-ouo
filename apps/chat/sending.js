@@ -194,21 +194,27 @@ export async function retrySendMessage(msg) {
 
 async function triggerAIReply(userMsg) {
   const state = getState();
-  const session = state.currentSession;
-  // 兼容：若用户切走了会话，仍用闭包里的 session 继续
-  const sess = session || null;
-  if (!sess) return;
+  // 用 userMsg.sessionId 从 DB 查会话，避免 sendMessage 的 await 期间用户切走会话造成串话
+  let sess = null;
+  try {
+    sess = await getDB(STORES.chatSessions, userMsg.sessionId);
+  } catch (e) {}
+  if (!sess) return; // 会话已被删除，直接结束
+  // 用户是否仍停留在该会话：决定要不要渲染 DOM
+  const viewingThis = state.currentSession?.id === sess.id;
 
   setReplying(true);
   state.streamCancelled = false;
-  showTypingIndicator();
-  scrollToBottom();
+  if (viewingThis) {
+    showTypingIndicator();
+    scrollToBottom();
+  }
 
   // 读角色
   let character = state.currentCharacter;
   if (!character || character.id !== sess.characterId) {
     try { character = await getDB(STORES.characters, sess.characterId); } catch (e) {}
-    if (state.currentSessionId === sess.id) state.currentCharacter = character;
+    if (viewingThis) state.currentCharacter = character;
   }
 
   // 历史消息（最近 20 条）—— 排除当前刚落盘的 userMsg，避免和单独传入的 userText 在 messages 末尾重复
@@ -234,7 +240,7 @@ async function triggerAIReply(userMsg) {
     const wb = await import('../worldbook/index.js');
     if (typeof wb.matchWorldbook === 'function') {
       const userText = userMsg.type === 'image' ? '' : userMsg.content;
-      const hits = wb.matchWorldbook(userText, sess.characterId);
+      const hits = await wb.matchWorldbook(userText, sess.characterId);
       if (hits && hits.length) {
         const lines = hits.slice(0, 5).map((h) => `[${h.keyword}] ${h.content || ''}`.slice(0, 200));
         worldbookContext = `世界书设定（自然融入对话，不要生硬复述）：\n${lines.join('\n')}`;
@@ -255,7 +261,7 @@ async function triggerAIReply(userMsg) {
   });
 
   // 隐藏呼吸气泡，建空气泡
-  hideTypingIndicator();
+  if (viewingThis) hideTypingIndicator();
   const aiMsg = {
     id: generateId('msg'),
     sessionId: sess.id,
@@ -265,7 +271,12 @@ async function triggerAIReply(userMsg) {
     type: 'text',
     timestamp: getNow()
   };
-  const msgEl = appendMessageEl(aiMsg, { stream: true });
+  // 用户已切走时只落盘不渲染：用脱离 DOM 的占位元素，让 runAIStream / finishAIMessage 里的 isConnected 守卫自动跳过 UI 更新
+  let msgEl = viewingThis ? appendMessageEl(aiMsg, { stream: true }) : null;
+  if (!msgEl) {
+    msgEl = document.createElement('div');
+    msgEl.innerHTML = '<div class="chat-bubble"></div>';
+  }
   const bubbleEl = msgEl.querySelector('.chat-bubble');
 
   // 本地模式提示：每个会话首次只提示一次

@@ -66,7 +66,7 @@ function ensureUIStyle() {
     .popo-toast-stack{position:fixed;top:calc(env(safe-area-inset-top,0px) + 12px);left:50%;transform:translateX(-50%);z-index:9999;display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:none;width:max-content;max-width:90vw}
     .popo-toast{background:color-mix(in srgb,var(--bg-card) 92%,transparent);backdrop-filter:blur(var(--glass-blur));-webkit-backdrop-filter:blur(var(--glass-blur));color:var(--text-primary);padding:10px 18px;border-radius:var(--radius-md);box-shadow:var(--shadow-md);font-size:var(--font-size-small);line-height:1.4;pointer-events:auto;border:1px solid color-mix(in srgb,var(--accent-light) 60%,transparent);animation:popoToastIn var(--motion) var(--motion-spring);max-width:80vw;text-align:center}
     .popo-toast.leaving{animation:popoToastOut 160ms ease forwards}
-    .popo-toast.error{background:color-mix(in srgb,var(--danger) 92%,transparent);color:#fff;border-color:var(--danger)}
+    .popo-toast.error{background:color-mix(in srgb,var(--danger) 92%,transparent);color:var(--bubble-user-text);border-color:var(--danger)}
     .popo-toast.success{background:color-mix(in srgb,var(--accent) 92%,transparent);color:var(--bubble-user-text);border-color:var(--accent)}
     @keyframes popoToastIn{from{opacity:0;transform:translateY(-12px) scale(.96)}to{opacity:1;transform:translateY(0) scale(1)}}
     @keyframes popoToastOut{to{opacity:0;transform:translateY(-8px) scale(.96)}}
@@ -86,7 +86,7 @@ function ensureUIStyle() {
     .popo-dialog-actions button{flex:1;padding:11px 14px;border-radius:var(--radius-sm);font-size:var(--font-size-base);font-weight:500;background:color-mix(in srgb,var(--bg-secondary) 80%,transparent);color:var(--text-primary);transition:var(--motion)}
     .popo-dialog-actions button:active{transform:scale(var(--press-scale))}
     .popo-dialog-actions button.primary{background:var(--accent);color:var(--bubble-user-text)}
-    .popo-dialog-actions button.danger{background:var(--danger);color:#fff}
+    .popo-dialog-actions button.danger{background:var(--danger);color:var(--bubble-user-text)}
     .popo-icon-svg{stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;fill:none;display:inline-block;vertical-align:middle}
     .popo-loading{position:fixed;inset:0;z-index:9500;display:flex;align-items:center;justify-content:center;background:var(--bg-overlay);backdrop-filter:blur(4px)}
     .popo-loading-dot{width:14px;height:14px;border-radius:50%;background:var(--accent);margin:0 5px;animation:popoPulse 1s ease-in-out infinite}
@@ -224,7 +224,7 @@ export function showBottomSheet(opts = {}) {
 export function hideBottomSheet() {
   // 关闭栈顶 sheet
   const top = sheetStack[sheetStack.length - 1];
-  if (top && typeof top.sheet._close === 'function') top.sheet._close();
+  if (top && typeof top.close === 'function') top.close();
 }
 
 // ════════════════════════════════════════
