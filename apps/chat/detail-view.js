@@ -152,8 +152,8 @@ export async function renderChatDetailView() {
         </div>
       </div>
       <button class="chat-header-search" id="chat-header-search" aria-label="搜索聊天记录">${createIcon('search', 18).outerHTML}</button>
-      <button class="app-header-gear" id="chat-settings" aria-label="聊天与AI调试设置">${createIcon('settings', 18).outerHTML}</button>
-      <button class="chat-more" id="chat-more" aria-label="更多操作">${createIcon('more', 20).outerHTML}</button>
+      <button class="app-header-gear" id="chat-settings" aria-label="聊天设置">${createIcon('settings', 18).outerHTML}</button>
+      <button class="chat-more" id="chat-more" aria-label="聊天设置">${createIcon('more', 20).outerHTML}</button>
     </div>
     <div class="chat-search-bar" id="chat-search-bar" aria-hidden="true">
       <input class="chat-search-input" id="chat-search-input" type="search" placeholder="找找聊过的话..." aria-label="搜索消息">

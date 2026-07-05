@@ -226,7 +226,7 @@ async function synthElevenLabs(text, cfg) {
 function playAudio(url, cfg, opts = {}, cleaned) {
   return new Promise((resolve) => {
     const audio = new Audio(url);
-    audio.playbackRate = Number(cfg.rate) || 1.0;
+    audio.rate = cfg.rate || 1.0;
     const ctrl = {
       stop: () => {
         try { audio.pause(); audio.src = ''; } catch (e) {}
