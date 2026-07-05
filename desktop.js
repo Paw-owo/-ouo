@@ -4,17 +4,18 @@
 // 所有视觉值走 CSS 变量（style.css + theme.js），所有魔法数字走 config.js。
 // 依赖：core/* + apps-registry.js
 
-import { initDB, ensureDefaultSettings, getData, setData, removeData, getDB, setDB, deleteDB, getAllDB, generateId, getNow, compressImage } from './core/storage.js';
+import { initDB, ensureDefaultSettings, getData, setData, getDB } from './core/storage.js';
 import { STORES, KEYS } from './core/storage-keys.js';
-import { loadTheme, applyTheme, getCurrentTheme, setTheme, applyFontFamily, applyDesktopScale, getPresets, restoreCustomColors, applyPersonalization, clearPersonalizeCache } from './core/theme.js';
-import { createIcon, showToast, showConfirm, showBottomSheet, hideBottomSheet } from './core/ui.js';
-import { pickImageFile, clamp, debounce, throttle, cssUrl, isUsableImage, injectStyle } from './core/util.js';
+import { loadTheme, applyFontFamily, applyDesktopScale, restoreCustomColors, applyPersonalization, clearPersonalizeCache } from './core/theme.js';
+import { createIcon, showToast, showConfirm, showBottomSheet } from './core/ui.js';
+import { clamp, debounce, throttle, cssUrl, isUsableImage, injectStyle } from './core/util.js';
 import { get as getConfig } from './core/config.js';
 import bus from './core/events.js';
 import { openApp, goHome } from './core/router.js';
 import { seedDefaultCharacter, getDefaultCharacter } from './core/seed.js';
 import { initInbox } from './core/inbox.js';
 import { getUpcomingCountdown } from './apps/countdown/index.js';
+import { DEFAULT_LOCK_PASSWORD, LOCK_MAX_FAILS, LOCK_LOCKOUT_MS, hashPassword, parseLockStored, formatLockStored } from './core/lock.js';
 
 // ════════════════════════════════════════
 // DOM 引用
@@ -43,15 +44,11 @@ let justDragged = false; // 拖拽刚结束标记，防止后续 click 误触退
 let lockInput = '';
 let clockTimer = null;
 let weatherTimer = null;
-let vinylTimer = null;
 let countdownTimer = null;
 let currentCharacter = null;
 
-// 锁屏密码安全：默认密码 / 盐 / 哈希 / 失败锁定
-const DEFAULT_LOCK_PASSWORD = '0326';
-const LOCK_SALT = 'popo-salt-2024';
-const LOCK_MAX_FAILS = 5;
-const LOCK_LOCKOUT_MS = 30000;
+// 锁屏密码安全常量从 core/lock.js 统一导入（DEFAULT_LOCK_PASSWORD /
+// LOCK_MAX_FAILS / LOCK_LOCKOUT_MS / hashPassword / parseLockStored / formatLockStored）
 let lockFailCount = 0;
 let lockLockoutUntil = 0;
 let lockLockoutTicker = null;
@@ -68,8 +65,6 @@ const WIDGET_DEFS = [
   { id: 'countdown', type: 'countdown', shape: 'square', page: 1 },
   { id: 'vinyl', type: 'vinyl', shape: 'wide', page: 1 }
 ];
-// 向后兼容旧引用
-const WIDGETS = WIDGET_DEFS;
 
 // 用户布局覆盖：{ widgetId: { page, hidden, order } }
 function getWidgetLayout() {
@@ -190,14 +185,13 @@ injectStyle('desktop-editing-styles', `
 
 // ════════════════════════════════════════
 // 图标分页覆盖：registry 冻结，用 localStorage 覆盖 app.page 实现跨页拖拽
-// （受"只动 desktop.js"约束，未注册到 storage-keys.js）
+// key 存 KEYS.appIconPageOverrides（已注册到 storage-keys.js 集中管理）
 // ════════════════════════════════════════
-const ICON_PAGE_OVERRIDE_KEY = 'app_icon_page_overrides';
 function getIconPageOverrides() {
-  const v = getData(ICON_PAGE_OVERRIDE_KEY, null);
+  const v = getData(KEYS.appIconPageOverrides, null);
   return (v && typeof v === 'object' && !Array.isArray(v)) ? v : {};
 }
-function saveIconPageOverrides(map) { setData(ICON_PAGE_OVERRIDE_KEY, map || {}); }
+function saveIconPageOverrides(map) { setData(KEYS.appIconPageOverrides, map || {}); }
 function getAppPage(app) {
   const overrides = getIconPageOverrides();
   if (Object.prototype.hasOwnProperty.call(overrides, app.id)) {
@@ -795,8 +789,9 @@ function saveIconOrder(grid) {
 function saveDockOrderArr(arr) {
   setData(KEYS.appDockOrder, arr);
 }
-function saveDockOrder(dockEl) {
-  const ids = [...dockEl.querySelectorAll('.dock-icon[data-app-id]')].map((n) => n.dataset.appId);
+// 参数名用 dockRoot 避免遮蔽全局 dockEl（行 33）
+function saveDockOrder(dockRoot) {
+  const ids = [...dockRoot.querySelectorAll('.dock-icon[data-app-id]')].map((n) => n.dataset.appId);
   saveDockOrderArr(ids);
 }
 
@@ -1080,33 +1075,43 @@ function bindEvents() {
   });
 
   // 窗口尺寸变化重排
-  window.addEventListener('resize', debounce(async () => { rebuildDesktopPages(); await renderAll(); await applyAllImages(); }, 260));
+  // 修复：原版 rebuildDesktopPages 会清空 pagesEl.innerHTML，丢失 scrollLeft 且 currentPage 不重置（回到第 0 页）。
+  // 改成重建后恢复 currentPage 的 scrollLeft。
+  window.addEventListener('resize', debounce(async () => {
+    const pageBefore = currentPage;
+    rebuildDesktopPages();
+    await renderAll();
+    await applyAllImages();
+    // 恢复到 resize 前的页
+    const restored = pagesEl.children[pageBefore];
+    if (restored) pagesEl.scrollTo({ left: restored.offsetLeft, behavior: 'auto' });
+  }, 260));
 
   // 锁屏键盘
   lockPadEl.addEventListener('click', onLockKeyClick);
 
-  // 存储/事件同步
-  window.addEventListener('storage', () => { applyAllImages(); refreshBadges(); });
+  // 存储/事件同步（多 tab 同步场景）
+  // 修复：原版任意 storage 变化都触发 applyAllImages + refreshBadges，过宽且频繁重绘。
+  // 只在桌面相关 key 变化时刷新。
+  const _desktopStorageKeys = new Set([
+    KEYS.appWallpaper, KEYS.appLockWallpaper, KEYS.appLockAvatar, KEYS.appLockPassword,
+    KEYS.appTheme, KEYS.appCustomColors, KEYS.appFontFamily, KEYS.appCustomFontBlob,
+    KEYS.appFontScale, KEYS.appBubbleRadius, KEYS.appMotionLevel,
+    KEYS.appDesktopScale, KEYS.appWidgetScale, KEYS.appDockScale,
+    KEYS.appDesktopPages, KEYS.appDockOrder, KEYS.appDockOverrides,
+    KEYS.appWidgetPositions, KEYS.appHiddenIcons, KEYS.appWidgetBackgrounds,
+    KEYS.appBadges, KEYS.appLockUnlocked, KEYS.appIcons
+  ]);
+  window.addEventListener('storage', (e) => {
+    if (!e.key) return;
+    // appIconOrder_<page> 是函数式 key，用前缀匹配
+    const isIconOrder = e.key.startsWith('app_icon_order_');
+    if (!_desktopStorageKeys.has(e.key) && !isIconOrder) return;
+    try { applyAllImages(); refreshBadges(); } catch (err) { /* 静默 */ }
+  });
 }
 
-// 密码哈希（SHA-256 + 盐），避免明文存储
-async function hashPassword(pwd) {
-  const data = new TextEncoder().encode(String(pwd) + LOCK_SALT);
-  const buf = await crypto.subtle.digest('SHA-256', data);
-  return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('');
-}
-
-// 解析存储的密码：支持 sha256:<长度>:<hex> / 纯 hex / 明文（兼容设置 App 旧写入与 ensureDefaultSettings 的明文）
-function parseLockStored(raw) {
-  if (raw == null) return { hash: null, plain: null, length: 4 };
-  if (typeof raw === 'string') {
-    const m = /^sha256:(\d+):([0-9a-f]{64})$/.exec(raw);
-    if (m) return { hash: m[2], plain: null, length: Number(m[1]) || 4 };
-    if (/^[0-9a-f]{64}$/.test(raw)) return { hash: raw, plain: null, length: 4 };
-    return { hash: null, plain: raw, length: raw.length };
-  }
-  return { hash: null, plain: null, length: 4 };
-}
+// hashPassword / parseLockStored 从 core/lock.js 统一导入，避免与 settings 重复实现
 
 function getLockPasswordLength() {
   return parseLockStored(getData(KEYS.appLockPassword, null)).length;
@@ -1118,7 +1123,7 @@ async function ensureLockPasswordHashed() {
   if (parsed.hash) return;
   const plain = parsed.plain != null ? parsed.plain : DEFAULT_LOCK_PASSWORD;
   const hash = await hashPassword(plain);
-  setData(KEYS.appLockPassword, `sha256:${plain.length}:${hash}`);
+  setData(KEYS.appLockPassword, formatLockStored(hash, plain.length));
 }
 
 async function isLockPasswordDefault() {
@@ -1515,7 +1520,6 @@ async function applyAllImages() {
     refreshLockScreen(),
     applyIconImages()
   ]);
-  bus.emit('desktop:images-applied');
 }
 
 async function applyWallpaper() {
@@ -1613,16 +1617,30 @@ function getBadgeMap() {
 // 事件总线订阅
 // ════════════════════════════════════════
 function subscribeBus() {
-  bus.on('desktop:refresh', async () => {
-    loadTheme();
-    restoreCustomColors();
-    applyPersonalization();
-    applyDesktopScaleFromConfig();
-    await applyCustomFont();
-    await renderAll();
-    await applyAllImages();
-    refreshBadges();
-  });
+  // 修复：desktop:refresh 是 async 且无锁，短时间内多次 emit 会并发 renderAll 互相覆盖 DOM。
+  // 用 _refreshing 标志去重：进行中的 refresh 不重复触发，改为标记 _refreshPending 待完成后补一次。
+  let _refreshing = false;
+  let _refreshPending = false;
+  const doRefresh = async () => {
+    if (_refreshing) { _refreshPending = true; return; }
+    _refreshing = true;
+    try {
+      loadTheme();
+      restoreCustomColors();
+      applyPersonalization();
+      applyDesktopScaleFromConfig();
+      await applyCustomFont();
+      await renderAll();
+      await applyAllImages();
+      refreshBadges();
+    } catch (e) {
+      console.warn('[desktop] refresh 失败', e);
+    } finally {
+      _refreshing = false;
+      if (_refreshPending) { _refreshPending = false; doRefresh(); }
+    }
+  };
+  bus.on('desktop:refresh', doRefresh);
   bus.on('desktop:refresh-badges', refreshBadges);
   bus.on('theme:changed', () => {
     // theme.js 的 applyTheme 会先 removeProperty 所有变量再重设，
@@ -1630,23 +1648,29 @@ function subscribeBus() {
     // 必须清掉原值缓存（新主题的原值可能不同）再重新应用。
     clearPersonalizeCache();
     applyPersonalization();
+    // 修复：壁纸遮罩色（.desktop::after 用 --wallpaper-soft）依赖主题变量，
+    // 切主题后遮罩色可能仍为旧值。补刷一次壁纸让遮罩跟随主题。
+    try { applyWallpaper(); } catch (e) { /* 静默 */ }
   });
   bus.on('character:updated', async () => {
-    currentCharacter = await getDefaultCharacter();
+    try { currentCharacter = await getDefaultCharacter(); } catch (e) { /* 静默 */ }
     refreshLockScreen();
   });
   // 头像定制后刷新锁屏头像（character.avatar 已被 avatar App 同步更新）
   bus.on('avatar:updated', async () => {
-    currentCharacter = await getDefaultCharacter();
+    try { currentCharacter = await getDefaultCharacter(); } catch (e) { /* 静默 */ }
     refreshLockScreen();
   });
-  bus.on('app:installed', async () => { await renderAll(); await applyAllImages(); });
+  // 删死订阅：app:installed 全代码库无人 emit
   bus.on('router:closed', refreshBadges);
   bus.on('router:home', goHome);
   bus.on('weather:refresh', () => { updateWeather(); });
   // 倒计时到期 / 增删改后刷新桌面 widget
   bus.on('countdown:due', () => { updateCountdownWidget(); });
   bus.on('countdown:changed', () => { updateCountdownWidget(); });
+  // 修复：anniversary App 在增删改纪念日时 emit anniversary:changed，desktop 未订阅 → widget 不刷新。
+  // 补订后用户在 anniversary App 改了纪念日，回桌面 widget 立刻更新。
+  bus.on('anniversary:changed', () => { updateAnniversaryWidget(); });
 }
 
 // ════════════════════════════════════════
@@ -1677,9 +1701,43 @@ function getDesktopPageCount() {
   if (n > 6) return 6;
   return n;
 }
-function setDesktopPageCount(n) {
+async function setDesktopPageCount(n) {
+  const oldCount = getDesktopPageCount();
   const clamped = Math.max(1, Math.min(6, Math.floor(Number(n) || 2)));
   setData(KEYS.appDesktopPages, clamped);
+  // 修复：减页后 currentPage 可能越界（如 currentPage=3 设为 2 页），
+  // updatePageDots 的高亮 i===currentPage 永远不匹配 → 无 active dot，
+  // 且 pagesEl.children[currentPage] 为 undefined。必须夹紧。
+  if (currentPage > clamped - 1) currentPage = clamped - 1;
+  // 修复：减页时，原本放在被删页上的图标会"丢失"（getAppPage 返回的页号 >= clamped，
+  // renderIconGrids 过滤掉，但图标没进 appHiddenIcons → 用户在设置里看不到也无法找回）。
+  // 把这些图标自动加入 appHiddenIcons，用户能在"隐藏的图标"里恢复。
+  if (clamped < oldCount) {
+    try {
+      const reg = await getRegistry();
+      const overrides = getIconPageOverrides();
+      const hidden = getData(KEYS.appHiddenIcons, []);
+      const hiddenSet = new Set(hidden);
+      let added = 0;
+      for (const app of (reg.APPS || [])) {
+        if (hiddenSet.has(app.id)) continue;
+        const page = getAppPage(app.id);
+        if (page >= clamped) {
+          hiddenSet.add(app.id);
+          added++;
+          // 同时把它的 page 覆盖改成 0，恢复时能立刻看到
+          overrides[app.id] = 0;
+        }
+      }
+      if (added > 0) {
+        setData(KEYS.appHiddenIcons, Array.from(hiddenSet));
+        saveIconPageOverrides(overrides);
+        showToast(`${added} 个图标因减页被收起啦，去设置里能恢复`, 'default', 2400);
+      }
+    } catch (e) {
+      console.warn('[desktop] 减页回收图标失败', e);
+    }
+  }
   rebuildDesktopPages();
   renderAll();
 }
@@ -1711,7 +1769,17 @@ function escapeHtml(s) {
 }
 
 // 暴露给设置 App 用（图片写入后触发刷新）
-window.popoRefreshDesktop = async () => { rebuildDesktopPages(); await renderAll(); await applyAllImages(); refreshBadges(); };
+// 修复：加 try-catch，避免 settings 调用处无保护导致 unhandledrejection
+window.popoRefreshDesktop = async () => {
+  try {
+    rebuildDesktopPages();
+    await renderAll();
+    await applyAllImages();
+    refreshBadges();
+  } catch (e) {
+    console.warn('[desktop] popoRefreshDesktop 失败', e);
+  }
+};
 window.popoRefreshLock = refreshLockScreen;
 window.popoGetPageCount = getDesktopPageCount;
 window.popoSetPageCount = setDesktopPageCount;

@@ -72,6 +72,8 @@ export const KEYS = Object.freeze({
   appLockUnlocked: 'app_lock_unlocked',
   appIconOrder: (page) => `app_icon_order_${page}`,
   appHiddenIcons: 'app_hidden_icons',
+  // 图标跨页拖拽覆盖：{ appId: pageNumber }，记录用户把 app 拖到了第几页
+  appIconPageOverrides: 'app_icon_page_overrides',
 
   // 聊天相关
   chatCurrentCharacter: 'chat_current_character',

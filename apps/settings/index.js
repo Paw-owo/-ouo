@@ -14,6 +14,7 @@ import { exportToFile, importFromFile } from '../../core/storage-manager.js';
 import { showToast, showBottomSheet, showConfirm, createIcon, createCollapsibleCard } from '../../core/ui.js';
 import bus from '../../core/events.js';
 import { get as getConfig } from '../../core/config.js';
+import { hashPassword, parseLockStored, formatLockStored } from '../../core/lock.js';
 // 新增卡片的子模块：拆出来避免 index.js 超过 800 行
 import { renderAICard } from './card-ai.js';
 import { renderNotifyCard } from './card-notify.js';
@@ -62,25 +63,8 @@ injectStyle('popo-settings-sections', `
   .settings-section.active{ display:block; }
 `);
 
-// 锁屏密码哈希（与 desktop.js 的 hashPassword 保持一致：SHA-256 + 盐）
-// 避免明文存储密码，desktop.js 启动时会迁移旧明文，这里直接写哈希格式
-const LOCK_SALT = 'popo-salt-2024';
-async function hashPassword(pwd) {
-  const data = new TextEncoder().encode(String(pwd) + LOCK_SALT);
-  const buf = await crypto.subtle.digest('SHA-256', data);
-  return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('');
-}
-// 解析存储的密码：支持 sha256:<长度>:<hex> / 纯 hex / 明文（兼容旧版）
-function parseLockStored(raw) {
-  if (raw == null) return { hash: null, plain: null, length: 4 };
-  if (typeof raw === 'string') {
-    const m = /^sha256:(\d+):([0-9a-f]{64})$/.exec(raw);
-    if (m) return { hash: m[2], plain: null, length: Number(m[1]) || 4 };
-    if (/^[0-9a-f]{64}$/.test(raw)) return { hash: raw, plain: null, length: 4 };
-    return { hash: null, plain: raw, length: raw.length };
-  }
-  return { hash: null, plain: null, length: 4 };
-}
+// 锁屏密码哈希（hashPassword / parseLockStored / formatLockStored）
+// 从 core/lock.js 统一导入，与 desktop.js 共用，避免两端重复实现导致不一致。
 
 export async function mount(container, context) {
   containerEl = container;
@@ -399,9 +383,9 @@ function renderLockCard() {
         oldMatched = (oldP === parsed.plain);
       }
       if (!oldMatched) { showToast('现在的密码不对哦', 'error'); return; }
-      // 写入哈希格式 sha256:<长度>:<hex>，与 desktop.js 一致
+      // 写入哈希格式（用 core/lock.js 的 formatLockStored，与 desktop.js 一致）
       const newHash = await hashPassword(newP);
-      setData(KEYS.appLockPassword, `sha256:${newP.length}:${newHash}`);
+      setData(KEYS.appLockPassword, formatLockStored(newHash, newP.length));
       document.querySelector('.popo-sheet-close')?.click();
       showToast('密码改好啦，下次用新密码解锁哦', 'success');
     });
@@ -739,6 +723,7 @@ const WIDGET_LIST = [
   { id: 'weather', name: '天气' },
   { id: 'anniversary', name: '纪念日' },
   { id: 'focus', name: '今日提示' },
+  { id: 'countdown', name: '倒计时' },
   { id: 'vinyl', name: '黑胶' }
 ];
 function renderWidgetMgmtCard() {
@@ -809,7 +794,20 @@ async function renderHiddenIconsCard() {
     card.innerHTML = `<div class="card-title">隐藏的图标</div><div class="empty-state"><div class="empty-state-text">没有藏起来的图标哦</div></div>`;
     return card;
   }
-  card.innerHTML = `<div class="card-title">隐藏的图标</div>`;
+  card.innerHTML = `<div class="card-title">隐藏的图标</div>
+    <div style="font-size:var(--font-size-small);color:var(--text-hint);margin-bottom:8px">点"放回去"把图标放回桌面，或一键全部恢复</div>`;
+  // 全部恢复按钮
+  const restoreAllBtn = document.createElement('button');
+  restoreAllBtn.className = 'btn ghost';
+  restoreAllBtn.style.cssText = 'width:100%;margin-bottom:10px';
+  restoreAllBtn.textContent = `全部放回去（${hidden.length} 个）`;
+  restoreAllBtn.addEventListener('click', () => {
+    setData(KEYS.appHiddenIcons, []);
+    refreshDesktop();
+    renderSections();
+    showToast('全部放回去啦');
+  });
+  card.appendChild(restoreAllBtn);
   hidden.forEach((appId) => {
     const app = reg.APPS.find((a) => a.id === appId);
     if (!app) return;
