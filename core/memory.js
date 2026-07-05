@@ -86,9 +86,9 @@ export async function recordInteraction(entry) {
     } else {
       saved = await setDB(STORES.memories, record.id, record);
     }
-    // 失效缓存（按 scope:ownerId 维度）
-    promptCache.delete(cacheKeyOf(record));
-    promptCache.delete(record.characterId); // 兼容旧缓存键
+    // 失效缓存：buildMemoryPrompt 的 key 是 `${characterId}:${JSON.stringify(context)}`，
+    // 必须按前缀删才能清掉所有 context 的缓存。用 invalidateCacheForRecord 统一处理。
+    invalidateCacheForRecord(record);
     // 通知可视化记忆卡片
     bus.emit('memory:written', { memory: saved, characterId: record.characterId, scope: record.scope, ownerId: record.ownerId });
     return saved;
@@ -97,11 +97,6 @@ export async function recordInteraction(entry) {
     console.warn('[memory] 记忆写入失败', e);
     return null;
   }
-}
-
-/** 计算缓存键：scope:ownerId 维度，避免不同角色记忆互相命中缓存 */
-function cacheKeyOf(record) {
-  return `${record.scope || 'character'}:${record.ownerId || 'global'}`;
 }
 
 async function findDuplicate(record) {
@@ -261,12 +256,18 @@ export async function updateMemory(id, patch) {
 /** 按记录的 scope/ownerId/characterId/groupId 失效所有相关 context 缓存 */
 function invalidateCacheForRecord(rec) {
   if (!rec) return;
+  // global 记忆会合并进每个角色的 getMemories，所以删 global 记忆要清全部缓存
+  const s = rec.scope || 'character';
+  if (s === 'global') {
+    promptCache.clear();
+    return;
+  }
   if (rec.characterId) {
     for (const k of promptCache.keys()) {
       if (k.startsWith(`${rec.characterId}:`)) promptCache.delete(k);
     }
   }
-  if (rec.scope === 'group' && rec.groupId) {
+  if (s === 'group' && rec.groupId) {
     for (const k of promptCache.keys()) {
       if (k.startsWith(`group:${rec.groupId}:`)) promptCache.delete(k);
     }
@@ -282,8 +283,8 @@ export async function deleteMemory(id) {
     const cur = await getDB(STORES.memories, id);
     const ok = await deleteDB(STORES.memories, id);
     if (cur) {
-      promptCache.delete(cur.characterId);
-      if (cur.scope && cur.ownerId) promptCache.delete(`${cur.scope}:${cur.ownerId}`);
+      // 失效缓存：按前缀清掉该记录相关的所有 context 缓存
+      invalidateCacheForRecord(cur);
     }
     bus.emit('memory:deleted', { id, memory: cur });
     return ok;
@@ -550,8 +551,18 @@ export async function clearMemories(characterId) {
 }
 
 export function invalidateCache(characterId) {
-  if (characterId) promptCache.delete(characterId);
-  else promptCache.clear();
+  if (!characterId) {
+    promptCache.clear();
+    return;
+  }
+  // 修复：buildMemoryPrompt 的 key 是 `${characterId}:${JSON.stringify(context)}`，
+  // 原版只删 `characterId` 这个无 context 的 key，删不掉带 context 的。
+  // 改成按前缀删，把该角色所有 context 的缓存都失效。
+  for (const k of promptCache.keys()) {
+    if (k.startsWith(`${characterId}:`)) promptCache.delete(k);
+    if (k.startsWith(`character:${characterId}`)) promptCache.delete(k);
+  }
+  promptCache.delete(characterId); // 兼容无 context 的旧 key
 }
 
 /**
