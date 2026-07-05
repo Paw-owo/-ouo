@@ -7,6 +7,7 @@ import { STORES } from '../../core/storage-keys.js';
 import { getDB, setDB, getAllDB, generateId, getNow, compressImage } from '../../core/storage.js';
 import { showToast, showBottomSheet, createIcon } from '../../core/ui.js';
 import { pickImageFile, isUsableImage, cssUrl, clamp } from '../../core/util.js';
+import bus from '../../core/events.js';
 import {
   DEFAULT_TEMPERATURE,
   escapeHTML, escapeAttr, parseTags, renderTagsHTML
@@ -340,6 +341,9 @@ export function openForm(existing, onSaved, onDelete) {
       await setDB(STORES.characters, id, record);
       sheet.close();
       showToast(editing ? '改好啦，已帮你更新' : '加进来啦，想找 TA 聊天点一下就好', 'success', 1400);
+      // 通知其他 App（chat 头像/名字、收藏夹、桌面挂件等）角色资料变了
+      // 编辑已有角色时才需要刷新联动；新建的还没被引用，emit 一下也无害（列表会刷新）
+      try { bus.emit('character:updated', { characterId: id, character: record, source: 'form' }); } catch (e) {}
       if (typeof onSaved === 'function') onSaved(record);
     } catch (e) {
       console.warn('[characters] 保存失败', e);

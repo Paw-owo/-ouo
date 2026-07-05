@@ -520,7 +520,7 @@ function registerChatListener() {
   listenerRegistered = true;
   bus.on('chat:user-message', async (payload) => {
     try {
-      const content = String(payload?.content || payload?.text || payload?.message || '');
+      const content = String(payload?.content || payload?.text || payload?.message || payload?.preview || '');
       const characterId = payload?.characterId || getData(KEYS.chatCurrentCharacter, 'char_chuyi');
       if (!content) return;
       // 先检测道歉（优先哄好），再检测伤人

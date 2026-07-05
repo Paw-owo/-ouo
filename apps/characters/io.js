@@ -9,6 +9,7 @@ import { setDB, generateId, getNow } from '../../core/storage.js';
 import { showToast } from '../../core/ui.js';
 import { downloadBlob } from '../../core/util.js';
 import { EXPORT_VERSION, EXPORT_KIND } from './shared.js';
+import bus from '../../core/events.js';
 
 // ════════════════════════════════════════
 // 导出单个角色为 JSON 文件
@@ -115,6 +116,8 @@ export async function importCharacter(file, onImported) {
     };
     await setDB(STORES.characters, id, record);
     showToast(`把「${record.name}」加进来啦`, 'success', 1600);
+    // 通知其他 App 有新角色加入（列表刷新 / 桌面挂件等）
+    try { bus.emit('character:updated', { characterId: id, character: record, source: 'import' }); } catch (e) {}
     if (typeof onImported === 'function') onImported(record);
   } catch (e) {
     console.warn('[characters] 导入失败', e);

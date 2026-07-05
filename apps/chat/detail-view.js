@@ -27,6 +27,8 @@ import {
   renderFileBubble, renderLocationBubble, renderContactBubble,
   bindRichBubble, ensureRichBubbleStyle
 } from './plus-content.js';
+// 代码块增强（复制 / 下载 / 预览 / 折叠）
+import { enhanceCodeBlocks } from './code-block.js';
 
 // 注册感叹号图标（用于消息发送失败状态）
 registerIcon('alert', 'M12 3v10 M12 17h.01');
@@ -737,6 +739,8 @@ function createMessageEl(msg, opts = {}) {
     bindInteractiveControls(el, msg);
     // 富消息交互（文件下载 / 位置查看 / 名片跳转）
     if (isFile || isLocation || isContact) bindRichBubble(el, msg);
+    // 代码块增强（复制 / 下载 / 预览 / 折叠）—— AI 回复才可能有代码块
+    if (!isUser) enhanceCodeBlocks(el);
     attachLongPress(el, () => openMessageActionSheet(msg));
     return el;
   }
@@ -814,6 +818,8 @@ function createMessageEl(msg, opts = {}) {
   bindInteractiveControls(el, msg);
   // 富消息交互（文件下载 / 位置查看 / 名片跳转）
   if (isFile || isLocation || isContact) bindRichBubble(el, msg);
+  // 代码块增强（复制 / 下载 / 预览 / 折叠）—— AI 回复才可能有代码块
+  if (!isUser) enhanceCodeBlocks(el);
   // 长按操作（TTS 已改为长按菜单，不再常驻按钮）
   attachLongPress(el, () => openMessageActionSheet(msg));
   return el;
@@ -900,7 +906,11 @@ export function updateThinkingUI(msgEl, thinkingText, opts = {}) {
   } else {
     // 更新内容
     const body = thinkEl.querySelector('.chat-thinking-body');
-    if (body) body.innerHTML = renderMarkdown(thinkingText);
+    if (body) {
+      body.innerHTML = renderMarkdown(thinkingText);
+      // 思维链里也可能有代码块，同样增强（复制/下载/预览/折叠）
+      enhanceCodeBlocks(body);
+    }
   }
   // 流式状态：流式中展开（让主人看到思考过程），结束后折叠（除非用户手动操作过）
   if (opts.streaming !== undefined) {
@@ -911,11 +921,12 @@ export function updateThinkingUI(msgEl, thinkingText, opts = {}) {
   }
 }
 
-/** 刷新当前详情页里所有 AI 头像（avatar:updated 事件触发） */
+/** 刷新当前详情页里所有 AI 头像 / header 名字 / 对话卡片名字（character:updated 事件触发） */
 export function refreshAvatar() {
   const state = getState();
   if (!state.containerEl || !state.currentCharacter) return;
-  const newAvatarHTML = renderCharacterAvatar(state.currentCharacter);
+  const c = state.currentCharacter;
+  const newAvatarHTML = renderCharacterAvatar(c);
   // 更新消息列表里所有 AI 头像
   const avatars = state.containerEl.querySelectorAll('.chat-msg-row.ai .chat-avatar, .chat-dialog-card-avatar');
   avatars.forEach((avEl) => {
@@ -923,9 +934,13 @@ export function refreshAvatar() {
     if (avEl.classList.contains('chat-dialog-user-avatar')) return;
     avEl.innerHTML = newAvatarHTML;
   });
-  // 更新顶部 header 头像（如有）
-  const headerAv = state.containerEl.querySelector('#chat-header-avatar');
-  if (headerAv) headerAv.innerHTML = newAvatarHTML;
+  // 同步刷新 header 名字 + 对话卡片里的 AI 名字（角色改名后实时跟着变）
+  const newName = c.name || c.nickname || state.currentSession?.title || '聊天';
+  const headerName = state.containerEl.querySelector('#chat-header-name');
+  if (headerName) headerName.textContent = newName;
+  state.containerEl.querySelectorAll('.chat-dialog-card-name').forEach((el) => {
+    el.textContent = newName;
+  });
 }
 
 /** 渲染角色头像（36px 圆形） */

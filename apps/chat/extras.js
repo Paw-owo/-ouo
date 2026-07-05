@@ -594,6 +594,7 @@ async function sendSticker(sticker) {
   bus.emit('chat:user-message', {
     characterId: session.characterId,
     sessionId: session.id,
+    content: '[表情]',
     preview: '[表情]'
   });
 

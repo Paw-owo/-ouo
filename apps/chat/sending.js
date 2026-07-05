@@ -24,6 +24,7 @@ import {
   updateThinkingUI, updateSendButtonState
 } from './detail-view.js';
 import { renderMarkdown } from './markdown.js';
+import { enhanceCodeBlocks } from './code-block.js';
 import { escapeHTML } from './shared-utils.js';
 
 // 注册 refresh 图标（用于重试按钮）
@@ -94,10 +95,11 @@ export async function sendMessage() {
   // 更新会话 lastMessage/lastAt
   await bumpSession(session, text.slice(0, 60), userMsg.timestamp);
 
-  // 通知其他 App：用户发消息了
+  // 通知其他 App：用户发消息了（content 带完整文本，grudge 记仇本用来做关键词检测）
   bus.emit('chat:user-message', {
     characterId: session.characterId,
     sessionId: session.id,
+    content: text,
     preview: text.slice(0, 60)
   });
 
@@ -160,6 +162,7 @@ export async function sendImageMessage() {
   bus.emit('chat:user-message', {
     characterId: session.characterId,
     sessionId: session.id,
+    content: '[图片]',
     preview: '[图片]'
   });
 
@@ -228,6 +231,7 @@ export async function sendVoiceMessage(dataUrl, duration) {
   bus.emit('chat:user-message', {
     characterId: session.characterId,
     sessionId: session.id,
+    content: preview,
     preview
   });
 
@@ -596,6 +600,8 @@ async function finishAIMessage(sess, character, aiMsg, msgEl, bubbleEl, finalTex
   // 去掉光标，固定文本（AI 消息用 markdown 渲染）
   if (bubbleEl.isConnected) {
     bubbleEl.innerHTML = renderMarkdown(finalText);
+    // 代码块增强（复制 / 下载 / 预览 / 折叠）
+    enhanceCodeBlocks(bubbleEl);
   }
   aiMsg.content = finalText;
   // 思维链单独存储（下一轮历史只传 content，不传 thinking）

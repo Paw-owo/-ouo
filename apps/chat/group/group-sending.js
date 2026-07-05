@@ -24,6 +24,7 @@ import {
   updateGroupMessageStatus, updateGroupThinkingUI
 } from './group-detail-view.js';
 import { renderMarkdown } from '../markdown.js';
+import { enhanceCodeBlocks } from '../code-block.js';
 import { escapeHTML } from '../shared-utils.js';
 
 // 注册重试图标（与单聊一致）
@@ -402,7 +403,10 @@ export async function triggerGroupAIReply(userMsg) {
   // 本地兜底
   const fallback = await getGroupLocalReply(replier, userText);
   accText = fallback;
-  if (viewingThis) bubbleEl.innerHTML = renderMarkdown(fallback);
+  if (viewingThis) {
+    bubbleEl.innerHTML = renderMarkdown(fallback);
+    enhanceCodeBlocks(bubbleEl);
+  }
   await finishGroupAIMessage(sess, replier, aiMsg, msgEl, bubbleEl, fallback, userMsg, '');
 }
 
@@ -461,13 +465,20 @@ async function runGroupAIStream(bubbleEl, messages, sess, replier, groupId, getA
       if (state.streamCancelled) return;
       if (!state.messageListEl || state.currentSession?.id !== sess.id) return;
       setAcc(text);
-      // 思维链剥离
-      const parsed = parseThinkingTags(text);
-      if (parsed.thinking) {
-        setThinking(parsed.thinking);
-        updateGroupThinkingUI(msgEl, parsed.thinking, { streaming: true });
+      // 思维链剥离：parseThinkingTags 返回 [{type:'thinking'|'content', text}] 数组
+      const segs = parseThinkingTags(text);
+      let content = '';
+      let thinking = '';
+      for (const seg of segs) {
+        if (seg.type === 'thinking') thinking += seg.text;
+        else content += seg.text;
       }
-      bubbleEl.innerHTML = renderMarkdown(parsed.content || '');
+      if (thinking) {
+        setThinking(thinking);
+        updateGroupThinkingUI(msgEl, thinking, { streaming: true });
+      }
+      bubbleEl.innerHTML = renderMarkdown(content || '');
+      enhanceCodeBlocks(bubbleEl);
       scrollToBottom();
     },
     onThinking: (text) => {
@@ -483,13 +494,23 @@ async function runGroupAIStream(bubbleEl, messages, sess, replier, groupId, getA
 async function finishGroupAIMessage(sess, replier, aiMsg, msgEl, bubbleEl, finalText, userMsg, thinkingText = '') {
   const state = getState();
   const viewingThis = state.currentSession?.id === sess.id;
-  const parsed = parseThinkingTags(finalText);
-  aiMsg.content = parsed.content || finalText;
-  aiMsg.thinking = parsed.thinking || thinkingText || '';
+  // parseThinkingTags 返回数组，遍历累加出 content / thinking
+  const segs = parseThinkingTags(finalText);
+  let content = '';
+  let thinking = '';
+  for (const seg of segs) {
+    if (seg.type === 'thinking') thinking += seg.text;
+    else content += seg.text;
+  }
+  aiMsg.content = content || finalText;
+  aiMsg.thinking = thinking || thinkingText || '';
   aiMsg.status = 'sent';
   try { await setDB(STORES.groupMessages, aiMsg.id, aiMsg); } catch (e) {}
   if (viewingThis) {
-    if (bubbleEl) bubbleEl.innerHTML = renderMarkdown(aiMsg.content);
+    if (bubbleEl) {
+      bubbleEl.innerHTML = renderMarkdown(aiMsg.content);
+      enhanceCodeBlocks(bubbleEl);
+    }
     if (aiMsg.thinking) updateGroupThinkingUI(msgEl, aiMsg.thinking, { streaming: false });
     updateGroupChatHeader(aiMsg.timestamp);
     scrollToBottom();

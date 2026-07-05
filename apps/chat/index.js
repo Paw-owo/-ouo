@@ -968,15 +968,37 @@ export async function mount(container, context) {
   };
   bus.on('chat:message-received', onMsgReceived);
   state.busListeners.push(['chat:message-received', onMsgReceived]);
+  // 群聊消息也要触发列表刷新（群消息在另一个 store，单独的事件）
+  bus.on('chat:group-ai-message', onMsgReceived);
+  state.busListeners.push(['chat:group-ai-message', onMsgReceived]);
+  bus.on('chat:group-user-message', onMsgReceived);
+  state.busListeners.push(['chat:group-user-message', onMsgReceived]);
+  // 群成员变动 / 会话字段更新也要刷新列表（群名改了、加人了等）
+  const onSessionUpdated = () => {
+    if (state.view === 'list') renderSessionListItems(state.lastSearchKeyword);
+  };
+  bus.on('chat:session-updated', onSessionUpdated);
+  state.busListeners.push(['chat:session-updated', onSessionUpdated]);
+  bus.on('chat:group-members-changed', onSessionUpdated);
+  state.busListeners.push(['chat:group-members-changed', onSessionUpdated]);
 
-  // 监听角色头像更新：在详情页时实时刷新 AI 头像
-  const onAvatarUpdated = () => {
-    if (state.view === 'chat') {
-      try { refreshAvatar(); } catch (e) { console.warn('[chat] 刷新头像失败', e); }
+  // 监听角色资料更新（avatar APP 换头像 / characters APP 改名改人设 / 导入角色卡都会 emit）
+  // 在详情页时重新读 DB 拿最新角色，刷新 header 名字 + AI 头像 + 对话卡片名字
+  const onCharacterUpdated = async () => {
+    if (state.view !== 'chat') return;
+    if (!state.currentCharacterId) return;
+    try {
+      const fresh = await getDB(STORES.characters, state.currentCharacterId);
+      if (fresh) {
+        state.currentCharacter = fresh;
+        refreshAvatar();
+      }
+    } catch (e) {
+      console.warn('[chat] 刷新角色资料失败', e);
     }
   };
-  bus.on('avatar:updated', onAvatarUpdated);
-  state.busListeners.push(['avatar:updated', onAvatarUpdated]);
+  bus.on('character:updated', onCharacterUpdated);
+  state.busListeners.push(['character:updated', onCharacterUpdated]);
 
   // 旧数据迁移：把没有 sessionId 的消息归到按角色生成的会话里
   await maybeMigrateLegacyMessages();

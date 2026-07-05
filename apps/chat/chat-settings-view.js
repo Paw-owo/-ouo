@@ -6,11 +6,12 @@
 // 依赖：core/ui.js, core/storage.js, core/storage-keys.js, ./chat-settings/widgets.js,
 //       ./chat-settings/*-group.js, ./index.js（动态 import 避免循环）
 
-import { createIcon } from '../../core/ui.js';
+import { createIcon, createCollapsibleCard } from '../../core/ui.js';
 import { showToast, showConfirm, showBottomSheet } from '../../core/ui.js';
 import { getDB } from '../../core/storage.js';
 import { STORES, KEYS } from '../../core/storage-keys.js';
 import bus from '../../core/events.js';
+import { saveAIConfig as saveAIConfigCore } from '../../js/ai/ai-client.js';
 import {
   ensureSettingsStyle,
   makeSection, makeSectionTitle, makeField, makeInput, makeToggle,
@@ -279,8 +280,6 @@ export async function openGlobalMessageSettings() {
 // ════════════════════════════════════════
 
 function buildGlobalAIConfigSection() {
-  const section = makeSection();
-  section.appendChild(makeSectionTitle('默认 AI 配置'));
   const content = document.createElement('div');
   content.appendChild(makeHintBar('这是所有聊天的默认 AI 接口，单个角色可在自己设置里覆盖', 'info'));
 
@@ -389,8 +388,8 @@ function buildGlobalAIConfigSection() {
   }
   content.appendChild(badgeRow);
 
-  section.appendChild(content);
-  return section;
+  // 与其他分组一致：用 createCollapsibleCard 包起来，可折叠
+  return createCollapsibleCard('默认 AI 配置', content, { collapsed: false, icon: 'settings' });
 }
 
 // ════════════════════════════════════════
@@ -628,13 +627,10 @@ function readAIConfig() {
   }
 }
 
-// 写全局 AI 配置
+// 写全局 AI 配置（统一走 ai-client.js 的实现，避免双份逻辑漂移；这里只补一层错误提示）
 function saveAIConfig(patch) {
   try {
-    const cur = readAIConfig();
-    const next = { ...cur, ...patch };
-    localStorage.setItem(KEYS.aiConfig, JSON.stringify(next));
-    bus.emit('ai:config-changed', { config: next });
+    saveAIConfigCore(patch);
   } catch (e) {
     console.warn('[chat-settings] 保存全局 AI 配置失败', e);
     showToast('保存出错了，再试一下嘛', 'error');

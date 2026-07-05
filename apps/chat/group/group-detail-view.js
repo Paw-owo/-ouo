@@ -13,6 +13,7 @@ import { showToast, showBottomSheet, createIcon, registerIcon } from '../../core
 import { formatTime, formatRelative, clamp, throttle, isUsableImage, cssUrl, injectStyle } from '../../core/util.js';
 import { getState, backToSessionList } from '../index.js';
 import { renderMarkdown } from '../markdown.js';
+import { enhanceCodeBlocks } from '../code-block.js';
 import { escapeHTML, escapeAttr, attachLongPress } from '../shared-utils.js';
 import { applySessionWallpaper } from '../wallpaper.js';
 import { stopAllTTS } from '../../core/tts.js';
@@ -451,6 +452,8 @@ function createGroupMessageEl(msg, opts = {}) {
     bindThinkingToggle(el);
   }
   bindGroupInteractiveControls(el, msg);
+  // 代码块增强（复制 / 下载 / 预览 / 折叠）—— 仅 AI 成员的消息可能有代码块
+  if (!isUser) enhanceCodeBlocks(el);
   attachLongPress(el, () => openGroupMessageActionSheet(msg));
   return el;
 }
@@ -849,7 +852,11 @@ export function updateGroupThinkingUI(msgEl, thinkingText, opts = {}) {
     bindThinkingToggle(msgEl);
   } else {
     const bodyEl = thinkEl.querySelector('.chat-thinking-body');
-    if (bodyEl) bodyEl.textContent = thinkingText;
+    if (bodyEl) {
+      // 与单聊一致：思维链用 markdown 渲染，并增强代码块
+      bodyEl.innerHTML = renderMarkdown(thinkingText);
+      enhanceCodeBlocks(bodyEl);
+    }
     thinkEl.dataset.streaming = opts.streaming ? 'true' : 'false';
   }
 }
@@ -885,14 +892,10 @@ function onGroupInputChanged() {
 }
 
 function onGroupInputKeyDown(e) {
-  const state = getState();
-  // 回车发送（shift+回车换行）
+  // 回车发送（shift+回车换行）；回复中回车会触发取消流式（onGroupSendClick 内部处理）
   if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
-    const enterToSend = getData(KEYS.chatMode, 'bubble') ? true : true; // 群聊默认回车发送
-    if (enterToSend) {
-      e.preventDefault();
-      onGroupSendClick();
-    }
+    e.preventDefault();
+    onGroupSendClick();
   }
 }
 

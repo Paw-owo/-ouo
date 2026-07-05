@@ -331,6 +331,7 @@ async function sendSingleRich({ type, content, meta, preview }) {
   bus.emit('chat:user-message', {
     characterId: session.characterId,
     sessionId: session.id,
+    content: preview,
     preview
   });
   // 触发 AI 回复

@@ -117,9 +117,10 @@ export function renderMarkdown(text) {
     const line = lines[i];
 
     // ── 代码块 ```lang
+    // 输出带 wrap 的结构，方便 code-block.js 加工具栏（复制/下载/预览/折叠）
     const fenceMatch = line.match(/^```(\w*)\s*$/);
     if (fenceMatch) {
-      const lang = fenceMatch[1] || '';
+      const lang = (fenceMatch[1] || '').toLowerCase();
       const codeLines = [];
       i++;
       while (i < lines.length && !/^```\s*$/.test(lines[i])) {
@@ -127,8 +128,26 @@ export function renderMarkdown(text) {
         i++;
       }
       i++; // 跳过结束的 ```
-      const langClass = lang ? ` language-${escapeHTML(lang.toLowerCase())}` : '';
-      out.push(`<pre class="md-pre"><code class="md-code-block${langClass}">${codeLines.join('\n')}</code></pre>`);
+      const langClass = lang ? ` language-${escapeHTML(lang)}` : '';
+      const langLabel = lang ? escapeHTML(lang) : 'text';
+      // 用 data-lang 标记语言，code-block.js 据此判断是否显示"预览"按钮（html/htm/svg 可预览）
+      const canPreview = /^(html?|svg|xml)$/i.test(lang);
+      out.push(
+        `<div class="md-code-wrap" data-lang="${langLabel}" data-can-preview="${canPreview ? '1' : '0'}">` +
+        `<div class="md-code-head">` +
+        `<span class="md-code-lang">${langLabel}</span>` +
+        `<div class="md-code-actions">` +
+        `<button class="md-code-btn" data-action="copy" type="button">复制</button>` +
+        `<button class="md-code-btn" data-action="download" type="button">下载</button>` +
+        (canPreview ? `<button class="md-code-btn" data-action="preview" type="button">预览</button>` : '') +
+        `<button class="md-code-btn md-code-toggle" data-action="toggle" type="button" aria-label="折叠/展开"></button>` +
+        `</div>` +
+        `</div>` +
+        `<div class="md-code-body">` +
+        `<pre class="md-pre"><code class="md-code-block${langClass}">${codeLines.join('\n')}</code></pre>` +
+        `</div>` +
+        `</div>`
+      );
       continue;
     }
 
