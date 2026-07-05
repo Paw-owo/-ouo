@@ -6,6 +6,7 @@
 
 export {
   getAIConfig,
+  getEffectiveAIConfig,
   saveAIConfig,
   isAIConfigured,
   buildMessages,

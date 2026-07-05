@@ -4,9 +4,77 @@
 // 依赖：core/ai-client.js, core/ui.js, core/util.js, core/config.js
 
 import { getAIConfig, saveAIConfig, isAIConfigured, streamChat } from '../../core/ai-client.js';
-import { showToast, createIcon } from '../../core/ui.js';
+import { showToast, createIcon, createCollapsibleCard } from '../../core/ui.js';
 import { injectStyle, clamp } from '../../core/util.js';
 import { get as getConfig, set as setConfig } from '../../core/config.js';
+
+// 常见 AI 服务商预设：一键填好地址和推荐模型，省得主人到处查文档
+const PROVIDER_PRESETS = [
+  {
+    id: 'openai',
+    name: 'OpenAI',
+    url: 'https://api.openai.com/v1/chat/completions',
+    model: 'gpt-4o-mini',
+    desc: '官方，需要科学上网',
+    keyHint: 'sk-...'
+  },
+  {
+    id: 'siliconflow',
+    name: '硅基流动',
+    url: 'https://api.siliconflow.cn/v1/chat/completions',
+    model: 'deepseek-ai/DeepSeek-V3',
+    desc: '国内直连，免费额度多',
+    keyHint: 'sk-...'
+  },
+  {
+    id: 'deepseek',
+    name: 'DeepSeek',
+    url: 'https://api.deepseek.com/v1/chat/completions',
+    model: 'deepseek-chat',
+    desc: '深度求索，性价比高',
+    keyHint: 'sk-...'
+  },
+  {
+    id: 'qwen',
+    name: '通义千问',
+    url: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
+    model: 'qwen-plus',
+    desc: '阿里云，国内直连',
+    keyHint: 'sk-...'
+  },
+  {
+    id: 'zhipu',
+    name: '智谱 GLM',
+    url: 'https://open.bigmodel.cn/api/paas/v4/chat/completions',
+    model: 'glm-4-flash',
+    desc: '智谱 AI，有免费模型',
+    keyHint: '...'
+  },
+  {
+    id: 'moonshot',
+    name: '月之暗面 Kimi',
+    url: 'https://api.moonshot.cn/v1/chat/completions',
+    model: 'moonshot-v1-8k',
+    desc: 'Kimi，长上下文',
+    keyHint: 'sk-...'
+  },
+  {
+    id: 'baichuan',
+    name: '百川',
+    url: 'https://api.baichuan-ai.com/v1/chat/completions',
+    model: 'Baichuan4',
+    desc: '百川智能',
+    keyHint: 'sk-...'
+  },
+  {
+    id: 'openrouter',
+    name: 'OpenRouter',
+    url: 'https://openrouter.ai/api/v1/chat/completions',
+    model: 'openai/gpt-4o-mini',
+    desc: '聚合平台，一个 Key 用多家',
+    keyHint: 'sk-or-...'
+  },
+];
 
 // 我只注入一次样式，重复 import 时 injectStyle 会自动去重
 injectStyle('popo-settings-ai-card', `
@@ -73,6 +141,7 @@ export function renderAICard() {
   card.innerHTML = `
     <div class="card-title">AI 脑子设置</div>
     ${configured ? '' : '<div class="ai-card-hint warn" id="ai-warn">还没配置 AI 呢，聊天会先用本地回复池凑合一下</div>'}
+    <div id="ai-provider-presets"></div>
     <div class="ai-card-field">
       <span class="ai-card-field-label">AI 脑子的地址</span>
       <input class="input" id="ai-url" type="text" placeholder="https://api.openai.com/v1/chat/completions" value="${escapeAttr(cfg.url)}">
@@ -138,6 +207,54 @@ export function renderAICard() {
       <button class="btn" id="ai-test" type="button">试一下嘛</button>
     </div>
   `;
+
+  // ── 服务商预设：一键填好地址 + 模型 + Key 占位 ──
+  // 用折叠卡片包起来，默认收起，点开选一个服务商
+  const presetWrap = document.createElement('div');
+  presetWrap.innerHTML = `
+    <div style="font-size:var(--font-size-small);color:var(--text-hint);margin-bottom:10px;line-height:1.5">
+      选一个服务商，自动填好地址和推荐模型，省得自己查文档～填好后再改 Key 就能用
+    </div>
+    <div class="ai-preset-grid" style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px"></div>
+  `;
+  const grid = presetWrap.querySelector('.ai-preset-grid');
+  PROVIDER_PRESETS.forEach((p) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn';
+    btn.style.cssText = 'display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:10px 12px;text-align:left';
+    btn.innerHTML = `
+      <span style="font-weight:500">${escapeAttr(p.name)}</span>
+      <span style="font-size:var(--font-size-small);color:var(--text-hint)">${escapeAttr(p.desc)}</span>
+    `;
+    btn.addEventListener('click', () => {
+      // 填入预设值（不覆盖已填的 Key）
+      card.querySelector('#ai-url').value = p.url;
+      // 如果当前 model 是 input（手动输入模式），直接设值；如果是 select，切回 input 再设
+      const modelEl = card.querySelector('#ai-model');
+      if (modelEl.tagName === 'SELECT') {
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.placeholder = 'gpt-4o-mini';
+        input.id = 'ai-model';
+        input.className = 'input';
+        input.value = p.model;
+        modelEl.replaceWith(input);
+        card.querySelector('#ai-model-manual').style.display = 'none';
+      } else {
+        modelEl.value = p.model;
+      }
+      // Key 占位提示更新
+      const keyInput = card.querySelector('#ai-key');
+      if (!keyInput.value) keyInput.placeholder = p.keyHint;
+      showToast(`填好「${p.name}」啦，补上 Key 就能用`, 'success', 1600);
+    });
+    grid.appendChild(btn);
+  });
+  const presetCard = createCollapsibleCard('一键选服务商', presetWrap, {
+    collapsed: true, icon: 'star', subtitle: 'OpenAI / 硅基 / DeepSeek / 通义 等 8 家'
+  });
+  card.querySelector('#ai-provider-presets').appendChild(presetCard);
 
   // 显示 / 隐藏密码小切换
   const eye = card.querySelector('#ai-eye');

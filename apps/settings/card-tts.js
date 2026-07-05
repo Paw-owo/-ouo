@@ -2,7 +2,7 @@
 // 我的声音卡——TTS 配置 UI。
 // 文案上把 TTS 叫成「我的声音」，免得吓到主人。
 // 支持 4 种 provider：浏览器自带 / OpenAI / 硅基流动 / ElevenLabs。
-// 功能：选 provider / 配字段 / 试听一句 / 存起来。
+// 功能：选 provider / 配字段 / 试听一句 / 存起来 / 拉取音色列表 / WebSpeech 按语言筛选。
 // 依赖：core/tts.js, core/ui.js, core/util.js
 
 import {
@@ -12,7 +12,7 @@ import {
   listVoices,
   TTS_PROVIDERS
 } from '../../core/tts.js';
-import { showToast, createIcon } from '../../core/ui.js';
+import { showToast, createIcon, createCollapsibleCard } from '../../core/ui.js';
 import { injectStyle, clamp } from '../../core/util.js';
 
 injectStyle('popo-settings-tts-card', `
@@ -163,10 +163,14 @@ export function renderTTSCard() {
     } else if (provider === TTS_PROVIDERS.siliconflow) {
       data.apiKey = get('tts-sf-key').trim();
       data.model = get('tts-sf-model');
-      data.voice = get('tts-sf-voice').trim();
+      // 手动填的优先于下拉选择
+      const manual = get('tts-sf-voice-manual').trim();
+      data.voice = manual || get('tts-sf-voice').trim();
     } else if (provider === TTS_PROVIDERS.elevenlabs) {
       data.apiKey = get('tts-el-key').trim();
-      data.voice = get('tts-el-voice').trim();
+      // 手动填的优先于下拉选择
+      const manual = get('tts-el-voice-manual').trim();
+      data.voice = manual || get('tts-el-voice').trim();
       data.model = get('tts-el-model');
       const stability = getNum('tts-el-stab', 0.5);
       const similarity = getNum('tts-el-sim', 0.75);
@@ -225,19 +229,76 @@ export function renderTTSCard() {
 }
 
 /**
+ * 从远程 provider 拉取可用音色列表。
+ * @param {string} provider  provider id
+ * @param {string} apiKey    API Key
+ * @returns {Promise<Array<{id,name,lang?}>>}
+ */
+async function fetchRemoteVoices(provider, apiKey) {
+  if (provider === TTS_PROVIDERS.elevenlabs) {
+    // ElevenLabs: GET /v1/voices
+    const res = await fetch('https://api.elevenlabs.io/v1/voices', {
+      headers: { 'xi-api-key': apiKey }
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const json = await res.json();
+    return (json.voices || []).map((v) => ({
+      id: v.voice_id,
+      name: v.name || v.voice_id,
+      lang: (v.labels && v.labels.language) ? v.labels.language : ''
+    }));
+  }
+  if (provider === TTS_PROVIDERS.siliconflow) {
+    // 硅基流动: GET /v1/audio/voice/list
+    const res = await fetch('https://api.siliconflow.cn/v1/audio/voice/list', {
+      headers: { Authorization: `Bearer ${apiKey}` }
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const json = await res.json();
+    // 返回格式可能是 { data: [...] } 或直接数组
+    const list = json.data || json.voices || json || [];
+    return (Array.isArray(list) ? list : []).map((v) => ({
+      id: v.voice_id || v.id || v.uri,
+      name: v.name || v.voice_id || v.id,
+      lang: v.language || v.lang || ''
+    }));
+  }
+  // OpenAI 的嗓音是固定的 6 个，不提供列表 API，直接返回预设
+  if (provider === TTS_PROVIDERS.openai) {
+    return OPENAI_VOICES.map((v) => ({ id: v, name: v }));
+  }
+  return [];
+}
+
+/**
  * 根据不同 provider 渲染对应的配置字段 DOM。
+ * WebSpeech：语言筛选 + 嗓音下拉 + 语速/音调/音量
+ * OpenAI：Key + 型号 + 嗓音下拉（固定 6 个）
+ * 硅基流动：Key + 型号 + 嗓音下拉（从 API 拉取）+ 手动输入兜底
+ * ElevenLabs：Key + 嗓音下拉（从 API 拉取）+ 型号 + 稳定性/相似度
  */
 function buildProviderConfig(provider, cfg) {
   const wrap = document.createElement('div');
   if (provider === TTS_PROVIDERS.webSpeech) {
-    // 浏览器自带：语音选择 + 语速/音调/音量
+    // 浏览器自带：语言筛选 + 语音选择 + 语速/音调/音量
     const voices = safeListVoices();
+    // 提取所有语言并去重排序
+    const langs = [...new Set(voices.map((v) => v.lang).filter(Boolean))].sort();
+    const curLangPrefix = (cfg.voice && voices.find((v) => (v.voiceURI || v.name) === cfg.voice)?.lang) || '';
+    const curLang = curLangPrefix ? langs.find((l) => l.toLowerCase().startsWith(curLangPrefix.toLowerCase().slice(0, 2))) || '' : '';
     wrap.innerHTML = `
+      <div class="tts-field">
+        <label class="tts-field-label" for="tts-ws-lang">先选语言</label>
+        <select class="select" id="tts-ws-lang">
+          <option value="">（全部）</option>
+          ${langs.map((l) => `<option value="${escapeAttr(l)}" ${l === curLang ? 'selected' : ''}>${escapeAttr(l)}</option>`).join('')}
+        </select>
+      </div>
       <div class="tts-field">
         <label class="tts-field-label" for="tts-ws-voice">选个嗓音</label>
         <select class="select" id="tts-ws-voice">
           <option value="">（让小手机自己挑）</option>
-          ${voices.map((v) => `<option value="${escapeAttr(v.voiceURI || v.name)}" ${(cfg.voice === (v.voiceURI || v.name)) ? 'selected' : ''}>${escapeAttr(v.name || v.voiceURI)}${v.lang ? ' (' + escapeAttr(v.lang) + ')' : ''}</option>`).join('')}
+          ${voices.map((v) => `<option value="${escapeAttr(v.voiceURI || v.name)}" data-lang="${escapeAttr(v.lang || '')}" ${(cfg.voice === (v.voiceURI || v.name)) ? 'selected' : ''}>${escapeAttr(v.name || v.voiceURI)}${v.lang ? ' (' + escapeAttr(v.lang) + ')' : ''}</option>`).join('')}
         </select>
         ${!voices.length ? '<div style="font-size:var(--font-size-small);color:var(--text-hint);margin-top:4px">还没读到系统嗓音呢，先点试听也能念</div>' : ''}
       </div>
@@ -263,6 +324,23 @@ function buildProviderConfig(provider, cfg) {
         </div>
       </div>
     `;
+    // 语言筛选联动嗓音下拉
+    const langSel = wrap.querySelector('#tts-ws-lang');
+    const voiceSel = wrap.querySelector('#tts-ws-voice');
+    langSel.addEventListener('change', () => {
+      const selLang = langSel.value;
+      voiceSel.querySelectorAll('option[data-lang]').forEach((opt) => {
+        if (!selLang) {
+          opt.style.display = '';
+        } else {
+          const optLang = opt.dataset.lang || '';
+          opt.style.display = optLang.toLowerCase().startsWith(selLang.toLowerCase().slice(0, 2)) ? '' : 'none';
+        }
+      });
+      // 如果当前选中的被隐藏了，重置为默认
+      const cur = voiceSel.options[voiceSel.selectedIndex];
+      if (cur && cur.style.display === 'none') voiceSel.value = '';
+    });
     bindRangeLabels(wrap, [
       { id: 'tts-ws-rate', valId: 'tts-ws-rate-val', fmt: (v) => Number(v).toFixed(1) },
       { id: 'tts-ws-pitch', valId: 'tts-ws-pitch-val', fmt: (v) => Number(v).toFixed(1) },
@@ -281,10 +359,13 @@ function buildProviderConfig(provider, cfg) {
         </select>
       </div>
       <div class="tts-field">
-        <label class="tts-field-label" for="tts-oai-voice">嗓音</label>
+        <label class="tts-field-label" for="tts-oai-voice">嗓音（6 种固定音色）</label>
         <select class="select" id="tts-oai-voice">
           ${optionsHTML(OPENAI_VOICES, cfg.voice || 'alloy')}
         </select>
+        <div style="font-size:var(--font-size-small);color:var(--text-hint);margin-top:4px">
+          alloy=中性 · echo=男声 · fable=叙事 · onyx=深沉男 · nova=女声 · shimmer=轻柔女
+        </div>
       </div>
     `;
   } else if (provider === TTS_PROVIDERS.siliconflow) {
@@ -300,10 +381,53 @@ function buildProviderConfig(provider, cfg) {
         </select>
       </div>
       <div class="tts-field">
-        <label class="tts-field-label" for="tts-sf-voice">嗓音 ID（按模型文档填，可留空）</label>
-        <input class="input" id="tts-sf-voice" type="text" placeholder="voice id" value="${escapeAttr(cfg.voice || '')}">
+        <label class="tts-field-label" for="tts-sf-voice">嗓音</label>
+        <div class="ai-card-model-row" style="display:flex;gap:6px">
+          <select class="select input" id="tts-sf-voice" style="flex:1;min-width:0">
+            <option value="">（先点右边拉取，或手动填）</option>
+          </select>
+          <button class="ai-card-model-btn" id="tts-sf-fetch" type="button" aria-label="拉取音色列表" style="width:36px;height:36px;display:flex;align-items:center;justify-content:center;background:var(--bg-secondary);border:none;border-radius:var(--radius-sm);color:var(--text-secondary);cursor:pointer">${createIcon('refresh', 18).outerHTML}</button>
+        </div>
+        <input class="input" id="tts-sf-voice-manual" type="text" placeholder="或者手动填 voice id" value="${escapeAttr(cfg.voice || '')}" style="margin-top:6px">
+        <div style="font-size:var(--font-size-small);color:var(--text-hint);margin-top:4px">
+          先填 Key 再点刷新拉取音色列表；手动填的会覆盖下拉选择
+        </div>
       </div>
     `;
+    // 拉取音色按钮
+    const fetchBtn = wrap.querySelector('#tts-sf-fetch');
+    const voiceSel = wrap.querySelector('#tts-sf-voice');
+    fetchBtn.addEventListener('click', async () => {
+      const apiKey = wrap.querySelector('#tts-sf-key').value.trim();
+      if (!apiKey) { showToast('先填 API Key 嘛', 'error'); return; }
+      fetchBtn.disabled = true;
+      fetchBtn.classList.add('spinning');
+      try {
+        const voices = await fetchRemoteVoices(TTS_PROVIDERS.siliconflow, apiKey);
+        if (!voices.length) {
+          showToast('拉不到音色列表呢，可以手动填', 'error');
+          return;
+        }
+        const cur = voiceSel.value;
+        voiceSel.innerHTML = '<option value="">（选一个）</option>' + voices.map((v) =>
+          `<option value="${escapeAttr(v.id)}" ${v.id === cur ? 'selected' : ''}>${escapeAttr(v.name)}${v.lang ? ' (' + escapeAttr(v.lang) + ')' : ''}</option>`
+        ).join('');
+        showToast(`拉到 ${voices.length} 个音色`, 'success');
+      } catch (e) {
+        showToast('拉不到音色列表：' + (e.message || '网络错误'), 'error');
+      } finally {
+        fetchBtn.disabled = false;
+        fetchBtn.classList.remove('spinning');
+      }
+    });
+    // 预填已有 voice
+    if (cfg.voice) {
+      const opt = document.createElement('option');
+      opt.value = cfg.voice;
+      opt.textContent = cfg.voice + '（当前）';
+      opt.selected = true;
+      voiceSel.appendChild(opt);
+    }
   } else if (provider === TTS_PROVIDERS.elevenlabs) {
     const vs = cfg.voice_settings || {};
     wrap.innerHTML = `
@@ -312,8 +436,14 @@ function buildProviderConfig(provider, cfg) {
         <input class="input" id="tts-el-key" type="password" placeholder="xi-..." value="${escapeAttr(cfg.apiKey || '')}">
       </div>
       <div class="tts-field">
-        <label class="tts-field-label" for="tts-el-voice">嗓音 ID</label>
-        <input class="input" id="tts-el-voice" type="text" placeholder="如：21m00Tcm4TlvDq8ikWAM" value="${escapeAttr(cfg.voice || '')}">
+        <label class="tts-field-label" for="tts-el-voice">嗓音</label>
+        <div class="ai-card-model-row" style="display:flex;gap:6px">
+          <select class="select input" id="tts-el-voice" style="flex:1;min-width:0">
+            <option value="">（先点右边拉取，或手动填）</option>
+          </select>
+          <button class="ai-card-model-btn" id="tts-el-fetch" type="button" aria-label="拉取音色列表" style="width:36px;height:36px;display:flex;align-items:center;justify-content:center;background:var(--bg-secondary);border:none;border-radius:var(--radius-sm);color:var(--text-secondary);cursor:pointer">${createIcon('refresh', 18).outerHTML}</button>
+        </div>
+        <input class="input" id="tts-el-voice-manual" type="text" placeholder="或者手动填 voice id" value="${escapeAttr(cfg.voice || '')}" style="margin-top:6px">
       </div>
       <div class="tts-field">
         <label class="tts-field-label" for="tts-el-model">型号</label>
@@ -336,6 +466,40 @@ function buildProviderConfig(provider, cfg) {
         </div>
       </div>
     `;
+    // 拉取音色按钮
+    const fetchBtn = wrap.querySelector('#tts-el-fetch');
+    const voiceSel = wrap.querySelector('#tts-el-voice');
+    fetchBtn.addEventListener('click', async () => {
+      const apiKey = wrap.querySelector('#tts-el-key').value.trim();
+      if (!apiKey) { showToast('先填 API Key 嘛', 'error'); return; }
+      fetchBtn.disabled = true;
+      fetchBtn.classList.add('spinning');
+      try {
+        const voices = await fetchRemoteVoices(TTS_PROVIDERS.elevenlabs, apiKey);
+        if (!voices.length) {
+          showToast('拉不到音色列表呢，可以手动填', 'error');
+          return;
+        }
+        const cur = voiceSel.value;
+        voiceSel.innerHTML = '<option value="">（选一个）</option>' + voices.map((v) =>
+          `<option value="${escapeAttr(v.id)}" ${v.id === cur ? 'selected' : ''}>${escapeAttr(v.name)}${v.lang ? ' (' + escapeAttr(v.lang) + ')' : ''}</option>`
+        ).join('');
+        showToast(`拉到 ${voices.length} 个音色`, 'success');
+      } catch (e) {
+        showToast('拉不到音色列表：' + (e.message || '网络错误'), 'error');
+      } finally {
+        fetchBtn.disabled = false;
+        fetchBtn.classList.remove('spinning');
+      }
+    });
+    // 预填已有 voice
+    if (cfg.voice) {
+      const opt = document.createElement('option');
+      opt.value = cfg.voice;
+      opt.textContent = cfg.voice + '（当前）';
+      opt.selected = true;
+      voiceSel.appendChild(opt);
+    }
     bindRangeLabels(wrap, [
       { id: 'tts-el-stab', valId: 'tts-el-stab-val', fmt: (v) => Number(v).toFixed(2) },
       { id: 'tts-el-sim', valId: 'tts-el-sim-val', fmt: (v) => Number(v).toFixed(2) }

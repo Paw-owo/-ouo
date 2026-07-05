@@ -10,12 +10,13 @@ import { showToast, showConfirm, showBottomSheet, createIcon } from '../../core/
 import { injectStyle, pickImageFile, isUsableImage, clamp } from '../../core/util.js';
 import bus from '../../core/events.js';
 
-// 5 个预设 widget，和 desktop.js 的 WIDGET_DEFS / settings 的 WIDGET_LIST 保持一致
+// 6 个预设 widget，和 desktop.js 的 WIDGET_DEFS / settings 的 WIDGET_LIST 保持一致
 const WIDGETS = [
   { id: 'time', name: '时间' },
   { id: 'weather', name: '天气' },
   { id: 'anniversary', name: '纪念日' },
   { id: 'focus', name: '今日提示' },
+  { id: 'countdown', name: '倒计时' },
   { id: 'vinyl', name: '黑胶' }
 ];
 

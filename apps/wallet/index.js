@@ -383,6 +383,7 @@ function handleTransfer(character, { amount, note, fromUser }) {
     fromUser
   });
   // 写入长期记忆：我转她记为 user，她转我记为 assistant
+  // recordInteraction 是 async，不 await 但加 .catch 防止 unhandledrejection
   try {
     if (fromUser) {
       recordInteraction({
@@ -392,7 +393,7 @@ function handleTransfer(character, { amount, note, fromUser }) {
         content: `转了${amount}金币给${name}`,
         importance: 6,
         relatedApp: 'wallet'
-      });
+      }).catch((e) => console.warn('[wallet] 记忆写入失败', e));
     } else {
       recordInteraction({
         characterId: character.id,
@@ -401,7 +402,7 @@ function handleTransfer(character, { amount, note, fromUser }) {
         content: `收到${name}转的${amount}金币`,
         importance: 6,
         relatedApp: 'wallet'
-      });
+      }).catch((e) => console.warn('[wallet] 记忆写入失败', e));
     }
   } catch (e) {
     console.warn('[wallet] 记忆写入失败', e);

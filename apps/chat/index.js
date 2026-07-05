@@ -11,11 +11,14 @@ import { injectStyle, debounce } from '../../core/util.js';
 import { applyAppBg } from '../../core/app-bg.js';
 import { renderSessionListPage, renderSessionListItems } from './session-list.js';
 import { renderChatDetailView, flushDraft, stopChatTTS, refreshAvatar } from './detail-view.js';
-import { cancelStreaming } from './sending.js';
+import { cancelStreaming, recalcChatUnread } from './sending.js';
+import { cleanupExtras } from './extras.js';
 
 // re-export 给 message-actions.js / session-list.js 等子文件用（保持原 import 路径不变）
 export { applySessionWallpaper } from './wallpaper.js';
 export { setQuoteToInput } from './detail-view.js';
+// 增强模块：转发 / 已读回执 / 表情面板 / 语音 / 页内搜索 / 引用定位
+export { openForwardSheet, markUserMessagesRead, scrollToMessageAndHighlight } from './extras.js';
 
 // ════════════════════════════════════════
 // 模块状态（单例，子模块通过 getState 读取）
@@ -551,6 +554,395 @@ injectStyle('app-chat-style', `
 `);
 
 // ════════════════════════════════════════
+// 增强样式：状态指示器 / 引用卡片 / 表情面板 / 语音 / 搜索栏 / 网格菜单 / 转发 / 音频消息
+// 对齐微信/QQ/Kelivo 体验，全部走 CSS 变量，动效 cubic-bezier(0.34, 1.56, 0.64, 1)
+// ════════════════════════════════════════
+injectStyle('app-chat-enhance-style', `
+  /* ── 消息状态指示器增强：sending/sent/delivered/read/failed ── */
+  .chat-status-sent,
+  .chat-status-delivered,
+  .chat-status-read{
+    display:inline-flex; align-items:center; gap:1px;
+    color:var(--text-hint); line-height:1;
+  }
+  /* 已读用主题色，让"她看到啦"更醒目 */
+  .chat-status-read{ color:var(--accent); }
+  .chat-status-delivered .popo-icon-svg,
+  .chat-status-read .popo-icon-svg{ stroke-width:2; }
+  /* 双勾第二个图标微微偏左，叠出双勾效果 */
+  .chat-status-delivered .popo-icon:last-child,
+  .chat-status-read .popo-icon:last-child{ margin-left:-6px; }
+  .chat-status-sending{
+    display:inline-block; width:12px; height:12px;
+    border:1.5px solid var(--text-hint); border-top-color:transparent;
+    border-radius:50%;
+    animation:chatStatusSpin 0.8s linear infinite;
+  }
+  .chat-status-failed{
+    color:var(--danger); display:inline-flex; cursor:pointer;
+    padding:2px; border-radius:50%;
+    transition:var(--motion);
+  }
+  .chat-status-failed:active{ transform:scale(var(--press-scale)); background:color-mix(in srgb, var(--danger) 18%, transparent); }
+
+  /* ── 引用卡片：可点击样式 + 发送者名 + 内容预览 ── */
+  .chat-quote-clickable{
+    cursor:pointer; transition:var(--motion);
+    display:flex; flex-direction:column; gap:2px;
+    padding:6px 10px; margin-bottom:6px;
+    border-left:3px solid var(--accent);
+    background:color-mix(in srgb, var(--accent-light) 50%, transparent);
+    border-radius:0 var(--radius-sm) var(--radius-sm) 0;
+  }
+  .chat-quote-clickable:active{ transform:scale(var(--press-scale)); }
+  .chat-quote-sender{
+    font-size:var(--font-size-caption); color:var(--accent-dark);
+    font-weight:600; line-height:1.2;
+  }
+  .chat-quote-preview-text{
+    font-size:var(--font-size-small); color:var(--text-secondary);
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+    line-height:1.3;
+  }
+  /* 旧版纯文本引用（无 quoteId）保留原样式 */
+  .chat-bubble > .chat-quote:not(.chat-quote-clickable){
+    font-size:var(--font-size-small); color:var(--text-secondary);
+    background:color-mix(in srgb, var(--text-hint) 12%, transparent);
+    border-left:2px solid var(--accent);
+    padding:4px 8px; margin-bottom:6px; border-radius:var(--radius-sm);
+    white-space:pre-wrap; word-break:break-word;
+  }
+
+  /* ── 引用消息定位闪烁动画 ── */
+  .chat-msg-row.highlight-flash{
+    animation:chatHighlightFlash 1.6s ease-out;
+    border-radius:var(--radius-md);
+  }
+  @keyframes chatHighlightFlash{
+    0%{ background:color-mix(in srgb, var(--accent) 35%, transparent); }
+    30%{ background:color-mix(in srgb, var(--accent) 18%, transparent); }
+    50%{ background:color-mix(in srgb, var(--accent) 28%, transparent); }
+    70%{ background:color-mix(in srgb, var(--accent) 12%, transparent); }
+    100%{ background:transparent; }
+  }
+
+  /* ── 输入区按钮通用样式（+ / 表情 / 语音 / 发送）── */
+  .chat-input-row .chat-plus,
+  .chat-input-row .chat-emoji-btn,
+  .chat-input-row .chat-voice-btn,
+  .chat-input-row .chat-send{
+    flex-shrink:0; width:36px; height:36px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    transition:var(--motion); cursor:pointer; border:none;
+  }
+  .chat-emoji-btn, .chat-voice-btn{
+    background:color-mix(in srgb, var(--bg-secondary) 70%, transparent);
+    color:var(--text-secondary);
+  }
+  .chat-emoji-btn:active, .chat-voice-btn:active{ transform:scale(var(--press-scale)); }
+  .chat-emoji-btn.active{
+    background:color-mix(in srgb, var(--accent-light) 70%, transparent);
+    color:var(--accent-dark);
+  }
+  .chat-voice-btn.active{
+    background:color-mix(in srgb, var(--accent-light) 70%, transparent);
+    color:var(--accent-dark);
+  }
+  /* 发送按钮：有内容时变主题色，空内容时弱化 */
+  .chat-send{
+    background:color-mix(in srgb, var(--accent) 50%, transparent);
+    color:var(--bubble-user-text);
+  }
+  .chat-send.active{
+    background:var(--accent);
+    box-shadow:var(--shadow-sm);
+  }
+  .chat-send:active{ transform:scale(var(--press-scale)); }
+  .chat-send.replying{
+    background:color-mix(in srgb, var(--danger) 70%, transparent);
+  }
+
+  /* ── 按住说话按钮（语音模式时替代 textarea）── */
+  .chat-voice-hold{
+    flex:1; height:38px; border:none; cursor:pointer;
+    background:color-mix(in srgb, var(--bg-secondary) 80%, transparent);
+    color:var(--text-secondary);
+    border-radius:var(--radius-md);
+    font-size:var(--font-size-base); font-family:inherit;
+    transition:var(--motion);
+    user-select:none; -webkit-user-select:none;
+  }
+  .chat-voice-hold:active{
+    transform:scale(var(--press-scale));
+    background:color-mix(in srgb, var(--accent-light) 70%, transparent);
+    color:var(--accent-dark);
+  }
+
+  /* ── 表情面板 ── */
+  .chat-emoji-panel{
+    max-height:0; overflow:hidden;
+    background:color-mix(in srgb, var(--bg-card) 96%, transparent);
+    backdrop-filter:blur(var(--glass-blur));
+    -webkit-backdrop-filter:blur(var(--glass-blur));
+    border-top:1px solid color-mix(in srgb, var(--text-hint) 16%, transparent);
+    transition:max-height var(--motion);
+    display:flex; flex-direction:column;
+  }
+  .chat-emoji-panel.show{ max-height:260px; }
+  .chat-emoji-tabs{
+    display:flex; gap:4px; padding:8px 12px 4px;
+    overflow-x:auto; -webkit-overflow-scrolling:touch;
+    border-bottom:1px solid color-mix(in srgb, var(--text-hint) 12%, transparent);
+    flex-shrink:0;
+  }
+  .chat-emoji-tab{
+    flex-shrink:0; padding:6px 12px; border:none; cursor:pointer;
+    background:transparent; color:var(--text-secondary);
+    border-radius:999px; font-size:var(--font-size-small); font-family:inherit;
+    transition:var(--motion);
+  }
+  .chat-emoji-tab:active{ transform:scale(var(--press-scale)); }
+  .chat-emoji-tab.active{
+    background:color-mix(in srgb, var(--accent-light) 70%, transparent);
+    color:var(--accent-dark); font-weight:600;
+  }
+  .chat-emoji-grid{
+    flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch;
+    padding:8px 10px 12px;
+    display:grid;
+    grid-template-columns:repeat(8, 1fr);
+    gap:2px;
+  }
+  .chat-emoji-item{
+    aspect-ratio:1; display:flex; align-items:center; justify-content:center;
+    border:none; cursor:pointer; background:transparent;
+    font-size:22px; line-height:1;
+    border-radius:var(--radius-sm);
+    transition:var(--motion);
+    padding:0;
+  }
+  .chat-emoji-item:active{ transform:scale(var(--press-scale)); background:color-mix(in srgb, var(--accent-light) 50%, transparent); }
+  .chat-emoji-item.picked{ background:color-mix(in srgb, var(--accent) 30%, transparent); }
+
+  /* ── 语音录制遮罩 ── */
+  .chat-voice-overlay{
+    position:fixed; inset:0; z-index:9100;
+    background:color-mix(in srgb, var(--bg-overlay) 70%, transparent);
+    backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px);
+    display:flex; align-items:center; justify-content:center;
+    opacity:0; transition:opacity var(--motion);
+    pointer-events:none;
+  }
+  .chat-voice-overlay.show{ opacity:1; pointer-events:auto; }
+  .chat-voice-overlay-card{
+    display:flex; flex-direction:column; align-items:center; gap:14px;
+    padding:24px 32px;
+    background:color-mix(in srgb, var(--bg-card) 96%, transparent);
+    border-radius:var(--radius-card);
+    box-shadow:var(--shadow-lg);
+  }
+  .chat-voice-overlay-icon{
+    width:80px; height:80px; border-radius:50%;
+    background:color-mix(in srgb, var(--accent-light) 70%, transparent);
+    color:var(--accent-dark);
+    display:flex; align-items:center; justify-content:center;
+    animation:chatVoicePulse 1.2s ease-in-out infinite;
+  }
+  @keyframes chatVoicePulse{
+    0%,100%{ transform:scale(1); box-shadow:var(--shadow-sm); }
+    50%{ transform:scale(1.06); box-shadow:var(--shadow-md); }
+  }
+  .chat-voice-overlay.cancelling .chat-voice-overlay-icon{
+    background:color-mix(in srgb, var(--danger) 30%, transparent);
+    color:var(--danger);
+    animation:none;
+  }
+  .chat-voice-timer{
+    font-size:var(--font-size-title); font-weight:600; color:var(--text-primary);
+    font-variant-numeric:tabular-nums;
+  }
+  .chat-voice-hint{
+    font-size:var(--font-size-small); color:var(--text-secondary);
+  }
+  .chat-voice-overlay.cancelling .chat-voice-hint{ color:var(--danger); }
+
+  /* ── 页内搜索栏（详情页顶部，可折叠）── */
+  .chat-search-bar{
+    flex-shrink:0; display:flex; align-items:center; gap:6px;
+    padding:6px 12px;
+    background:color-mix(in srgb, var(--bg-card) 92%, transparent);
+    backdrop-filter:blur(var(--glass-blur)); -webkit-backdrop-filter:blur(var(--glass-blur));
+    border-bottom:1px solid color-mix(in srgb, var(--text-hint) 16%, transparent);
+    max-height:0; overflow:hidden; opacity:0;
+    transition:max-height var(--motion), opacity var(--motion), padding var(--motion);
+    padding-top:0; padding-bottom:0;
+  }
+  .chat-search-bar.show{
+    max-height:56px; opacity:1; padding-top:6px; padding-bottom:6px;
+  }
+  .chat-search-input{
+    flex:1; min-width:0; padding:8px 12px;
+    background:var(--bg-secondary);
+    border:1px solid color-mix(in srgb, var(--text-hint) 18%, transparent);
+    border-radius:var(--radius-md);
+    font-size:var(--font-size-base); color:var(--text-primary); font-family:inherit;
+    transition:var(--motion);
+  }
+  .chat-search-input:focus{ outline:none; border-color:var(--accent); background:var(--bg-card); }
+  .chat-search-nav{
+    display:flex; align-items:center; gap:2px; flex-shrink:0;
+  }
+  .chat-search-nav button{
+    width:30px; height:30px; border-radius:50%; border:none; cursor:pointer;
+    background:transparent; color:var(--text-secondary);
+    display:flex; align-items:center; justify-content:center;
+    transition:var(--motion);
+  }
+  .chat-search-nav button:active{ transform:scale(var(--press-scale)); background:color-mix(in srgb, var(--accent-light) 50%, transparent); }
+  .chat-search-count{
+    font-size:var(--font-size-small); color:var(--text-hint);
+    min-width:42px; text-align:center; flex-shrink:0;
+    font-variant-numeric:tabular-nums;
+  }
+  /* 搜索高亮 mark */
+  .chat-bubble mark.chat-search-mark{
+    background:color-mix(in srgb, var(--accent) 50%, transparent);
+    color:inherit; border-radius:3px; padding:0 2px;
+  }
+  .chat-msg-row.search-current .chat-bubble{
+    box-shadow:0 0 0 2px color-mix(in srgb, var(--accent) 60%, transparent);
+    border-radius:var(--radius-md);
+  }
+
+  /* ── 音频消息渲染 ── */
+  .chat-audio{
+    display:flex; align-items:center; gap:10px;
+    min-width:160px; padding:4px 0;
+  }
+  .chat-audio-play{
+    flex-shrink:0; width:36px; height:36px; border-radius:50%;
+    border:none; cursor:pointer;
+    background:color-mix(in srgb, var(--accent) 25%, transparent);
+    color:var(--accent-dark);
+    display:flex; align-items:center; justify-content:center;
+    transition:var(--motion);
+  }
+  .chat-audio-play:active{ transform:scale(var(--press-scale)); }
+  .chat-msg-row.user .chat-audio-play{
+    background:color-mix(in srgb, var(--bubble-user-text) 25%, transparent);
+    color:var(--bubble-user-text);
+  }
+  .chat-audio-wave{
+    flex:1; height:20px; display:flex; align-items:center; gap:2px;
+  }
+  .chat-audio-wave span{
+    flex:1; background:currentColor; opacity:0.5;
+    border-radius:1px; min-width:2px;
+  }
+  .chat-audio-duration{
+    font-size:var(--font-size-small); color:currentColor; opacity:0.7;
+    flex-shrink:0; font-variant-numeric:tabular-nums;
+  }
+
+  /* ── 转发消息标识 ── */
+  .chat-forwarded-tag{
+    display:inline-flex; align-items:center; gap:3px;
+    font-size:var(--font-size-caption); color:var(--text-hint);
+    margin-bottom:4px; padding:0 4px;
+  }
+
+  /* ── 转发会话选择列表 ── */
+  .chat-forward-list{ display:flex; flex-direction:column; gap:6px; }
+  .chat-forward-item{
+    display:flex; align-items:center; gap:12px; padding:12px;
+    border-radius:var(--radius-md); cursor:pointer;
+    transition:var(--motion); background:transparent;
+    border:1px solid transparent;
+  }
+  .chat-forward-item:active{ transform:scale(var(--press-scale)); background:color-mix(in srgb, var(--accent-light) 30%, transparent); }
+  .chat-forward-avatar{
+    width:44px; height:44px; border-radius:50%; flex-shrink:0;
+    background-size:cover; background-position:center;
+    background:color-mix(in srgb, var(--accent-light) 50%, transparent);
+    display:flex; align-items:center; justify-content:center;
+    color:var(--accent-dark); overflow:hidden;
+  }
+  .chat-forward-avatar-fallback{ display:flex; align-items:center; justify-content:center; }
+  .chat-forward-info{ flex:1; min-width:0; }
+  .chat-forward-title{
+    font-size:var(--font-size-base); font-weight:600; color:var(--text-primary);
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  }
+  .chat-forward-preview{
+    font-size:var(--font-size-small); color:var(--text-hint);
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+    margin-top:2px;
+  }
+
+  /* ── 网格操作菜单（消息长按 / + 菜单，圆形按钮 + 文字）── */
+  .chat-action-grid{
+    display:grid; grid-template-columns:repeat(4, 1fr);
+    gap:10px 6px; padding:4px 0;
+  }
+  .chat-action-grid-item{
+    display:flex; flex-direction:column; align-items:center; gap:6px;
+    padding:10px 4px; border:none; cursor:pointer;
+    background:transparent; color:var(--text-primary);
+    border-radius:var(--radius-md);
+    transition:var(--motion); font-family:inherit;
+  }
+  .chat-action-grid-item:active{ transform:scale(var(--press-scale)); background:color-mix(in srgb, var(--accent-light) 35%, transparent); }
+  .chat-action-grid-item.danger{ color:var(--danger); }
+  .chat-action-grid-icon{
+    width:48px; height:48px; border-radius:50%;
+    background:color-mix(in srgb, var(--bg-secondary) 80%, transparent);
+    display:flex; align-items:center; justify-content:center;
+    transition:var(--motion);
+  }
+  .chat-action-grid-item.danger .chat-action-grid-icon{
+    background:color-mix(in srgb, var(--danger) 18%, transparent);
+  }
+  .chat-action-grid-item:active .chat-action-grid-icon{
+    background:color-mix(in srgb, var(--accent-light) 70%, transparent);
+  }
+  .chat-action-grid-item.danger:active .chat-action-grid-icon{
+    background:color-mix(in srgb, var(--danger) 30%, transparent);
+  }
+  .chat-action-grid-label{
+    font-size:var(--font-size-small); color:var(--text-secondary);
+    text-align:center; line-height:1.2;
+  }
+  .chat-action-grid-item.danger .chat-action-grid-label{ color:var(--danger); }
+  /* 禁用态：待接入的入口先灰掉，但保留可点击查看提示 */
+  .chat-action-grid-item.disabled{ opacity:0.45; cursor:not-allowed; }
+  .chat-action-grid-item.disabled:active{ transform:none; background:transparent; }
+  .chat-action-grid-item.disabled .chat-action-grid-icon{
+    background:color-mix(in srgb, var(--text-hint) 18%, transparent);
+    color:var(--text-hint);
+  }
+  .chat-action-grid-item.disabled .chat-action-grid-label{ color:var(--text-hint); }
+
+  /* ── 详情页头部：搜索按钮 ── */
+  .chat-header-search{
+    flex-shrink:0; width:36px; height:36px; border-radius:50%;
+    border:none; cursor:pointer;
+    background:transparent; color:var(--text-secondary);
+    display:flex; align-items:center; justify-content:center;
+    transition:var(--motion);
+  }
+  .chat-header-search:active{ transform:scale(var(--press-scale)); background:color-mix(in srgb, var(--accent-light) 40%, transparent); }
+
+  /* ── + 菜单分类（图片/拍照/文件/位置/名片）── */
+  .chat-plus-menu .chat-action-grid-icon{ background:color-mix(in srgb, var(--accent-light) 50%, transparent); color:var(--accent-dark); }
+
+  @media (prefers-reduced-motion:reduce){
+    .chat-voice-overlay-icon, .chat-emoji-panel, .chat-search-bar, .chat-msg-row.highlight-flash{
+      animation-duration:0.01ms!important; transition-duration:0.01ms!important;
+    }
+  }
+`);
+
+// ════════════════════════════════════════
 // mount / unmount
 // ════════════════════════════════════════
 
@@ -570,21 +962,97 @@ export async function mount(container, context) {
   // 草稿防抖（800ms 写入 DB）
   state.saveDraftDebounced = debounce(() => { flushDraft(); }, 800);
 
+  // 软键盘适配：用 visualViewport 监听键盘弹起/收起，把容器高度限制为可视区域，
+  // 让输入框始终露在键盘上方，不会被遮挡。
+  // 原版只靠 100% 高度，而 100% 解析到布局视口（不随键盘缩小）→ 输入框被键盘盖住。
+  state._onVpResize = () => {
+    const vp = window.visualViewport;
+    if (!vp || !state.containerEl) return;
+    // 容器高度跟随可视区域（键盘弹起时变小，收起时恢复满屏）
+    state.containerEl.style.height = vp.height + 'px';
+    // 详情页里：如果用户原本就在底部附近，键盘弹起后跟着滚到底，保证最新消息可见
+    if ((state.view === 'chat' || state.view === 'group') && state.messageListEl) {
+      const el = state.messageListEl;
+      const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+      if (distFromBottom < 100) {
+        requestAnimationFrame(() => {
+          try { el.scrollTo({ top: el.scrollHeight }); } catch (e) {}
+        });
+      }
+    }
+  };
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', state._onVpResize);
+    window.visualViewport.addEventListener('scroll', state._onVpResize);
+  }
+
   // 监听消息中心事件：在列表页时自动刷新（AI 在后台回复完时列表能更新）
   const onMsgReceived = () => {
     if (state.view === 'list') renderSessionListItems(state.lastSearchKeyword);
   };
   bus.on('chat:message-received', onMsgReceived);
   state.busListeners.push(['chat:message-received', onMsgReceived]);
+  // 群聊消息也要触发列表刷新（群消息在另一个 store，单独的事件）
+  bus.on('chat:group-ai-message', onMsgReceived);
+  state.busListeners.push(['chat:group-ai-message', onMsgReceived]);
+  bus.on('chat:group-user-message', onMsgReceived);
+  state.busListeners.push(['chat:group-user-message', onMsgReceived]);
+  // 群成员变动 / 会话字段更新也要刷新列表（群名改了、加人了等）
+  const onSessionUpdated = () => {
+    if (state.view === 'list') renderSessionListItems(state.lastSearchKeyword);
+  };
+  bus.on('chat:session-updated', onSessionUpdated);
+  state.busListeners.push(['chat:session-updated', onSessionUpdated]);
+  bus.on('chat:group-members-changed', onSessionUpdated);
+  state.busListeners.push(['chat:group-members-changed', onSessionUpdated]);
 
-  // 监听角色头像更新：在详情页时实时刷新 AI 头像
-  const onAvatarUpdated = () => {
-    if (state.view === 'chat') {
-      try { refreshAvatar(); } catch (e) { console.warn('[chat] 刷新头像失败', e); }
+  // 监听角色资料更新（avatar APP 换头像 / characters APP 改名改人设 / 导入角色卡都会 emit）
+  // 在详情页时重新读 DB 拿最新角色，刷新 header 名字 + AI 头像 + 对话卡片名字
+  const onCharacterUpdated = async () => {
+    if (state.view !== 'chat') return;
+    if (!state.currentCharacterId) return;
+    try {
+      const fresh = await getDB(STORES.characters, state.currentCharacterId);
+      if (fresh) {
+        state.currentCharacter = fresh;
+        refreshAvatar();
+      }
+    } catch (e) {
+      console.warn('[chat] 刷新角色资料失败', e);
     }
   };
-  bus.on('avatar:updated', onAvatarUpdated);
-  state.busListeners.push(['avatar:updated', onAvatarUpdated]);
+  bus.on('character:updated', onCharacterUpdated);
+  state.busListeners.push(['character:updated', onCharacterUpdated]);
+
+  // per-character 偏好变更：如果在详情页且改的是当前角色，重渲染让新偏好生效
+  // （字号 / 模式 / 回车发送 / 思维链 / 打字提示 等都靠这个实时刷新）
+  // 流式中不重渲染，避免冲掉正在流的气泡（偏好会在下条消息或下次进入时生效）。
+  const onPrefsChanged = (p) => {
+    if (state.view !== 'chat') return;
+    if (state.isReplying) return;
+    if (p?.characterId && p.characterId !== state.currentCharacterId) return;
+    state.currentPrefs = null; // 清缓存，让 getEffectivePrefs 重读
+    render();
+  };
+  bus.on('chat:prefs-changed', onPrefsChanged);
+  state.busListeners.push(['chat:prefs-changed', onPrefsChanged]);
+
+  // 全局消息偏好变更：影响所有会话（如全局 chatMode 兜底值变了），详情页也要刷新
+  const onGlobalPrefsChanged = () => {
+    if (state.view !== 'chat') return;
+    if (state.isReplying) return;
+    state.currentPrefs = null;
+    render();
+  };
+  bus.on('chat:global-prefs-changed', onGlobalPrefsChanged);
+  state.busListeners.push(['chat:global-prefs-changed', onGlobalPrefsChanged]);
+
+  // 清空对话缓存：清掉本地回复去重用的 lastReply，让下一条本地回复不被上一条带偏
+  const onInvalidateCache = () => {
+    state.lastReply = null;
+  };
+  bus.on('chat:invalidate-cache', onInvalidateCache);
+  state.busListeners.push(['chat:invalidate-cache', onInvalidateCache]);
 
   // 旧数据迁移：把没有 sessionId 的消息归到按角色生成的会话里
   await maybeMigrateLegacyMessages();
@@ -609,6 +1077,8 @@ export function unmount() {
   // 落盘草稿
   try { if (state.saveDraftDebounced) state.saveDraftDebounced.cancel?.(); } catch (e) {}
   flushDraft();
+  // 收起增强模块的临时状态（表情面板 / 语音模式 / 搜索高亮 / document 监听）
+  try { cleanupExtras(); } catch (e) {}
 
   // 解绑 bus
   state.busListeners.forEach(([name, fn]) => bus.off(name, fn));
@@ -619,6 +1089,16 @@ export function unmount() {
     try { state.messageListEl.removeEventListener('scroll', state._onMessagesScroll); } catch (e) {}
     state._onMessagesScroll = null;
   }
+
+  // 移除软键盘 visualViewport 监听 + 清掉手动设的容器高度（避免影响别的 App）
+  if (state._onVpResize && window.visualViewport) {
+    try {
+      window.visualViewport.removeEventListener('resize', state._onVpResize);
+      window.visualViewport.removeEventListener('scroll', state._onVpResize);
+    } catch (e) {}
+  }
+  state._onVpResize = null;
+  if (state.containerEl) state.containerEl.style.height = '';
 
   state.containerEl = null;
   state.messageListEl = null;
@@ -692,6 +1172,17 @@ export async function render() {
     await renderSessionListPage(state.lastSearchKeyword);
   } else if (state.view === 'chat') {
     await renderChatDetailView();
+  } else if (state.view === 'group') {
+    // 群聊视图：动态 import 避免循环依赖
+    try {
+      const { renderGroupDetailView } = await import('./group/group-detail-view.js');
+      await renderGroupDetailView();
+    } catch (e) {
+      console.warn('[chat] 群聊视图加载失败', e);
+      showToast('群聊页打不开呢', 'error');
+      state.view = 'list';
+      await render();
+    }
   }
 }
 
@@ -701,9 +1192,15 @@ export async function enterChat(sessionId) {
   // 先落盘当前草稿（如果在别的会话里）
   await flushDraft();
   // 切会话前先停掉旧会话的流式（避免两段对话交叉）
-  if (state.typingTimer) { clearTimeout(state.typingTimer); state.typingTimer = null; }
+  // 修复：原版 clearTimeout(typingTimer) + reset streamCancelled=false 会让 streamLocalReply
+  // 的 tick 链断掉且检测不到取消标志，Promise 永久挂起 → finishAIMessage 不执行 →
+  // setReplying(false) 不调用 → isReplying 永久锁死，新会话发不出消息。
+  // 正确做法：只 cancelStreaming（设 streamCancelled=true），不清 typingTimer、不 reset，
+  // 让 streamLocalReply 的下一个 tick 自己检测到 streamCancelled=true 后 resolve，
+  // finishAIMessage 自然执行 setReplying(false) + reset streamCancelled。
   cancelStreaming();
-  state.streamCancelled = false;
+  // 清掉旧会话的引用预览，防止 A 会话引用串到 B 会话（原版只在 backToSessionList 清）
+  state.pendingQuote = null;
 
   // 读会话
   let session = null;
@@ -715,7 +1212,7 @@ export async function enterChat(sessionId) {
     return;
   }
 
-  state.view = 'chat';
+  state.view = session.isGroup ? 'group' : 'chat';
   state.currentSessionId = sessionId;
   state.currentSession = session;
   state.currentCharacterId = session.characterId;
@@ -723,12 +1220,18 @@ export async function enterChat(sessionId) {
 
   // 进入即清未读
   if ((session.unread || 0) > 0) {
-    try { await setDB(STORES.chatSessions, sessionId, { ...session, unread: 0 }); } catch (e) {}
+    try {
+      await setDB(STORES.chatSessions, sessionId, { ...session, unread: 0 });
+      // 聚合全局未读数，让桌面图标提示同步消失
+      recalcChatUnread().catch(() => {});
+    } catch (e) {}
   }
 
-  // 缓存角色
+  // 缓存角色（群聊无单一角色，留 null）
   state.currentCharacter = null;
-  try { state.currentCharacter = await getDB(STORES.characters, session.characterId); } catch (e) {}
+  if (!session.isGroup && session.characterId) {
+    try { state.currentCharacter = await getDB(STORES.characters, session.characterId); } catch (e) {}
+  }
 
   await render();
 }
@@ -737,7 +1240,10 @@ export async function enterChat(sessionId) {
 export async function backToSessionList() {
   // 落盘草稿
   await flushDraft();
-  // 不取消进行中的流式——让 AI 在后台跑完，消息中心也能收到
+  // 修复：原版"让 AI 在后台跑完"，但 isReplying 是全局锁，用户回到列表进入任一会话
+  // 都发不出消息，直到旧会话流式结束。改为取消流式释放锁，代价是 AI 回复被截断，
+  // 但比永久锁死卡用户更合理（与 enterChat 切会话行为一致）。
+  cancelStreaming();
   // 但 TTS 要停掉，避免回到列表还在念
   try { stopChatTTS(); } catch (e) {}
   state.view = 'list';

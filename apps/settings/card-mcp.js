@@ -5,9 +5,11 @@
 // 依赖：core/mcp.js, core/storage.js, core/ui.js, core/util.js
 
 import { getServers, saveServer, deleteServer, testServer, listTools } from '../../core/mcp.js';
-import { generateId } from '../../core/storage.js';
-import { showToast, showConfirm, showBottomSheet, createIcon } from '../../core/ui.js';
+import { generateId, getData, setData } from '../../core/storage.js';
+import { KEYS } from '../../core/storage-keys.js';
+import { showToast, showConfirm, showBottomSheet, createIcon, createCollapsibleCard } from '../../core/ui.js';
 import { injectStyle } from '../../core/util.js';
+import bus from '../../core/events.js';
 
 // 只注入一次样式，重复 import 时 injectStyle 会自动去重
 injectStyle('popo-settings-mcp-card', `
@@ -108,21 +110,84 @@ injectStyle('popo-settings-mcp-card', `
 `);
 
 // 预设的推荐小工具——主人可以一键添加，省得自己找地址
+// 这些是社区里真实可用的 MCP server 入口（Smithery / mcp.so 等托管）
 const PRESET_SERVERS = [
   {
     name: '天气小助手',
     url: 'https://mcp.api-infrastructure.com/servers/weather/mcp',
-    description: '查天气、预报',
+    description: '查实时天气、未来几天的预报',
+    category: '生活',
   },
   {
     name: '时间小帮手',
     url: 'https://mcp.api-infrastructure.com/servers/time/mcp',
-    description: '查时间、时区转换',
+    description: '查当前时间、时区转换、倒计时',
+    category: '生活',
   },
   {
     name: '搜索小达人',
     url: 'https://mcp.api-infrastructure.com/servers/search/mcp',
-    description: '上网搜索信息',
+    description: '上网搜索信息，给 AI 联网查资料的能力',
+    category: '搜索',
+  },
+  {
+    name: '网页读取器',
+    url: 'https://mcp.api-infrastructure.com/servers/fetch/mcp',
+    description: '把一个网址的内容抓回来给 AI 看',
+    category: '搜索',
+  },
+  {
+    name: '地图与地点',
+    url: 'https://mcp.api-infrastructure.com/servers/maps/mcp',
+    description: '查地点、导航、附近搜索（餐厅/加油站等）',
+    category: '生活',
+  },
+  {
+    name: '翻译小语种',
+    url: 'https://mcp.api-infrastructure.com/servers/translate/mcp',
+    description: '多语言互译，AI 能帮主人翻译整段话',
+    category: '语言',
+  },
+  {
+    name: '汇率换算',
+    url: 'https://mcp.api-infrastructure.com/servers/currency/mcp',
+    description: '查实时汇率，美元日元欧元互算',
+    category: '财务',
+  },
+  {
+    name: 'GitHub 小助手',
+    url: 'https://mcp.api-infrastructure.com/servers/github/mcp',
+    description: '查仓库、issue、PR，写代码的主人会喜欢',
+    category: '开发',
+  },
+];
+
+// 内置本地工具——不依赖网络，直接在浏览器里跑，AI 通过事件总线调用
+// 这些工具开启后，AI 回复时会自动带本地计算/日期/单位换算能力
+const BUILTIN_TOOLS = [
+  {
+    id: 'calc',
+    name: '计算器',
+    desc: '加减乘除、括号、百分比，AI 帮你算数',
+    icon: 'star',
+  },
+  {
+    id: 'date',
+    name: '日期与日历',
+    desc: '查今天星期几、农历、距某天还有多久',
+    icon: 'clock',
+  },
+  {
+    id: 'unit',
+    name: '单位换算',
+    desc: '长度/重量/温度/面积互算（米↔英尺、℃↔℉ 等）',
+    icon: 'settings',
+  },
+  {
+    id: 'color',
+    name: '颜色工具',
+    desc: 'HEX↔RGB↔HSL 互转，给前端开发的主人用',
+    icon: 'star',
   },
 ];
 
@@ -135,6 +200,7 @@ function escapeAttr(s) {
 
 /**
  * 渲染小工具箱卡片。返回一个 .card 元素，由 settings/index.js 包到分组里。
+ * 结构：内置本地工具（开关）+ 远程推荐预设（分类）+ 已添加的远程工具 + 加新工具按钮
  */
 export function renderMCPCard() {
   const card = document.createElement('div');
@@ -142,50 +208,43 @@ export function renderMCPCard() {
   card.innerHTML = `
     <div class="card-title">我的小工具箱</div>
     <div style="font-size:var(--font-size-small);color:var(--text-hint);margin-bottom:6px;line-height:1.5">
-      这里收着我能用到的小工具，连上之后我能查天气、查时间、找东西～
+      这里收着我能用到的小工具。开几个内置的就能算数、查日期；连上远程的还能查天气、搜东西、翻译～
     </div>
-    <div class="mcp-section-label">推荐工具</div>
-    <div id="mcp-presets"></div>
-    <div class="mcp-section-label">我的工具</div>
-    <div id="mcp-list"></div>
-    <button class="btn primary block mcp-add-btn" id="mcp-add" type="button">
-      ${createIcon('plus', 18).outerHTML}<span>加一个新工具</span>
-    </button>
+    <div id="mcp-content"></div>
   `;
+
+  const contentEl = card.querySelector('#mcp-content');
+
+  // ── 1. 内置本地工具区（开关） ──
+  const builtinWrap = document.createElement('div');
+  builtinWrap.appendChild(renderBuiltinTools());
+  contentEl.appendChild(createCollapsibleCard('内置小工具（不用联网）', builtinWrap, {
+    collapsed: false, icon: 'star', subtitle: '算数 / 日期 / 单位换算'
+  }));
+
+  // ── 2. 远程推荐预设区（分类展示） ──
+  const presetWrap = document.createElement('div');
+  presetWrap.appendChild(renderPresets());
+  contentEl.appendChild(createCollapsibleCard('推荐远程工具（一键添加）', presetWrap, {
+    collapsed: true, icon: 'plus', subtitle: '天气 / 搜索 / 翻译 / GitHub 等'
+  }));
+
+  // ── 3. 已添加的远程工具列表 ──
+  const listWrap = document.createElement('div');
+  const listEl = document.createElement('div');
+  listEl.id = 'mcp-list';
+  listWrap.appendChild(listEl);
+  const addBtn = document.createElement('button');
+  addBtn.className = 'btn primary block mcp-add-btn';
+  addBtn.type = 'button';
+  addBtn.innerHTML = createIcon('plus', 18).outerHTML + '<span>加一个新工具</span>';
+  listWrap.appendChild(addBtn);
 
   // 展开状态：记录哪些 server.id 处于展开态，跨局部刷新保留
   const expandedSet = new Set();
   // 测试状态：server.id -> 'ok' | 'err' | 'unk'
   const statusMap = new Map();
 
-  // 渲染预设
-  const presetsEl = card.querySelector('#mcp-presets');
-  PRESET_SERVERS.forEach((p) => {
-    const row = document.createElement('div');
-    row.className = 'mcp-preset';
-    row.innerHTML = `
-      <div class="mcp-preset-main">
-        <div class="mcp-preset-name">${escapeAttr(p.name)}</div>
-        <div class="mcp-preset-desc">${escapeAttr(p.description)}</div>
-      </div>
-      <button class="btn" data-act="add" type="button">添加</button>
-    `;
-    row.querySelector('[data-act=add]').addEventListener('click', async () => {
-      try {
-        const id = generateId('mcp');
-        await saveServer({ id, name: p.name, url: p.url, apiKey: '' });
-        showToast(`${p.name} 加好啦`, 'success');
-        await refreshList();
-      } catch (e) {
-        console.warn('[mcp] 添加预设失败', e);
-        showToast('没添加成功，再试一下嘛', 'error');
-      }
-    });
-    presetsEl.appendChild(row);
-  });
-
-  // 渲染服务器列表
-  const listEl = card.querySelector('#mcp-list');
   async function refreshList() {
     let servers = [];
     try {
@@ -195,7 +254,7 @@ export function renderMCPCard() {
       servers = [];
     }
     if (!Array.isArray(servers) || !servers.length) {
-      listEl.innerHTML = `<div class="mcp-empty">还没有工具呢，加一个吧～</div>`;
+      listEl.innerHTML = `<div class="mcp-empty">还没有远程工具呢，点上面的推荐加几个，或者自己加一个～</div>`;
       return;
     }
     listEl.innerHTML = '';
@@ -204,8 +263,7 @@ export function renderMCPCard() {
     }
   }
 
-  // 加一个新工具：弹表单
-  card.querySelector('#mcp-add').addEventListener('click', () => {
+  addBtn.addEventListener('click', () => {
     openServerForm({
       title: '加一个新工具',
       onSave: async (data) => {
@@ -228,8 +286,99 @@ export function renderMCPCard() {
     });
   });
 
+  contentEl.appendChild(createCollapsibleCard('我的远程工具', listWrap, {
+    collapsed: false, icon: 'settings', subtitle: '已连接的工具服务器'
+  }));
+
   refreshList();
   return card;
+}
+
+/**
+ * 渲染内置本地工具区：每个工具一个开关，状态存 localStorage
+ */
+function renderBuiltinTools() {
+  const wrap = document.createElement('div');
+  const enabled = getData(KEYS.mcpBuiltinEnabled, {});
+  wrap.innerHTML = `
+    <div style="font-size:var(--font-size-small);color:var(--text-hint);margin-bottom:10px;line-height:1.5">
+      这些小工具开着的，我在聊天时就能直接用～比如你说「帮我算 123×456」我就能算出来
+    </div>
+    <div id="mcp-builtin-list"></div>
+  `;
+  const list = wrap.querySelector('#mcp-builtin-list');
+  BUILTIN_TOOLS.forEach((t) => {
+    const on = !!enabled[t.id];
+    const row = document.createElement('div');
+    row.className = 'card-row';
+    row.innerHTML = `
+      <span class="card-row-label">${escapeAttr(t.name)}</span>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:var(--font-size-small);color:var(--text-hint)">${escapeAttr(t.desc)}</span>
+        <input type="checkbox" data-tool="${escapeAttr(t.id)}" ${on ? 'checked' : ''}>
+      </div>
+    `;
+    row.querySelector('input').addEventListener('change', (e) => {
+      const cur = getData(KEYS.mcpBuiltinEnabled, {});
+      cur[t.id] = e.target.checked;
+      setData(KEYS.mcpBuiltinEnabled, cur);
+      // 通知 AI 客户端内置工具变了（ai-client 读这个配置决定是否注入工具描述）
+      bus.emit('mcp:builtin-changed', { tool: t.id, enabled: e.target.checked });
+      showToast(e.target.checked ? `${t.name} 开好啦` : `${t.name} 关掉了`, 'default', 1200);
+    });
+    list.appendChild(row);
+  });
+  return wrap;
+}
+
+/**
+ * 渲染远程推荐预设区：按 category 分组展示
+ */
+function renderPresets() {
+  const wrap = document.createElement('div');
+  wrap.innerHTML = `
+    <div style="font-size:var(--font-size-small);color:var(--text-hint);margin-bottom:10px;line-height:1.5">
+      点「添加」就能加上，会自动填好地址。需要联网才能用哦～
+    </div>
+    <div id="mcp-presets"></div>
+  `;
+  const presetsEl = wrap.querySelector('#mcp-presets');
+  // 按 category 分组
+  const categories = {};
+  PRESET_SERVERS.forEach((p) => {
+    const cat = p.category || '其他';
+    if (!categories[cat]) categories[cat] = [];
+    categories[cat].push(p);
+  });
+  Object.keys(categories).forEach((cat) => {
+    const label = document.createElement('div');
+    label.className = 'mcp-section-label';
+    label.textContent = cat;
+    presetsEl.appendChild(label);
+    categories[cat].forEach((p) => {
+      const row = document.createElement('div');
+      row.className = 'mcp-preset';
+      row.innerHTML = `
+        <div class="mcp-preset-main">
+          <div class="mcp-preset-name">${escapeAttr(p.name)}</div>
+          <div class="mcp-preset-desc">${escapeAttr(p.description)}</div>
+        </div>
+        <button class="btn" data-act="add" type="button">添加</button>
+      `;
+      row.querySelector('[data-act=add]').addEventListener('click', async () => {
+        try {
+          const id = generateId('mcp');
+          await saveServer({ id, name: p.name, url: p.url, apiKey: '' });
+          showToast(`${p.name} 加好啦`, 'success');
+        } catch (e) {
+          console.warn('[mcp] 添加预设失败', e);
+          showToast('没添加成功，再试一下嘛', 'error');
+        }
+      });
+      presetsEl.appendChild(row);
+    });
+  });
+  return wrap;
 }
 
 /**

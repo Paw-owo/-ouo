@@ -122,14 +122,14 @@ const PRESETS = {
       '--bubble-ai-bg': '#2E3848',
       '--bubble-ai-text': '#E8E4E8',
       '--shadow-glow': '0 0 20px color-mix(in srgb, var(--accent) 40%, transparent)',
-      // 暗色主题阴影：用深色系而非浅色 accent，确保卡片有层次感
-      '--shadow-sm': '0 2px 12px color-mix(in srgb, black 20%, transparent)',
-      '--shadow-md': '0 4px 16px color-mix(in srgb, black 25%, transparent)',
-      '--shadow-lg': '0 8px 28px color-mix(in srgb, black 30%, transparent)',
-      '--shadow-soft': '0 2px 12px color-mix(in srgb, black 22%, transparent)',
-      '--shadow-card': '0 4px 20px color-mix(in srgb, black 28%, transparent)',
-      '--shadow-float': '0 8px 32px color-mix(in srgb, black 32%, transparent)',
-      '--shadow-neu-out': '0 4px 12px color-mix(in srgb, black 22%, transparent), 0 -2px 8px color-mix(in srgb, black 10%, transparent)',
+      // 暗色主题阴影：同色系主色光晕（跟随各主题 accent），禁止纯灰 black 阴影
+      '--shadow-sm': '0 2px 12px color-mix(in srgb, var(--accent) 18%, transparent)',
+      '--shadow-md': '0 4px 16px color-mix(in srgb, var(--accent) 22%, transparent)',
+      '--shadow-lg': '0 8px 28px color-mix(in srgb, var(--accent) 28%, transparent)',
+      '--shadow-soft': '0 2px 12px color-mix(in srgb, var(--accent) 20%, transparent)',
+      '--shadow-card': '0 4px 20px color-mix(in srgb, var(--accent) 24%, transparent)',
+      '--shadow-float': '0 8px 32px color-mix(in srgb, var(--accent) 30%, transparent)',
+      '--shadow-neu-out': '0 4px 12px color-mix(in srgb, var(--accent) 20%, transparent), 0 -2px 8px color-mix(in srgb, var(--accent) 8%, transparent)',
       // 语义色（暗色提亮 +10% lightness）
       '--success': '#7FC8B3',
       '--warning': '#F8D277',
@@ -160,14 +160,14 @@ const PRESETS = {
       '--bubble-ai-bg': '#3A2C32',
       '--bubble-ai-text': '#F0E4E8',
       '--shadow-glow': '0 0 20px color-mix(in srgb, var(--accent) 40%, transparent)',
-      // 暗色主题阴影：用深色系而非浅色 accent，确保卡片有层次感
-      '--shadow-sm': '0 2px 12px color-mix(in srgb, black 20%, transparent)',
-      '--shadow-md': '0 4px 16px color-mix(in srgb, black 25%, transparent)',
-      '--shadow-lg': '0 8px 28px color-mix(in srgb, black 30%, transparent)',
-      '--shadow-soft': '0 2px 12px color-mix(in srgb, black 22%, transparent)',
-      '--shadow-card': '0 4px 20px color-mix(in srgb, black 28%, transparent)',
-      '--shadow-float': '0 8px 32px color-mix(in srgb, black 32%, transparent)',
-      '--shadow-neu-out': '0 4px 12px color-mix(in srgb, black 22%, transparent), 0 -2px 8px color-mix(in srgb, black 10%, transparent)',
+      // 暗色主题阴影：同色系主色光晕（跟随各主题 accent），禁止纯灰 black 阴影
+      '--shadow-sm': '0 2px 12px color-mix(in srgb, var(--accent) 18%, transparent)',
+      '--shadow-md': '0 4px 16px color-mix(in srgb, var(--accent) 22%, transparent)',
+      '--shadow-lg': '0 8px 28px color-mix(in srgb, var(--accent) 28%, transparent)',
+      '--shadow-soft': '0 2px 12px color-mix(in srgb, var(--accent) 20%, transparent)',
+      '--shadow-card': '0 4px 20px color-mix(in srgb, var(--accent) 24%, transparent)',
+      '--shadow-float': '0 8px 32px color-mix(in srgb, var(--accent) 30%, transparent)',
+      '--shadow-neu-out': '0 4px 12px color-mix(in srgb, var(--accent) 20%, transparent), 0 -2px 8px color-mix(in srgb, var(--accent) 8%, transparent)',
       // 语义色（暗色提亮 +10% lightness）
       '--success': '#7FC8B3',
       '--warning': '#F8D277',
@@ -198,14 +198,14 @@ const PRESETS = {
       '--bubble-ai-bg': '#3A2E20',
       '--bubble-ai-text': '#ECE4D4',
       '--shadow-glow': '0 0 20px color-mix(in srgb, var(--accent) 40%, transparent)',
-      // 暗色主题阴影：用深色系而非浅色 accent，确保卡片有层次感
-      '--shadow-sm': '0 2px 12px color-mix(in srgb, black 20%, transparent)',
-      '--shadow-md': '0 4px 16px color-mix(in srgb, black 25%, transparent)',
-      '--shadow-lg': '0 8px 28px color-mix(in srgb, black 30%, transparent)',
-      '--shadow-soft': '0 2px 12px color-mix(in srgb, black 22%, transparent)',
-      '--shadow-card': '0 4px 20px color-mix(in srgb, black 28%, transparent)',
-      '--shadow-float': '0 8px 32px color-mix(in srgb, black 32%, transparent)',
-      '--shadow-neu-out': '0 4px 12px color-mix(in srgb, black 22%, transparent), 0 -2px 8px color-mix(in srgb, black 10%, transparent)',
+      // 暗色主题阴影：同色系主色光晕（跟随各主题 accent），禁止纯灰 black 阴影
+      '--shadow-sm': '0 2px 12px color-mix(in srgb, var(--accent) 18%, transparent)',
+      '--shadow-md': '0 4px 16px color-mix(in srgb, var(--accent) 22%, transparent)',
+      '--shadow-lg': '0 8px 28px color-mix(in srgb, var(--accent) 28%, transparent)',
+      '--shadow-soft': '0 2px 12px color-mix(in srgb, var(--accent) 20%, transparent)',
+      '--shadow-card': '0 4px 20px color-mix(in srgb, var(--accent) 24%, transparent)',
+      '--shadow-float': '0 8px 32px color-mix(in srgb, var(--accent) 30%, transparent)',
+      '--shadow-neu-out': '0 4px 12px color-mix(in srgb, var(--accent) 20%, transparent), 0 -2px 8px color-mix(in srgb, var(--accent) 8%, transparent)',
       // 语义色（暗色提亮 +10% lightness）
       '--success': '#7FC8B3',
       '--warning': '#F8D277',
@@ -431,6 +431,87 @@ export function listThemes() {
   const custom = getData(KEYS.appCustomTheme, null);
   if (custom) presets.push({ id: custom.id, name: custom.name || '自定义', mode: custom.mode || 'light' });
   return presets;
+}
+
+// ════════════════════════════════════════
+// 个性化覆盖：字号缩放 / 气泡圆角 / 动效强度
+// 这些覆盖叠在主题变量之上。applyTheme 会先 removeProperty 所有变量再重设，
+// 所以主题切换后我们的覆盖会被清掉——必须在 theme:changed 时重新应用。
+// 启动时（boot）也要调一次，否则刷新页面后保存的个性化不生效。
+// 依赖：core/storage.js, core/storage-keys.js（已在文件头导入）
+// ════════════════════════════════════════
+
+// 主题原值缓存：applyTheme 把变量设在 documentElement 的 inline style 上，
+// 我们覆盖时需要先拿到主题原值才能 calc(orig * scale)。
+// 首次读取时还没有我们的覆盖，getComputedStyle 返回的就是主题原值；
+// 主题切换后必须清缓存，否则会用到上一个主题的陈旧原值。
+const _personalizeBaseCache = new Map();
+const _PERSONALIZE_FONT_SIZES = [
+  '--font-size-base', '--font-size-small', '--font-size-title',
+  '--font-size-large', '--font-size-huge', '--font-size-display'
+];
+
+function _readBaseVar(varName) {
+  if (_personalizeBaseCache.has(varName)) return _personalizeBaseCache.get(varName);
+  // 首次读取：此时 inline style 上是主题原值（我们还没覆盖），直接读
+  const base = getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
+  _personalizeBaseCache.set(varName, base);
+  return base;
+}
+
+/** 清空个性化原值缓存。主题切换后必须先调这个再调 applyPersonalization，避免读到陈旧原值。 */
+export function clearPersonalizeCache() {
+  _personalizeBaseCache.clear();
+}
+
+/**
+ * 应用个性化覆盖：字号缩放 / 气泡圆角 / 动效强度。
+ * 从 localStorage 读 KEYS.appFontScale / appBubbleRadius / appMotionLevel。
+ * 调用时机：① boot 启动时 ② theme:changed 后 ③ 用户在设置里改滑块时。
+ */
+export function applyPersonalization() {
+  const root = document.documentElement;
+  const fontScale = Number(getData(KEYS.appFontScale, 1));
+  const bubbleRadius = Number(getData(KEYS.appBubbleRadius, 1));
+  const motionLevel = getData(KEYS.appMotionLevel, 'full');
+
+  // 字号缩放：覆盖各档 --font-size-* 变量
+  if (fontScale && fontScale !== 1) {
+    _PERSONALIZE_FONT_SIZES.forEach((k) => {
+      const base = _readBaseVar(k);
+      if (base) root.style.setProperty(k, `calc(${base} * ${fontScale})`);
+    });
+  } else {
+    // 倍率为 1：清掉覆盖，回到主题原值
+    _PERSONALIZE_FONT_SIZES.forEach((k) => root.style.removeProperty(k));
+  }
+
+  // 气泡圆角：覆盖 --radius-md（气泡和卡片圆角主要用它）
+  if (bubbleRadius && bubbleRadius !== 1) {
+    const base = _readBaseVar('--radius-md');
+    if (base) root.style.setProperty('--radius-md', `calc(${base} * ${bubbleRadius})`);
+  } else {
+    root.style.removeProperty('--radius-md');
+  }
+
+  // 动效强度
+  if (motionLevel === 'none') {
+    root.style.setProperty('--motion', 'none');
+    root.style.setProperty('--motion-fast', '0ms');
+    root.style.setProperty('--motion-slow', '0ms');
+    root.style.setProperty('--press-scale', '1');
+  } else if (motionLevel === 'reduced') {
+    root.style.setProperty('--motion', 'transform 0.15s ease, opacity 0.15s ease');
+    root.style.setProperty('--motion-fast', '80ms ease');
+    root.style.setProperty('--motion-slow', '250ms ease');
+    root.style.setProperty('--press-scale', '0.98');
+  } else {
+    // full：清掉覆盖，回到主题原值
+    root.style.removeProperty('--motion');
+    root.style.removeProperty('--motion-fast');
+    root.style.removeProperty('--motion-slow');
+    root.style.removeProperty('--press-scale');
+  }
 }
 
 // ════════════════════════════════════════

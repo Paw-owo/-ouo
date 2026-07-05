@@ -7,7 +7,7 @@
 import { KEYS, STORES } from '../../core/storage-keys.js';
 import { getData, getDB, setDB, getAllDB } from '../../core/storage.js';
 import { showToast, showBottomSheet, createIcon, registerIcon } from '../../core/ui.js';
-import { formatTime, formatRelative, clamp, throttle, isUsableImage, cssUrl, injectStyle } from '../../core/util.js';
+import { formatTime, formatRelative, clamp, throttle, debounce, isUsableImage, cssUrl, injectStyle } from '../../core/util.js';
 import { getState, render, backToSessionList } from './index.js';
 import { openChatMoreMenu, openMessageActionSheet } from './message-actions.js';
 import { sendMessage, sendImageMessage, cancelStreaming, retrySendMessage } from './sending.js';
@@ -16,9 +16,50 @@ import { renderMarkdown } from './markdown.js';
 import { escapeHTML, escapeAttr, attachLongPress } from './shared-utils.js';
 import { openApp } from '../../core/router.js';
 import { stopAllTTS } from '../../core/tts.js';
+// 增强模块：表情面板 / 语音模式 / 页内搜索 / 引用定位
+import {
+  toggleEmojiPanel, closeEmojiPanel, toggleVoiceMode, closeVoiceMode,
+  toggleInChatSearch, runInChatSearch, searchPrev, searchNext,
+  scrollToMessageAndHighlight
+} from './extras.js';
+// + 菜单富消息渲染（文件 / 位置 / 名片）
+import {
+  renderFileBubble, renderLocationBubble, renderContactBubble,
+  bindRichBubble, ensureRichBubbleStyle
+} from './plus-content.js';
+// 代码块增强（复制 / 下载 / 预览 / 折叠）
+import { enhanceCodeBlocks } from './code-block.js';
+// 聊天偏好（按角色读 per-character 设置，没设过回落全局）
+import { getChatPrefs } from './chat-settings/widgets.js';
 
 // 注册感叹号图标（用于消息发送失败状态）
 registerIcon('alert', 'M12 3v10 M12 17h.01');
+
+/**
+ * 取当前会话生效的聊天偏好。
+ * 单聊：按角色 id 读 per-character 配置；没设过的字段回落到全局默认。
+ * 群聊走 group-detail-view.js，不会进到这里。
+ * 结果缓存在 state.currentPrefs，避免每条消息都重复读 localStorage。
+ */
+function getEffectivePrefs() {
+  const state = getState();
+  if (state.currentPrefs) return state.currentPrefs;
+  const characterId = state.currentCharacterId;
+  // per-character 偏好（chatMode / fontSize / enterToSend 等都在这里）
+  const prefs = characterId ? getChatPrefs(characterId) : {};
+  // chatMode 没在 per-character 里设过时，回落到全局 chat_mode key
+  if (!prefs.chatMode) prefs.chatMode = getData(KEYS.chatMode, 'bubble');
+  state.currentPrefs = prefs;
+  return prefs;
+}
+
+/** 应用字号到消息列表（通过 CSS 变量 --chat-font-size） */
+function applyFontSizeToMessages(size) {
+  const state = getState();
+  if (!state.messageListEl) return;
+  const map = { small: '14px', medium: '16px', large: '18px' };
+  state.messageListEl.style.setProperty('--chat-font-size', map[size] || '16px');
+}
 
 // 注入思维链 / 滚动按钮 / 加载更多 样式（全部走 CSS 变量）
 injectStyle('app-chat-thinking-scroll', `
@@ -132,7 +173,10 @@ export async function renderChatDetailView() {
     return;
   }
 
-  const mode = getData(KEYS.chatMode, 'bubble');
+  // 重置偏好缓存：切会话 / 重渲染时重新读 per-character 偏好
+  state.currentPrefs = null;
+  const prefs = getEffectivePrefs();
+  const mode = prefs.chatMode || getData(KEYS.chatMode, 'bubble');
   const charName = state.currentCharacter?.name || state.currentCharacter?.nickname || session.title || '聊天';
 
   container.innerHTML = `
@@ -145,8 +189,18 @@ export async function renderChatDetailView() {
           <span id="chat-header-status-text">在线</span>
         </div>
       </div>
-      <button class="app-header-gear" id="chat-settings" aria-label="聊天设置">${createIcon('settings', 18).outerHTML}</button>
-      <button class="chat-more" id="chat-more" aria-label="聊天设置">${createIcon('more', 20).outerHTML}</button>
+      <button class="chat-header-search" id="chat-header-search" aria-label="搜索聊天记录">${createIcon('search', 18).outerHTML}</button>
+      <button class="app-header-gear" id="chat-settings" aria-label="聊天与AI调试设置">${createIcon('settings', 18).outerHTML}</button>
+      <button class="chat-more" id="chat-more" aria-label="更多操作">${createIcon('more', 20).outerHTML}</button>
+    </div>
+    <div class="chat-search-bar" id="chat-search-bar" aria-hidden="true">
+      <input class="chat-search-input" id="chat-search-input" type="search" placeholder="找找聊过的话..." aria-label="搜索消息">
+      <div class="chat-search-nav">
+        <button id="chat-search-prev" type="button" aria-label="上一个">${createIcon('arrow-up', 18).outerHTML}</button>
+        <button id="chat-search-next" type="button" aria-label="下一个">${createIcon('arrow-down', 18).outerHTML}</button>
+      </div>
+      <span class="chat-search-count" id="chat-search-count"></span>
+      <button id="chat-search-close" type="button" aria-label="关闭搜索">${createIcon('close', 18).outerHTML}</button>
     </div>
     <div class="chat-messages" id="chat-messages" data-mode="${escapeAttr(mode)}">
       <div class="chat-load-more" id="chat-load-more" style="display:none"><span class="chat-load-more-spinner"></span>正在加载更多...</div>
@@ -158,8 +212,10 @@ export async function renderChatDetailView() {
         <button class="chat-quote-preview-close" id="chat-quote-close" aria-label="取消引用">${createIcon('close', 16).outerHTML}</button>
       </div>
       <div class="chat-input-row">
-        <button class="chat-plus" id="chat-plus" aria-label="发送图片">${createIcon('plus', 20).outerHTML}</button>
+        <button class="chat-plus" id="chat-plus" aria-label="更多操作">${createIcon('plus', 20).outerHTML}</button>
+        <button class="chat-voice-btn" id="chat-voice-btn" aria-label="切换语音输入">${createIcon('mic', 20).outerHTML}</button>
         <textarea class="chat-input" id="chat-input" placeholder="说点什么吧..." rows="1" enterkeyhint="send" aria-label="输入消息"></textarea>
+        <button class="chat-emoji-btn" id="chat-emoji-btn" aria-label="表情面板">${createIcon('smile', 20).outerHTML}</button>
         <button class="chat-send" id="chat-send" aria-label="发送">${createIcon('check', 20).outerHTML}</button>
       </div>
     </div>
@@ -178,12 +234,38 @@ export async function renderChatDetailView() {
   container.querySelector('#chat-back').addEventListener('click', backToSessionList);
   container.querySelector('#chat-more').addEventListener('click', openChatMoreMenu);
   // 齿轮跳到设置「AI 与陪伴」分组
-  container.querySelector('#chat-settings').addEventListener('click', () => openApp('settings', { deepLink: { tab: 'ai' } }));
+  container.querySelector('#chat-settings').addEventListener('click', async () => {
+    // 独立聊天设置页：不跳全局设置 APP，直接动态 import 本目录的 chat-settings-view.js
+    try {
+      const mod = await import('./chat-settings-view.js');
+      if (typeof mod.openChatSettings === 'function') {
+        mod.openChatSettings();
+      } else {
+        showToast('设置页还在准备中，稍等一下嘛', 'default');
+      }
+    } catch (e) {
+      console.warn('[chat] 加载设置页失败', e);
+      showToast('设置页打不开呢，再试一下嘛', 'error');
+    }
+  });
   container.querySelector('#chat-plus').addEventListener('click', openInputPlusMenu);
   state.sendBtnEl.addEventListener('click', onSendClick);
   state.inputEl.addEventListener('keydown', onInputKeyDown);
   state.inputEl.addEventListener('input', onInputChanged);
   container.querySelector('#chat-quote-close').addEventListener('click', () => clearQuote());
+  // 页内搜索：切换栏 / 输入（防抖）/ 上下跳转 / 关闭
+  container.querySelector('#chat-header-search').addEventListener('click', toggleInChatSearch);
+  container.querySelector('#chat-search-input').addEventListener('input', debounce((e) => {
+    runInChatSearch(e.target.value || '');
+  }, 200));
+  container.querySelector('#chat-search-prev').addEventListener('click', searchPrev);
+  container.querySelector('#chat-search-next').addEventListener('click', searchNext);
+  container.querySelector('#chat-search-close').addEventListener('click', toggleInChatSearch);
+  // 表情面板 / 语音模式切换
+  container.querySelector('#chat-emoji-btn').addEventListener('click', toggleEmojiPanel);
+  container.querySelector('#chat-voice-btn').addEventListener('click', toggleVoiceMode);
+  // 发送按钮初始态：空内容时弱化
+  updateSendButtonState();
 
   // 滚动监听：上滑显示"回到底部"按钮；滑到顶部触发加载更多
   // 保存 handler 引用到 state，unmount 时移除，避免监听泄漏
@@ -197,6 +279,8 @@ export async function renderChatDetailView() {
 
   // 应用壁纸
   applySessionWallpaper();
+  // 应用字号（per-character 偏好）
+  applyFontSizeToMessages(prefs.fontSize);
 
   // 恢复草稿 + 引用
   if (session.draft) state.inputEl.value = session.draft;
@@ -264,7 +348,9 @@ async function loadAndRenderMessages() {
 
   renderVisibleMessages();
   updateChatHeader(messages[messages.length - 1].timestamp || messages[messages.length - 1].createdAt);
-  scrollToBottom();
+  // per-character 偏好 autoScroll=false 时不强制滚到底（停在最后看到的位置）
+  // 切模式时由调用方（toggleChatMode）自行恢复滚动位置，跳过这里的自动滚底
+  if (getEffectivePrefs().autoScroll !== false && !state._skipAutoScroll) scrollToBottom();
 }
 
 /** 渲染当前 visibleCount 范围内的消息（最后 N 条） */
@@ -333,6 +419,10 @@ const _onScrollThrottled = throttle(() => {
   // 距顶部 < 30 触发加载更多
   if (el.scrollTop < 30 && !state.allMessagesLoaded) {
     loadMoreMessages();
+  }
+  // 用户手动滚到底部时清掉未读新消息徽章（原版只在点"回到底部"按钮时清，手动滚到底徽章残留）
+  if (distToBottom < 30 && (state.unseenNewCount || 0) > 0) {
+    state.unseenNewCount = 0;
   }
   updateScrollBtn(distToBottom > 200);
 }, 80);
@@ -447,10 +537,10 @@ export function appendMessageEl(msg, opts = {}) {
 }
 
 /**
- * 更新已渲染消息的状态图标（sending/sent/failed）。
+ * 更新已渲染消息的状态图标（sending/sent/delivered/read/failed）。
  * 在 sending.js 中 DB 写入成功/失败后调用。
  * @param {string} msgId
- * @param {'sending'|'sent'|'failed'} status
+ * @param {'sending'|'sent'|'delivered'|'read'|'failed'} status
  * @param {object} [msg] 可选消息对象（失败时用于重试，避免 DB 读不到）
  */
 export function updateMessageStatus(msgId, status, msg) {
@@ -485,11 +575,123 @@ function cssEscape(s) {
   return String(s).replace(/["\\]/g, '\\$&');
 }
 
+/**
+ * 渲染引用卡片 HTML。
+ * - 有 quoteId：可点击样式（发送者名 + 内容预览 + 主题色竖线），点击滚动到原消息
+ * - 无 quoteId：旧版纯文本引用（兼容历史数据）
+ */
+function renderQuoteHTML(msg) {
+  if (!msg.quote) return '';
+  const text = String(msg.quote);
+  if (msg.quoteId) {
+    const sender = msg.quoteSender || '原文';
+    const preview = text.length > 60 ? text.slice(0, 60) + '...' : text;
+    return `<div class="chat-quote-clickable" data-quote-id="${escapeAttr(msg.quoteId)}" role="button" tabindex="0" aria-label="点击查看原消息">
+      <div class="chat-quote-sender">${escapeHTML(sender)}</div>
+      <div class="chat-quote-preview-text">${escapeHTML(preview)}</div>
+    </div>`;
+  }
+  return `<div class="chat-quote">引用：${escapeHTML(text)}</div>`;
+}
+
+/**
+ * 渲染语音消息 HTML：播放按钮 + 伪波形 + 时长。
+ * 波形柱高用确定性算法（基于 duration + index），保证同一消息多次渲染一致。
+ */
+function renderAudioHTML(msg) {
+  const url = String(msg.mediaUrl || '');
+  const duration = Math.max(0, Number(msg.duration || 0));
+  const m = Math.floor(duration / 60);
+  const s = duration % 60;
+  const durStr = `${m}:${String(s).padStart(2, '0')}`;
+  // 伪波形：根据时长生成柱数（8~28 根），用 sin + duration 做种子保证稳定
+  const bars = Math.min(28, Math.max(8, Math.round(duration / 0.4) + 8));
+  const waveParts = [];
+  for (let i = 0; i < bars; i++) {
+    const h = 40 + Math.round(Math.sin(i * 1.3 + duration * 0.7) * 35);
+    const pct = clamp(h, 20, 100);
+    waveParts.push(`<span style="height:${pct}%"></span>`);
+  }
+  return `<div class="chat-audio" data-url="${escapeAttr(url)}" data-duration="${duration}">
+    <button class="chat-audio-play" type="button" aria-label="播放语音">${createIcon('voice-play', 18).outerHTML}</button>
+    <div class="chat-audio-wave">${waveParts.join('')}</div>
+    <span class="chat-audio-duration">${durStr}</span>
+  </div>`;
+}
+
+/** 给消息元素绑定引用卡片点击 + 语音播放器交互 */
+function bindInteractiveControls(el, msg) {
+  // 引用卡片点击：滚动到原消息并高亮闪烁
+  const quoteEl = el.querySelector('.chat-quote-clickable');
+  if (quoteEl) {
+    quoteEl.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const qid = quoteEl.dataset.quoteId;
+      if (qid) scrollToMessageAndHighlight(qid);
+    });
+    quoteEl.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        e.stopPropagation();
+        const qid = quoteEl.dataset.quoteId;
+        if (qid) scrollToMessageAndHighlight(qid);
+      }
+    });
+  }
+  // 语音消息播放/暂停
+  const audioEl = el.querySelector('.chat-audio');
+  if (audioEl) {
+    const playBtn = audioEl.querySelector('.chat-audio-play');
+    let audioInst = null;
+    if (playBtn) {
+      playBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const url = audioEl.dataset.url;
+        if (!url) return;
+        if (!audioInst) {
+          audioInst = new Audio(url);
+          audioInst.addEventListener('play', () => {
+            playBtn.innerHTML = createIcon('pause', 18).outerHTML;
+            playBtn.setAttribute('aria-label', '暂停');
+          });
+          audioInst.addEventListener('pause', () => {
+            playBtn.innerHTML = createIcon('voice-play', 18).outerHTML;
+            playBtn.setAttribute('aria-label', '播放语音');
+          });
+          audioInst.addEventListener('ended', () => {
+            playBtn.innerHTML = createIcon('voice-play', 18).outerHTML;
+            playBtn.setAttribute('aria-label', '播放语音');
+          });
+        }
+        if (audioInst.paused) {
+          audioInst.play().catch(() => showToast('播放不了呀，可能格式不对', 'error'));
+        } else {
+          audioInst.pause();
+        }
+      });
+    }
+  }
+}
+
+// 富消息气泡分发：file / location / contact
+function renderRichBubble(kind, msg) {
+  if (kind === 'file') return renderFileBubble(msg);
+  if (kind === 'location') return renderLocationBubble(msg);
+  if (kind === 'contact') return renderContactBubble(msg);
+  return '';
+}
+// 注入富消息样式（模块加载时跑一次）
+ensureRichBubbleStyle();
+
 function createMessageEl(msg, opts = {}) {
   const state = getState();
-  const mode = getData(KEYS.chatMode, 'bubble');
+  const mode = getEffectivePrefs().chatMode || getData(KEYS.chatMode, 'bubble');
   const isUser = msg.role === 'user';
   const isImage = msg.type === 'image';
+  const isVoice = msg.type === 'voice' || msg.type === 'audio';
+  const isFile = msg.type === 'file';
+  const isLocation = msg.type === 'location';
+  const isContact = msg.type === 'contact';
 
   // ── 撤回占位 ──
   if (msg.recalled) {
@@ -502,7 +704,9 @@ function createMessageEl(msg, opts = {}) {
   // 1对1会话判断：当前所有会话都是单角色，未来支持群聊时扩展
   const isOneOnOne = isOneOnOneSession(state.currentSession);
   // 思维链 HTML：AI 消息且有 thinking 字段时渲染（流式中由 updateThinkingUI 动态创建）
-  const showThinking = !isUser && !opts.stream && !!(msg.thinking && msg.thinking.trim());
+  // per-character 偏好 showThinking=false 时不显示思维链
+  const showThinking = !isUser && !opts.stream && !!(msg.thinking && msg.thinking.trim())
+    && getEffectivePrefs().showThinking !== false;
   const thinkingHTML = showThinking ? renderThinkingHTML(msg.thinking, { streaming: false }) : '';
 
   const el = document.createElement('div');
@@ -514,16 +718,22 @@ function createMessageEl(msg, opts = {}) {
     const name = isUser ? '我' : (state.currentCharacter?.name || state.currentCharacter?.nickname || '她');
     const time = formatTime(msg.timestamp || msg.createdAt);
 
-    // 引用块（dialog 模式也要渲染）
-    const quoteHTML = msg.quote
-      ? `<div class="chat-quote">引用：${escapeHTML(msg.quote)}</div>`
-      : '';
+    // 引用卡片（dialog 模式也要渲染，可点击样式复用）
+    const quoteHTML = renderQuoteHTML(msg);
 
     // 正文内容
     let inner;
     if (isImage) {
       const safeUrl = String(msg.mediaUrl || '').replace(/"/g, '&quot;');
       inner = `<img class="chat-image" src="${safeUrl}" alt="图片" loading="lazy">`;
+    } else if (isVoice) {
+      inner = renderAudioHTML(msg);
+    } else if (isFile) {
+      inner = renderRichBubble('file', msg);
+    } else if (isLocation) {
+      inner = renderRichBubble('location', msg);
+    } else if (isContact) {
+      inner = renderRichBubble('contact', msg);
     } else if (opts.stream) {
       inner = '';
     } else if (isUser) {
@@ -532,11 +742,17 @@ function createMessageEl(msg, opts = {}) {
       inner = renderMarkdown(msg.content || '');
     }
 
+    // 转发标识
+    const forwardedTag = msg.forwarded
+      ? `<div class="chat-forwarded-tag">${createIcon('forward', 14).outerHTML}<span>转发消息</span></div>`
+      : '';
+
     if (isUser) {
       // 用户消息：与 AI 卡片对称 —— 头像(右) + 时间 + 名字 + 内容
       const avatarHTML = renderUserAvatar();
       el.innerHTML = `
         <div class="chat-dialog-user">
+          ${forwardedTag}
           <div class="chat-bubble">${quoteHTML}${inner}</div>
           <div class="chat-dialog-user-meta">
             <span class="chat-dialog-user-time">${escapeHTML(time)}</span>
@@ -561,6 +777,11 @@ function createMessageEl(msg, opts = {}) {
       `;
     }
     if (showThinking) bindThinkingToggle(el);
+    bindInteractiveControls(el, msg);
+    // 富消息交互（文件下载 / 位置查看 / 名片跳转）
+    if (isFile || isLocation || isContact) bindRichBubble(el, msg);
+    // 代码块增强（复制 / 下载 / 预览 / 折叠）—— AI 回复才可能有代码块
+    if (!isUser) enhanceCodeBlocks(el);
     attachLongPress(el, () => openMessageActionSheet(msg));
     return el;
   }
@@ -577,16 +798,27 @@ function createMessageEl(msg, opts = {}) {
     : '';
 
   const content = opts.stream ? '' : (msg.content || '');
+  // 转发标识
+  const forwardedTag = msg.forwarded
+    ? `<div class="chat-forwarded-tag">${createIcon('forward', 14).outerHTML}<span>转发消息</span></div>`
+    : '';
   let bubbleInner = '';
-  if (msg.quote) {
-    bubbleInner += `<div class="chat-quote">引用：${escapeHTML(msg.quote)}</div>`;
-  }
+  // 引用卡片（可点击样式）
+  bubbleInner += renderQuoteHTML(msg);
   if (isImage) {
     const safeUrl = String(msg.mediaUrl || '').replace(/"/g, '&quot;');
     bubbleInner += `<img class="chat-image" src="${safeUrl}" alt="图片" loading="lazy">`;
     if (content) {
       bubbleInner += isUser ? escapeHTML(content) : renderMarkdown(content);
     }
+  } else if (isVoice) {
+    bubbleInner += renderAudioHTML(msg);
+  } else if (isFile) {
+    bubbleInner += renderRichBubble('file', msg);
+  } else if (isLocation) {
+    bubbleInner += renderRichBubble('location', msg);
+  } else if (isContact) {
+    bubbleInner += renderRichBubble('contact', msg);
   } else if (opts.stream) {
     bubbleInner += '';
   } else {
@@ -600,6 +832,7 @@ function createMessageEl(msg, opts = {}) {
     <div class="chat-avatar">${avatarHTML}</div>
     <div class="chat-msg-main">
       ${nicknameHTML}
+      ${forwardedTag}
       ${thinkingHTML}
       <div class="chat-bubble">${bubbleInner}</div>
       <div class="chat-meta">${statusHTML}</div>
@@ -622,6 +855,12 @@ function createMessageEl(msg, opts = {}) {
   }
   // 思维链折叠/展开
   if (showThinking) bindThinkingToggle(el);
+  // 引用卡片点击 + 语音播放
+  bindInteractiveControls(el, msg);
+  // 富消息交互（文件下载 / 位置查看 / 名片跳转）
+  if (isFile || isLocation || isContact) bindRichBubble(el, msg);
+  // 代码块增强（复制 / 下载 / 预览 / 折叠）—— AI 回复才可能有代码块
+  if (!isUser) enhanceCodeBlocks(el);
   // 长按操作（TTS 已改为长按菜单，不再常驻按钮）
   attachLongPress(el, () => openMessageActionSheet(msg));
   return el;
@@ -708,7 +947,11 @@ export function updateThinkingUI(msgEl, thinkingText, opts = {}) {
   } else {
     // 更新内容
     const body = thinkEl.querySelector('.chat-thinking-body');
-    if (body) body.innerHTML = renderMarkdown(thinkingText);
+    if (body) {
+      body.innerHTML = renderMarkdown(thinkingText);
+      // 思维链里也可能有代码块，同样增强（复制/下载/预览/折叠）
+      enhanceCodeBlocks(body);
+    }
   }
   // 流式状态：流式中展开（让主人看到思考过程），结束后折叠（除非用户手动操作过）
   if (opts.streaming !== undefined) {
@@ -719,11 +962,12 @@ export function updateThinkingUI(msgEl, thinkingText, opts = {}) {
   }
 }
 
-/** 刷新当前详情页里所有 AI 头像（avatar:updated 事件触发） */
+/** 刷新当前详情页里所有 AI 头像 / header 名字 / 对话卡片名字（character:updated 事件触发） */
 export function refreshAvatar() {
   const state = getState();
   if (!state.containerEl || !state.currentCharacter) return;
-  const newAvatarHTML = renderCharacterAvatar(state.currentCharacter);
+  const c = state.currentCharacter;
+  const newAvatarHTML = renderCharacterAvatar(c);
   // 更新消息列表里所有 AI 头像
   const avatars = state.containerEl.querySelectorAll('.chat-msg-row.ai .chat-avatar, .chat-dialog-card-avatar');
   avatars.forEach((avEl) => {
@@ -731,9 +975,13 @@ export function refreshAvatar() {
     if (avEl.classList.contains('chat-dialog-user-avatar')) return;
     avEl.innerHTML = newAvatarHTML;
   });
-  // 更新顶部 header 头像（如有）
-  const headerAv = state.containerEl.querySelector('#chat-header-avatar');
-  if (headerAv) headerAv.innerHTML = newAvatarHTML;
+  // 同步刷新 header 名字 + 对话卡片里的 AI 名字（角色改名后实时跟着变）
+  const newName = c.name || c.nickname || state.currentSession?.title || '聊天';
+  const headerName = state.containerEl.querySelector('#chat-header-name');
+  if (headerName) headerName.textContent = newName;
+  state.containerEl.querySelectorAll('.chat-dialog-card-name').forEach((el) => {
+    el.textContent = newName;
+  });
 }
 
 /** 渲染角色头像（36px 圆形） */
@@ -751,7 +999,13 @@ function renderUserAvatar() {
   return `<div class="chat-avatar-fallback">${createIcon('smile', 22).outerHTML}</div>`;
 }
 
-/** 渲染消息状态指示器：sending / sent / failed */
+/** 渲染消息状态指示器：sending / sent / delivered / read / failed
+ *  - sending：圆环转圈
+ *  - sent：单勾（已发送到服务器/本地）
+ *  - delivered：双勾（已送达对方设备）
+ *  - read：双勾（已读，用主题色高亮）
+ *  - failed：感叹号圆圈（点击重试）
+ */
 function renderStatusIndicator(msg) {
   const status = msg.status || 'sent';
   if (status === 'sending') {
@@ -760,7 +1014,15 @@ function renderStatusIndicator(msg) {
   if (status === 'failed') {
     return `<span class="chat-status-failed" role="button" aria-label="发送失败，点击重试">${createIcon('alert', 14).outerHTML}</span>`;
   }
-  // sent
+  if (status === 'delivered') {
+    // 双勾：两个 check 叠加，第二个微微偏左
+    return `<span class="chat-status-delivered" aria-label="已送达">${createIcon('check', 14).outerHTML}${createIcon('check', 14).outerHTML}</span>`;
+  }
+  if (status === 'read') {
+    // 双勾：用主题色，让"她看到啦"更醒目
+    return `<span class="chat-status-read" aria-label="已读">${createIcon('check', 14).outerHTML}${createIcon('check', 14).outerHTML}</span>`;
+  }
+  // sent：单勾
   return `<span class="chat-status-sent" aria-label="已发送">${createIcon('check', 14).outerHTML}</span>`;
 }
 
@@ -889,11 +1151,12 @@ export function stopChatTTS() {
 }
 
 // ════════════════════════════════════════
-// 输入区：自适应高度 / 草稿 / 引用
+// 输入区：自适应高度 / 草稿 / 引用 / 发送按钮态
 // ════════════════════════════════════════
 
 function onInputChanged() {
   autoResizeInput();
+  updateSendButtonState();
   // 草稿防抖保存
   const state = getState();
   if (state.saveDraftDebounced) state.saveDraftDebounced();
@@ -907,10 +1170,21 @@ export function autoResizeInput() {
   state.inputEl.style.height = h + 'px';
 }
 
+/** 发送按钮态：有内容时高亮（active），回复中切红色（replying） */
+export function updateSendButtonState() {
+  const state = getState();
+  if (!state.sendBtnEl) return;
+  const hasText = !!(state.inputEl && state.inputEl.value.trim());
+  state.sendBtnEl.classList.toggle('active', hasText);
+  state.sendBtnEl.classList.toggle('replying', !!state.isReplying);
+}
+
 function onInputKeyDown(e) {
   // 回车发送，Shift+回车换行；回复中不拦截
+  // per-character 偏好 enterToSend=false 时回车只换行，需点按钮发送
   const state = getState();
   if (e.key === 'Enter' && !e.shiftKey && !state.isReplying) {
+    if (getEffectivePrefs().enterToSend === false) return; // 关了回车发送就只换行
     e.preventDefault();
     sendMessage();
   }
@@ -931,22 +1205,33 @@ export async function flushDraft() {
   }
 }
 
-/** 设置引用：在输入框上方显示引用预览，下一条消息会带上 quote 字段 */
-export function setQuoteToInput(text) {
+/**
+ * 设置引用：在输入框上方显示引用预览，下一条消息会带上 quote / quoteId / quoteSender 字段。
+ * @param {string} text 引用文本片段（自动截断 80 字）
+ * @param {{id?:string, sender?:string}} [meta] 原消息 id 与发送者名（用于可点击引用卡片）
+ */
+export function setQuoteToInput(text, meta) {
   const state = getState();
-  state.pendingQuote = String(text || '').slice(0, 80);
+  const t = String(text || '').slice(0, 80);
+  state.pendingQuote = {
+    text: t,
+    id: (meta && meta.id) || '',
+    sender: (meta && meta.sender) || ''
+  };
   showQuotePreview(state.pendingQuote);
   try { state.inputEl?.focus(); } catch (e) {}
 }
 
-function showQuotePreview(text) {
+/** 显示引用预览（兼容旧版字符串与新版对象） */
+function showQuotePreview(quote) {
   const state = getState();
   const previewEl = state.containerEl?.querySelector('#chat-quote-preview');
   const textEl = state.containerEl?.querySelector('#chat-quote-preview-text');
-  if (previewEl && textEl) {
-    textEl.textContent = `引用：${text}`;
-    previewEl.style.display = 'flex';
-  }
+  if (!previewEl || !textEl) return;
+  const text = (quote && typeof quote === 'object') ? quote.text : (quote || '');
+  const sender = (quote && typeof quote === 'object') ? quote.sender : '';
+  textEl.textContent = sender ? `引用 ${sender}：${text}` : `引用：${text}`;
+  previewEl.style.display = 'flex';
 }
 
 export function clearQuote() {
@@ -965,24 +1250,40 @@ function onSendClick() {
   if (state.isReplying) {
     // 回复中点一下 = 取消
     cancelStreaming();
-  } else {
-    sendMessage();
+    return;
   }
+  // 发送前先收起表情面板，避免遮挡
+  try { closeEmojiPanel(); } catch (e) {}
+  sendMessage();
 }
 
+/** + 菜单：网格布局，提供图片/拍照/文件/位置/名片入口 */
 function openInputPlusMenu() {
   const body = document.createElement('div');
-  body.className = 'chat-action-list';
-  body.innerHTML = `
-    <button class="chat-action-item" data-key="image" role="menuitem">
-      ${createIcon('camera', 20).outerHTML}
-      <span>发图片</span>
+  body.className = 'chat-action-grid chat-plus-menu';
+  // 各项配置：全部已接入真实功能（plus-content.js）
+  const items = [
+    { key: 'image',    label: '相册',  icon: 'camera',   enabled: true, onClick: () => sendImageMessage() },
+    { key: 'shoot',    label: '拍照',  icon: 'camera',   enabled: true, onClick: () => import('./plus-content.js').then(m => m.sendShootMessage({ group: false })) },
+    { key: 'file',     label: '文件',  icon: 'file',     enabled: true, onClick: () => import('./plus-content.js').then(m => m.sendFileMessage({ group: false })) },
+    { key: 'location', label: '位置',  icon: 'location', enabled: true, onClick: () => import('./plus-content.js').then(m => m.sendLocationMessage({ group: false })) },
+    { key: 'contact',  label: '名片',  icon: 'contact',  enabled: true, onClick: () => import('./plus-content.js').then(m => m.sendContactMessage({ group: false })) }
+  ];
+  body.innerHTML = items.map((a) => `
+    <button class="chat-action-grid-item${a.enabled ? '' : ' disabled'}" data-key="${a.key}" type="button" role="menuitem"${a.enabled ? '' : ' aria-disabled="true"'}>
+      <span class="chat-action-grid-icon">${createIcon(a.icon, 22).outerHTML}</span>
+      <span class="chat-action-grid-label">${escapeHTML(a.label)}</span>
     </button>
-  `;
+  `).join('');
   const sheet = showBottomSheet({ title: '选择发送内容', bodyElement: body, dismissible: true });
-  body.querySelector('[data-key="image"]').addEventListener('click', () => {
-    sheet.close();
-    sendImageMessage();
+  body.querySelectorAll('.chat-action-grid-item').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const key = btn.dataset.key;
+      const item = items.find((a) => a.key === key);
+      if (!item) return;
+      sheet.close();
+      try { item.onClick(); } catch (e) { console.warn('[chat] + 菜单项失败', e); }
+    });
   });
 }
 
@@ -994,7 +1295,9 @@ export function showTypingIndicator() {
   const state = getState();
   if (!state.messageListEl) return;
   hideTypingIndicator();
-  const mode = getData(KEYS.chatMode, 'bubble');
+  // 显示打字提示前先看 per-character 偏好，关了就不显示
+  if (getEffectivePrefs().showTyping === false) return;
+  const mode = getEffectivePrefs().chatMode || getData(KEYS.chatMode, 'bubble');
   state.typingIndicatorEl = document.createElement('div');
   // dialog 模式下呼吸气泡也走卡片背景，与 AI 消息卡片一致
   state.typingIndicatorEl.className = mode === 'dialog'

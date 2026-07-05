@@ -58,6 +58,10 @@ export const KEYS = Object.freeze({
   appCustomColors: 'app_custom_colors',
   appFontFamily: 'app_font_family',
   appCustomFontBlob: 'app_custom_font_blob',
+  appFontScale: 'app_font_scale',          // 全局字号缩放（0.85 ~ 1.25）
+  appBubbleRadius: 'app_bubble_radius',    // 气泡圆角倍率（0.5 ~ 1.8）
+  appMotionLevel: 'app_motion_level',      // 动效强度：'full' | 'reduced' | 'none'
+  appTypingSpeed: 'app_typing_speed',      // 本地兜底打字速度（字/帧，0.5 ~ 4）
   appDesktopScale: 'app_desktop_scale',
   appWidgetScale: 'app_widget_widget_scale',
   appDockScale: 'app_dock_scale',
@@ -68,6 +72,8 @@ export const KEYS = Object.freeze({
   appLockUnlocked: 'app_lock_unlocked',
   appIconOrder: (page) => `app_icon_order_${page}`,
   appHiddenIcons: 'app_hidden_icons',
+  // 图标跨页拖拽覆盖：{ appId: pageNumber }，记录用户把 app 拖到了第几页
+  appIconPageOverrides: 'app_icon_page_overrides',
 
   // 聊天相关
   chatCurrentCharacter: 'chat_current_character',
@@ -113,6 +119,10 @@ export const KEYS = Object.freeze({
   appLockUseWallpaper: 'app_lock_use_wallpaper',
   // 锁屏壁纸透明度（0-100，100 = 完全显示）
   appLockWallpaperOpacity: 'app_lock_wallpaper_opacity',
+  // 锁屏失败锁定状态持久化（刷新不绕过）：{ count, until }
+  appLockFailState: 'app_lock_fail_state',
+  // 桌面通知提示风格：'ring' | 'breathe' | 'tag' | 'none'（温柔提示，禁红点数字）
+  desktopNoticeStyle: 'desktop_notice_style',
   // Widget 自定义壁纸：{ widgetId: { url, opacity } }
   appWidgetBackgrounds: 'app_widget_backgrounds',
 
@@ -132,6 +142,8 @@ export const KEYS = Object.freeze({
 
   // 第 0 步新增：AI / 消息中心 / APP 背景 / 系统
   aiConfig: 'ai_config',
+  // MCP 内置本地工具开关：{ calc: true, date: false, ... }
+  mcpBuiltinEnabled: 'mcp_builtin_enabled',
   appAppBackgrounds: 'app_app_backgrounds',
   inboxMessages: 'inbox_messages',
   systemName: 'system_name',
