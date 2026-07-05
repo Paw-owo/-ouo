@@ -84,7 +84,8 @@ const DEFAULTS = Object.freeze({
     toastDurationMs: 2200,
     sheetTransitionMs: 260,
     iconEditPressMs: 620,
-    pressScale: 0.96
+    pressScale: 0.96,
+    dockMax: 4                   // Dock 固定 4 位，满了挤出最旧的到桌面
   },
 
   // 防打扰预算

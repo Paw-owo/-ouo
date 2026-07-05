@@ -15,6 +15,7 @@ import bus from '../../core/events.js';
 import { formatRelative, injectStyle } from '../../core/util.js';
 import { openApp } from '../../core/router.js';
 import { applyAppBg } from '../../core/app-bg.js';
+import { APPS } from '../../apps-registry.js';
 
 // ════════════════════════════════════════
 // 模块状态
@@ -25,35 +26,16 @@ let containerEl = null;
 let disposeInboxNew = null;
 let disposeInboxUpdated = null;
 
-// app 标识 -> 图标名映射（全部走 ICON_PATHS 已注册的 SVG 线稿图标，禁止 emoji）
-const APP_ICON_MAP = {
-  chat: 'chat',
-  moments: 'heart',
-  wallet: 'wallet',
-  shop: 'gift',
-  grudge: 'bell',
-  memo: 'memo',
-  anniversary: 'calendar',
-  games: 'games',
-  music: 'music',
-  memory: 'star',
-  system: 'bell'
-};
-
-// app 标识 -> 中文小标签（给消息卡片右上角贴个来源小条）
-const APP_LABEL_MAP = {
-  chat: '聊天',
-  moments: '朋友圈',
-  wallet: '钱包',
-  shop: '礼物',
-  grudge: '记仇',
-  memo: '备忘',
-  anniversary: '纪念日',
-  games: '游戏',
-  music: '音乐',
-  memory: '记忆',
-  system: '系统'
-};
+// 从 APP 注册表读 app 元信息（单一数据源，禁止再硬编码 APP 列表）。
+// 找不到的（如 system / 历史 id）走 fallback：bell 图标 + '消息' 标签 + 不跳转。
+function getAppMeta(appId) {
+  if (!appId) return { icon: 'bell', name: '消息', canOpen: false };
+  const app = APPS.find((a) => a.id === appId);
+  if (app) return { icon: app.icon, name: app.name, canOpen: true };
+  // system 等非注册 APP：贴个系统小条，不跳转
+  if (appId === 'system') return { icon: 'bell', name: '系统', canOpen: false };
+  return { icon: 'bell', name: '消息', canOpen: false };
+}
 
 // ════════════════════════════════════════
 // 样式（全部走 CSS 变量，主题变了我也跟着变）
@@ -279,8 +261,9 @@ function renderFooter(bodyEl, count) {
 }
 
 function renderItem(msg) {
-  const iconName = APP_ICON_MAP[msg.app] || 'bell';
-  const tag = APP_LABEL_MAP[msg.app] || '消息';
+  const meta = getAppMeta(msg.app);
+  const iconName = meta.icon;
+  const tag = meta.name;
   const time = formatRelative(msg.t || msg.createdAt);
   const title = msg.title || '有一条新消息';
   const body = msg.body || '';
@@ -315,7 +298,8 @@ function handleMessageClick(msg) {
   }
   // 跳到对应 App（system / 未知来源就不跳，留在消息中心）
   const appId = msg.app;
-  if (appId && appId !== 'system' && APP_ICON_MAP[appId]) {
+  const meta = getAppMeta(appId);
+  if (meta.canOpen) {
     openApp(appId).catch((e) => {
       console.warn('[inbox] 跳转 App 失败', appId, e);
     });

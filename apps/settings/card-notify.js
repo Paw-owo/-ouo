@@ -1,13 +1,14 @@
 // apps/settings/card-notify.js
 // 通知设置卡。我把通知的小开关都拢在一起啦，
-// 总开关、分 App 开关、免打扰时段、桌面角标都在这儿。
-// 依赖：core/storage-keys.js, core/storage.js, core/ui.js, core/util.js, core/events.js
+// 总开关、分 App 开关、免打扰时段、桌面图标提示都在这儿。
+// 依赖：core/storage-keys.js, core/storage.js, core/ui.js, core/util.js, core/events.js, apps-registry.js
 
 import { KEYS } from '../../core/storage-keys.js';
 import { getData, setData } from '../../core/storage.js';
 import { showToast } from '../../core/ui.js';
 import { injectStyle } from '../../core/util.js';
 import bus from '../../core/events.js';
+import { APPS } from '../../apps-registry.js';
 
 injectStyle('popo-settings-notify-card', `
   .notify-per-app{display:flex;flex-direction:column;gap:2px;margin-top:4px}
@@ -17,35 +18,8 @@ injectStyle('popo-settings-notify-card', `
   .notify-quiet-row input[type=time]{padding:5px 8px;border-radius:var(--radius-sm);background:var(--bg-secondary);color:var(--text-primary);border:1px solid color-mix(in srgb,var(--text-hint) 20%,transparent);font-size:var(--font-size-base)}
   .notify-quiet-sep{color:var(--text-hint);font-size:var(--font-size-small)}
   .notify-section-label{font-size:var(--font-size-small);color:var(--text-secondary);margin:12px 0 2px;font-weight:500}
+  .notify-style-select{padding:5px 8px;border-radius:var(--radius-sm);background:var(--bg-secondary);color:var(--text-primary);border:1px solid color-mix(in srgb,var(--text-hint) 20%,transparent);font-size:var(--font-size-base)}
 `);
-
-// 分 App 通知列表：覆盖所有已注册的 App
-const PER_APP_LIST = [
-  { id: 'chat', name: '聊天' },
-  { id: 'characters', name: '角色' },
-  { id: 'moments', name: '朋友圈' },
-  { id: 'memo', name: '备忘录' },
-  { id: 'mood', name: '心情' },
-  { id: 'weather', name: '天气' },
-  { id: 'calculator', name: '计算器' },
-  { id: 'countdown', name: '倒计时' },
-  { id: 'anniversary', name: '纪念日' },
-  { id: 'pomodoro', name: '番茄钟' },
-  { id: 'flashcard', name: '记忆卡' },
-  { id: 'alarm', name: '闹钟' },
-  { id: 'astro', name: '星座' },
-  { id: 'health', name: '健康' },
-  { id: 'dream', name: '梦境' },
-  { id: 'avatar', name: '头像' },
-  { id: 'worldbook', name: '世界书' },
-  { id: 'games', name: '游戏' },
-  { id: 'music', name: '音乐' },
-  { id: 'shop', name: '商店' },
-  { id: 'wallet', name: '钱包' },
-  { id: 'collections', name: '收藏' },
-  { id: 'grudge', name: '记仇本' },
-  { id: 'memory-viewer', name: '记忆' }
-];
 
 // 默认通知配置，没存过就用这套
 const DEFAULT_NOTIFY = {
@@ -71,6 +45,14 @@ function readNotify() {
   };
 }
 
+// 读桌面图标提示风格（4档温柔提示）。未设时回退看旧 badge 字段，保持兼容。
+function readNoticeStyle() {
+  const s = getData(KEYS.desktopNoticeStyle, null);
+  if (s) return s;
+  const cfg = getData(KEYS.notifySettings, null);
+  return (cfg && cfg.badge === false) ? 'none' : 'ring';
+}
+
 export function renderNotifyCard() {
   const cfg = readNotify();
   const card = document.createElement('div');
@@ -92,15 +74,20 @@ export function renderNotifyCard() {
       </div>
     </div>
     <div class="card-row">
-      <span class="card-row-label">桌面角标红点</span>
-      <input type="checkbox" id="notify-badge" ${cfg.badge ? 'checked' : ''}>
+      <span class="card-row-label">桌面图标提示</span>
+      <select id="notify-notice-style" class="notify-style-select">
+        <option value="ring">圆环</option>
+        <option value="breathe">呼吸</option>
+        <option value="tag">新字</option>
+        <option value="none">关掉</option>
+      </select>
     </div>
     <div style="font-size:var(--font-size-small);color:var(--text-hint);margin-top:8px;line-height:1.5">免打扰时段里通知会安安静静的，不打扰你休息哦</div>
   `;
 
-  // 渲染分 App 行
+  // 渲染分 App 行（从注册表动态读，新增 App 自动出现）
   const perAppEl = card.querySelector('#notify-per-app');
-  PER_APP_LIST.forEach((app) => {
+  APPS.forEach((app) => {
     const on = cfg.perApp[app.id] !== false; // 没存过默认开
     const row = document.createElement('div');
     row.className = 'card-row';
@@ -113,7 +100,6 @@ export function renderNotifyCard() {
   const persist = () => {
     const next = readNotify();
     next.global = !!card.querySelector('#notify-global').checked;
-    next.badge = !!card.querySelector('#notify-badge').checked;
     next.quietHours = {
       start: card.querySelector('#notify-quiet-start').value,
       end: card.querySelector('#notify-quiet-end').value
@@ -124,6 +110,8 @@ export function renderNotifyCard() {
     });
     next.perApp = perApp;
     setData(KEYS.notifySettings, next);
+    // 桌面图标提示风格独立存储
+    setData(KEYS.desktopNoticeStyle, card.querySelector('#notify-notice-style').value);
   };
 
   // 总开关
@@ -132,10 +120,13 @@ export function renderNotifyCard() {
     showToast(e.target.checked ? '通知打开啦' : '通知关掉啦，安安静静');
     bus.emit('notify:settings-changed');
   });
-  // 角标开关
-  card.querySelector('#notify-badge').addEventListener('change', (e) => {
+  // 桌面图标提示风格
+  const styleSel = card.querySelector('#notify-notice-style');
+  styleSel.value = readNoticeStyle();
+  styleSel.addEventListener('change', (e) => {
     persist();
-    showToast(e.target.checked ? '角标打开啦' : '角标关掉啦');
+    const label = { ring: '圆环', breathe: '呼吸', tag: '新字', none: '关掉' }[e.target.value] || '';
+    showToast(label ? `图标提示改成${label}啦` : '图标提示关掉啦');
     bus.emit('notify:settings-changed');
   });
   // 分 App 开关

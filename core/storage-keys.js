@@ -119,6 +119,10 @@ export const KEYS = Object.freeze({
   appLockUseWallpaper: 'app_lock_use_wallpaper',
   // 锁屏壁纸透明度（0-100，100 = 完全显示）
   appLockWallpaperOpacity: 'app_lock_wallpaper_opacity',
+  // 锁屏失败锁定状态持久化（刷新不绕过）：{ count, until }
+  appLockFailState: 'app_lock_fail_state',
+  // 桌面通知提示风格：'ring' | 'breathe' | 'tag' | 'none'（温柔提示，禁红点数字）
+  desktopNoticeStyle: 'desktop_notice_style',
   // Widget 自定义壁纸：{ widgetId: { url, opacity } }
   appWidgetBackgrounds: 'app_widget_backgrounds',
 

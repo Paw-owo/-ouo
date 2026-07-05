@@ -389,13 +389,36 @@ img { display: block; max-width: 100%; }
 }
 .icon-badge {
   position: absolute; top: -2px; right: -2px;
-  min-width: 18px; height: 18px; border-radius: 9px;
-  background: var(--danger); color: var(--bubble-user-text);
-  font-size: 11px; font-weight: 600;
-  display: flex; align-items: center; justify-content: center;
-  padding: 0 5px;
   z-index: 1;
+  display: flex; align-items: center; justify-content: center;
+  pointer-events: none;
 }
+/* 温柔提示 4 档（desktop skill 铁律：禁红底数字角标，改小圆环/轻呼吸/新标签） */
+/* ring：accent 色描边小圆环 */
+.icon-badge.style-ring {
+  width: 12px; height: 12px; border-radius: 50%;
+  border: 2px solid var(--accent);
+  background: var(--bg-card);
+}
+/* breathe：accent 色小圆点 + 轻呼吸动画 */
+.icon-badge.style-breathe {
+  width: 10px; height: 10px; border-radius: 50%;
+  background: var(--accent);
+  animation: popoBadgeBreathe 2.4s ease-in-out infinite;
+}
+@keyframes popoBadgeBreathe {
+  0%, 100% { transform: scale(1); opacity: 0.7; }
+  50% { transform: scale(1.18); opacity: 1; }
+}
+/* tag：accent 色小胶囊 + "新"字 */
+.icon-badge.style-tag {
+  min-width: 22px; height: 16px; border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 85%, transparent);
+  color: var(--bubble-user-text);
+  font-size: 10px; font-weight: 600; line-height: 1;
+  padding: 0 5px;
+}
+/* 兼容旧 .dot 变体（已废弃，保留向后兼容） */
 .icon-badge.dot { width: 10px; min-width: 10px; height: 10px; padding: 0; }
 
 /* 页面指示点 */

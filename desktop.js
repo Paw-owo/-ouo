@@ -14,8 +14,9 @@ import bus from './core/events.js';
 import { openApp, goHome } from './core/router.js';
 import { seedDefaultCharacter, getDefaultCharacter } from './core/seed.js';
 import { initInbox } from './core/inbox.js';
-import { getUpcomingCountdown } from './apps/countdown/index.js';
 import { DEFAULT_LOCK_PASSWORD, LOCK_MAX_FAILS, LOCK_LOCKOUT_MS, hashPassword, parseLockStored, formatLockStored } from './core/lock.js';
+// 注意：不静态 import apps/countdown，避免桌面壳与 App 强耦合。
+// 倒计时 widget 用动态 import 懒加载 getUpcomingCountdown（与 registry loader 同模式）。
 
 // ════════════════════════════════════════
 // DOM 引用
@@ -52,6 +53,27 @@ let currentCharacter = null;
 let lockFailCount = 0;
 let lockLockoutUntil = 0;
 let lockLockoutTicker = null;
+
+// 锁屏失败锁定状态持久化（刷新不绕过）。存 KEYS.appLockFailState: { count, until }
+function loadLockFailState() {
+  const v = getData(KEYS.appLockFailState, null);
+  if (!v || typeof v !== 'object') return { count: 0, until: 0 };
+  return { count: Number(v.count) || 0, until: Number(v.until) || 0 };
+}
+function saveLockFailState() {
+  setData(KEYS.appLockFailState, { count: lockFailCount, until: lockLockoutUntil });
+}
+// 启动时恢复锁定状态：仍在锁定期内则继续倒计时
+function restoreLockFailState() {
+  const s = loadLockFailState();
+  lockFailCount = s.count;
+  lockLockoutUntil = s.until;
+  if (isLockLockedOut()) {
+    if (lockLockoutTicker) clearInterval(lockLockoutTicker);
+    lockLockoutTicker = setInterval(updateLockCountdown, 500);
+    updateLockCountdown();
+  }
+}
 
 // 状态栏图标（8 个，纯装饰 + 时间）
 const STATUS_ICONS = ['heart', 'sun', 'weather', 'music', 'star', 'calendar', 'moon', 'bell'];
@@ -215,6 +237,7 @@ async function boot() {
     await seedDefaultCharacter();
     currentCharacter = await getDefaultCharacter();
     await ensureLockPasswordHashed(); // 密码哈希迁移（明文 -> 哈希）
+    restoreLockFailState();           // 恢复锁屏失败锁定状态（刷新不绕过）
     renderLockDots();
     rebuildDesktopPages();
     await renderAll();
@@ -262,9 +285,9 @@ async function applyCustomFont() {
 // ════════════════════════════════════════
 async function renderAll() {
   renderStatusBar();
-  renderDock();
+  await renderDock();          // 修复：原版未 await，图标自定义图片应用竞态
   await renderWidgets();
-  renderIconGrids();
+  await renderIconGrids();     // 修复：原版未 await，跨页图标顺序应用竞态
   updateEditingClass();
   updatePageDots();
 }
@@ -399,7 +422,8 @@ async function createWidget(w) {
     el.innerHTML = `<div class="widget-title">天气</div><div class="widget-value" id="w-weather">看看外面天气如何</div>`;
   } else if (w.type === 'anniversary') {
     el.innerHTML = `<div class="widget-title">纪念日</div><div class="widget-value" id="w-anniversary">还没有纪念日呢</div>`;
-    el.addEventListener('click', () => addAnniversaryPrompt());
+    // 修复：原版未判断 editing，编辑态下点 widget 会误触弹出添加纪念日面板。补 !editing 判断。
+    el.addEventListener('click', () => { if (!editing) addAnniversaryPrompt(); });
   } else if (w.type === 'focus') {
     const focus = getData(KEYS.appFocusWidget, { title: '今天也要好好休息', text: '打开设置，看看我能帮你做什么' });
     el.innerHTML = `<div class="widget-title">今日提示</div><div class="widget-value" id="w-focus-title">${escapeHtml(focus.title || '今天也要好好休息')}</div><div class="widget-sub" id="w-focus-text">${escapeHtml(focus.text || '')}</div>`;
@@ -543,7 +567,8 @@ function handleIconPointerDown(event, element) {
   const pressMs = getConfig('ui.iconEditPressMs', 620);
   const startX = event.clientX, startY = event.clientY;
   let pressTimer = setTimeout(() => {
-    if (!moved) { enterEditingMode(); showToast('长按拖动可以调整位置哦'); }
+    // 修复：原版编辑态下长按另一个图标会重复弹 toast。只在首次进入编辑态时提示。
+    if (!moved) { const wasEditing = editing; enterEditingMode(); if (!wasEditing) showToast('长按拖动可以调整位置哦'); }
   }, pressMs);
   let moved = false;
   let dragGhost = null;
@@ -631,20 +656,21 @@ function updateIconDropPreview(x, y, dragEl, originGrid, isDockIcon) {
 
 // 落点处理：交换 / 跨页移动 / Dock↔桌面互移
 function handleIconDrop(x, y, dragEl, originGrid, isDockIcon) {
-  const sel = isDockIcon ? '.dock-icon[data-app-id]' : '.desktop-icon[data-app-id]';
   const overEl = document.elementFromPoint(x, y);
   if (!overEl) return;
-  const target = overEl.closest(sel);
+  // 修复：原版 sel 根据"被拖元素"类型选，导致跨类型目标永远匹配不到（Dock→桌面 / 桌面→Dock 两个分支是死代码）。
+  // 改成同时匹配 dock-icon 和 desktop-icon，让四个分支都能正常进入。
+  const target = overEl.closest('.dock-icon[data-app-id], .desktop-icon[data-app-id]');
 
   if (target && target !== dragEl) {
     // 落在另一个图标上：交换
     if (target.parentElement === originGrid) {
-      // 同 grid 内交换
+      // 同 grid 内交换（dock 内互换 / 桌面同页互换）
       swapIconsInGrid(originGrid, dragEl, target);
       if (isDockIcon) saveDockOrder(originGrid); else saveIconOrder(originGrid);
       showToast('位置换好啦', 'success');
     } else if (!isDockIcon && target.classList.contains('desktop-icon')) {
-      // 跨页桌面图标交换
+      // 桌面图标拖到桌面图标上（跨页交换）
       const targetGrid = target.parentElement;
       swapIconsCrossGrid(dragEl, target);
       saveIconOrder(originGrid);
@@ -756,10 +782,33 @@ function moveToDock(desktopIconEl) {
   const reg = getRegistrySync();
   const app = reg?.APPS.find((a) => a.id === appId);
   if (!app) return;
-  if (getDockOrder().length >= getConfig('ui.dockMax', 6)) {
-    showToast('Dock 装满啦，先移走一个嘛', 'error');
-    return;
+  const maxDock = getConfig('ui.dockMax', 4);
+  let dockOrder = getDockOrder();
+  const originGrid = desktopIconEl.parentElement;
+  const targetPage = originGrid ? Number(originGrid.dataset.iconGrid) || 0 : 0;
+
+  // Dock 已满：挤出最旧的（dock 顺序第一个）到拖入图标的原桌面位置
+  // desktop skill 要求 Dock 固定 4 位，满了挤出而非拒绝
+  if (dockOrder.length >= maxDock) {
+    const kickedId = dockOrder[0];
+    const kickedApp = reg?.APPS.find((a) => a.id === kickedId);
+    if (kickedApp) {
+      const dockOverrides = getDockOverrides();
+      dockOverrides[kickedId] = false;
+      saveDockOverrides(dockOverrides);
+      const pageOverrides = getIconPageOverrides();
+      pageOverrides[kickedId] = targetPage;
+      saveIconPageOverrides(pageOverrides);
+      const newDesktopIcon = createDesktopIcon(kickedApp);
+      if (originGrid) originGrid.appendChild(newDesktopIcon);
+      const kickedDockEl = dockEl.querySelector(`.dock-icon[data-app-id="${kickedId}"]`);
+      if (kickedDockEl) kickedDockEl.remove();
+      dockOrder = dockOrder.filter((id) => id !== kickedId);
+      saveDockOrderArr(dockOrder);
+      showToast(`${kickedApp.name} 让了位置到桌面`, 'default');
+    }
   }
+
   // 标记为 dock app（覆盖 registry 的 dock 字段，不修改 registry 本身）
   const overrides = getDockOverrides();
   overrides[appId] = true;
@@ -768,14 +817,12 @@ function moveToDock(desktopIconEl) {
   const pageOverrides = getIconPageOverrides();
   delete pageOverrides[appId];
   saveIconPageOverrides(pageOverrides);
-  // 从桌面移除
-  const grid = desktopIconEl.parentElement;
+  // 从桌面移除拖入的图标，统一保存网格顺序（含被挤出图标）
   desktopIconEl.remove();
-  if (grid) saveIconOrder(grid);
+  if (originGrid) saveIconOrder(originGrid);
   // 加入 dock
   const newIcon = createDockIcon(app);
   dockEl.appendChild(newIcon);
-  const dockOrder = getDockOrder();
   dockOrder.push(appId);
   saveDockOrderArr(dockOrder);
   showToast('放到 Dock 啦', 'success');
@@ -804,7 +851,8 @@ function handleWidgetPointerDown(event, element, widget) {
   const pressMs = getConfig('ui.iconEditPressMs', 620);
   const startX = event.clientX, startY = event.clientY;
   let pressTimer = setTimeout(() => {
-    if (!moved) { enterEditingMode(); showToast('拖动可以换位置，松开试试'); }
+    // 修复：同上，编辑态下长按另一个 widget 不重复弹 toast。
+    if (!moved) { const wasEditing = editing; enterEditingMode(); if (!wasEditing) showToast('拖动可以换位置，松开试试'); }
   }, pressMs);
   let moved = false;
   let dragGhost = null;
@@ -1099,15 +1147,20 @@ function bindEvents() {
     KEYS.appFontScale, KEYS.appBubbleRadius, KEYS.appMotionLevel,
     KEYS.appDesktopScale, KEYS.appWidgetScale, KEYS.appDockScale,
     KEYS.appDesktopPages, KEYS.appDockOrder, KEYS.appDockOverrides,
+    KEYS.appIconPageOverrides,                  // 补：跨页拖拽覆盖跨 tab 同步
     KEYS.appWidgetPositions, KEYS.appHiddenIcons, KEYS.appWidgetBackgrounds,
-    KEYS.appBadges, KEYS.appLockUnlocked, KEYS.appIcons
+    KEYS.appBadges, KEYS.appLockUnlocked, KEYS.appIcons,
+    KEYS.notifySettings,                        // 补：通知设置跨 tab 同步
+    KEYS.desktopNoticeStyle,                    // 补：提示风格跨 tab 同步
+    KEYS.appLockFailState                       // 补：锁屏失败锁定状态跨 tab 同步
   ]);
   window.addEventListener('storage', (e) => {
     if (!e.key) return;
     // appIconOrder_<page> 是函数式 key，用前缀匹配
     const isIconOrder = e.key.startsWith('app_icon_order_');
     if (!_desktopStorageKeys.has(e.key) && !isIconOrder) return;
-    try { applyAllImages(); refreshBadges(); } catch (err) { /* 静默 */ }
+    // 修复：原版只 applyAllImages + refreshBadges，图标/dock 顺序变了不重渲染 → 补 renderIconGrids + renderDock。
+    try { applyAllImages(); renderIconGrids(); renderDock(); refreshBadges(); } catch (err) { /* 静默 */ }
   });
 }
 
@@ -1145,6 +1198,7 @@ function startLockLockout() {
   if (lockLockoutTicker) clearInterval(lockLockoutTicker);
   lockLockoutTicker = setInterval(updateLockCountdown, 500);
   updateLockCountdown();
+  saveLockFailState();               // 持久化：进入锁定期
 }
 
 function updateLockCountdown() {
@@ -1157,6 +1211,7 @@ function updateLockCountdown() {
   } else {
     if (lockLockoutTicker) { clearInterval(lockLockoutTicker); lockLockoutTicker = null; }
     lockLockoutUntil = 0;
+    saveLockFailState();             // 持久化：锁定期结束，清空 until
     lockErrorEl.textContent = '';
     lockPadEl.style.pointerEvents = '';
     lockPadEl.style.opacity = '';
@@ -1204,6 +1259,7 @@ async function checkLockPassword() {
   }
   if (matched) {
     lockFailCount = 0;
+    saveLockFailState();               // 持久化：解锁成功，清空失败计数
     setData(KEYS.appLockUnlocked, true);
     lockScreenEl.classList.add('unlocked');
     setTimeout(() => lockScreenEl.classList.add('hidden'), 360);
@@ -1212,6 +1268,7 @@ async function checkLockPassword() {
   }
   lockInput = '';
   lockFailCount += 1;
+  saveLockFailState();                 // 持久化：失败计数累加
   if (lockFailCount >= LOCK_MAX_FAILS) {
     startLockLockout();
     return;
@@ -1337,6 +1394,8 @@ async function updateCountdownWidget() {
   const daysEl = $('w-countdown-days');
   if (!titleEl && !daysEl) return;
   try {
+    // 动态 import 懒加载 countdown App，避免桌面壳静态依赖 App（与 registry loader 同模式）
+    const { getUpcomingCountdown } = await import('./apps/countdown/index.js');
     const up = await getUpcomingCountdown();
     if (!up) {
       if (titleEl) titleEl.textContent = '还没有倒计时呢';
@@ -1590,15 +1649,25 @@ async function applyIconImages() {
 // 徽章
 // ════════════════════════════════════════
 function refreshBadges() {
+  // desktop skill 铁律：禁红底数字角标，改温柔提示 4 档（ring/breathe/tag/none）
+  // 旧数据兼容：desktopNoticeStyle 未设时回退看 notifySettings.badge（false→none）
+  let style = getData(KEYS.desktopNoticeStyle, null);
+  if (!style) {
+    const cfg = getData(KEYS.notifySettings, null);
+    style = (cfg && cfg.badge === false) ? 'none' : 'ring';
+  }
   const map = getBadgeMap();
   document.querySelectorAll('[data-badge]').forEach((el) => {
     const count = Number(map[el.dataset.badge] || 0);
-    if (count > 0) {
-      el.textContent = count > 99 ? '99+' : String(count);
-      el.style.display = '';
-    } else {
+    el.classList.remove('style-ring', 'style-breathe', 'style-tag');
+    if (count <= 0 || style === 'none') {
       el.style.display = 'none';
+      el.textContent = '';
+      return;
     }
+    el.style.display = '';
+    el.classList.add(`style-${style}`);
+    el.textContent = style === 'tag' ? '新' : '';
   });
 }
 
@@ -1611,6 +1680,143 @@ function getBadgeMap() {
   const momentsUnread = getData(KEYS.momentsUnreadCount, 0);
   if (Number(momentsUnread) > 0) map.moments = Number(momentsUnread);
   return map;
+}
+
+// ════════════════════════════════════════
+// 横幅通知（消息中心新消息时顶部弹横幅，遵循免打扰 + 总开关）
+// ════════════════════════════════════════
+injectStyle('desktop-notice-styles', `
+.notice-banner {
+  position: absolute;
+  top: calc(env(safe-area-inset-top, 0px) + var(--status-bar-base) + 8px);
+  left: 50%;
+  transform: translateX(-50%) translateY(-12px);
+  z-index: 60;
+  display: flex; align-items: center; gap: 10px;
+  min-width: 260px; max-width: calc(100vw - 32px);
+  padding: 10px 12px;
+  border-radius: var(--radius-card);
+  background: color-mix(in srgb, var(--bg-card) 92%, transparent);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  box-shadow: var(--shadow-md);
+  border: 1px solid color-mix(in srgb, var(--accent-light) 60%, transparent);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.notice-banner.show {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateX(-50%) translateY(0);
+}
+.notice-banner-icon {
+  flex-shrink: 0; width: 32px; height: 32px; border-radius: 50%;
+  background: color-mix(in srgb, var(--accent-light) 55%, transparent);
+  color: var(--accent-dark);
+  display: flex; align-items: center; justify-content: center;
+}
+.notice-banner-icon .popo-icon-svg { width: 18px; height: 18px; }
+.notice-banner-main { flex: 1; min-width: 0; }
+.notice-banner-title {
+  font-size: var(--font-size-small); font-weight: 600;
+  color: var(--text-primary); line-height: 1.3;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.notice-banner-body {
+  font-size: var(--font-size-caption); color: var(--text-secondary);
+  line-height: 1.4; margin-top: 2px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.notice-banner-close {
+  flex-shrink: 0; width: 22px; height: 22px; border-radius: 50%;
+  background: transparent; color: var(--text-hint);
+  display: flex; align-items: center; justify-content: center;
+  transition: var(--motion);
+}
+.notice-banner-close:active { transform: scale(var(--press-scale)); }
+.notice-banner-close .popo-icon-svg { width: 12px; height: 12px; }
+`);
+
+let noticeBannerEl = null;
+let noticeBannerTimer = null;
+
+// 从 registry 取 app 图标和名字（图标提示/横幅用），找不到给兜底
+function getAppInfo(appId) {
+  const reg = getRegistrySync();
+  const app = reg?.APPS.find((a) => a.id === appId);
+  return app || { id: appId, name: '消息', icon: 'bell' };
+}
+
+// 通知总开关 + 免打扰时段 + 分APP开关检查（读 KEYS.notifySettings）
+function shouldShowNotice(appId) {
+  const cfg = getData(KEYS.notifySettings, null);
+  if (cfg && cfg.global === false) return false;
+  // 分APP开关：没存过默认开，存了 false 才关
+  if (appId && cfg && cfg.perApp && cfg.perApp[appId] === false) return false;
+  if (cfg && cfg.quietHours && cfg.quietHours.start && cfg.quietHours.end) {
+    const now = new Date();
+    const cur = now.getHours() * 60 + now.getMinutes();
+    const [sh, sm] = String(cfg.quietHours.start).split(':').map(Number);
+    const [eh, em] = String(cfg.quietHours.end).split(':').map(Number);
+    const start = (sh || 0) * 60 + (sm || 0);
+    const end = (eh || 0) * 60 + (em || 0);
+    if (start <= end) {
+      if (cur >= start && cur < end) return false;
+    } else {
+      // 跨夜（如 23:00-07:30）
+      if (cur >= start || cur < end) return false;
+    }
+  }
+  return true;
+}
+
+function ensureNoticeBanner() {
+  if (noticeBannerEl) return;
+  noticeBannerEl = document.createElement('div');
+  noticeBannerEl.className = 'notice-banner';
+  const icon = document.createElement('div');
+  icon.className = 'notice-banner-icon';
+  const main = document.createElement('div');
+  main.className = 'notice-banner-main';
+  const title = document.createElement('div');
+  title.className = 'notice-banner-title';
+  const body = document.createElement('div');
+  body.className = 'notice-banner-body';
+  main.append(title, body);
+  const close = document.createElement('button');
+  close.className = 'notice-banner-close';
+  close.type = 'button';
+  close.setAttribute('aria-label', '关闭');
+  close.appendChild(createIcon('close', 12));
+  close.addEventListener('click', (e) => { e.stopPropagation(); hideNoticeBanner(); });
+  noticeBannerEl.append(icon, main, close);
+  // 点横幅主体跳到消息中心
+  noticeBannerEl.addEventListener('click', () => {
+    hideNoticeBanner();
+    openApp('inbox');
+  });
+  desktopEl.appendChild(noticeBannerEl);
+}
+
+function showNoticeBanner(msg) {
+  if (!msg || !msg.title) return;
+  if (!shouldShowNotice(msg.app)) return;
+  ensureNoticeBanner();
+  const app = getAppInfo(msg.app);
+  const iconEl = noticeBannerEl.querySelector('.notice-banner-icon');
+  iconEl.innerHTML = '';
+  iconEl.appendChild(createIcon(app.icon || 'bell', 18));
+  noticeBannerEl.querySelector('.notice-banner-title').textContent = msg.title;
+  noticeBannerEl.querySelector('.notice-banner-body').textContent = msg.body || '';
+  noticeBannerEl.classList.add('show');
+  if (noticeBannerTimer) clearTimeout(noticeBannerTimer);
+  noticeBannerTimer = setTimeout(hideNoticeBanner, 3800);
+}
+
+function hideNoticeBanner() {
+  if (!noticeBannerEl) return;
+  noticeBannerEl.classList.remove('show');
 }
 
 // ════════════════════════════════════════
@@ -1642,7 +1848,7 @@ function subscribeBus() {
   };
   bus.on('desktop:refresh', doRefresh);
   bus.on('desktop:refresh-badges', refreshBadges);
-  bus.on('theme:changed', () => {
+  bus.on('theme:changed', async () => {
     // theme.js 的 applyTheme 会先 removeProperty 所有变量再重设，
     // 我们叠在上面的个性化覆盖（字号/圆角/动效）被一起清掉了。
     // 必须清掉原值缓存（新主题的原值可能不同）再重新应用。
@@ -1650,7 +1856,8 @@ function subscribeBus() {
     applyPersonalization();
     // 修复：壁纸遮罩色（.desktop::after 用 --wallpaper-soft）依赖主题变量，
     // 切主题后遮罩色可能仍为旧值。补刷一次壁纸让遮罩跟随主题。
-    try { applyWallpaper(); } catch (e) { /* 静默 */ }
+    // 原版 applyWallpaper 是 async 但未 await，try-catch 捕获不到异步抛错 → 改 await。
+    try { await applyWallpaper(); } catch (e) { /* 静默 */ }
   });
   bus.on('character:updated', async () => {
     try { currentCharacter = await getDefaultCharacter(); } catch (e) { /* 静默 */ }
@@ -1671,6 +1878,14 @@ function subscribeBus() {
   // 修复：anniversary App 在增删改纪念日时 emit anniversary:changed，desktop 未订阅 → widget 不刷新。
   // 补订后用户在 anniversary App 改了纪念日，回桌面 widget 立刻更新。
   bus.on('anniversary:changed', () => { updateAnniversaryWidget(); });
+  // 通知设置变更：重算徽章（角标开关/分APP开关/免打扰变了都要重算）
+  bus.on('notify:settings-changed', () => { refreshBadges(); });
+  // 消息中心：新消息 → 横幅通知 + 图标提示；状态变更 → 重算徽章
+  bus.on('inbox:new', (payload) => {
+    refreshBadges();
+    showNoticeBanner(payload?.message);
+  });
+  bus.on('inbox:updated', () => { refreshBadges(); });
 }
 
 // ════════════════════════════════════════
@@ -1783,7 +1998,7 @@ window.popoRefreshDesktop = async () => {
 window.popoRefreshLock = refreshLockScreen;
 window.popoGetPageCount = getDesktopPageCount;
 window.popoSetPageCount = setDesktopPageCount;
-window.popoLock = () => { setData(KEYS.appLockUnlocked, false); lockScreenEl.classList.remove('unlocked', 'hidden'); lockInput = ''; lockErrorEl.textContent = ''; renderLockDots(); };
+// 删除 window.popoLock：全代码库无调用方的死接口。未来需要手动锁屏时再补。
 
 // 启动
 boot();
