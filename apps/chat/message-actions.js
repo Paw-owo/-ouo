@@ -199,6 +199,16 @@ function recallMessage(msg) {
 // 存入 IndexedDB favorites store，并 emit 事件供其他 App 监听
 async function starMessage(msg) {
   try {
+    // 先查重：同一条消息已收藏过就提示，不重复写入（原版每次都新建 fav 记录，重复收藏堆一屏）
+    let existing = null;
+    try {
+      const all = await getAllDB(STORES.favorites);
+      existing = all.find((f) => f && f.messageId === msg.id);
+    } catch (e) {}
+    if (existing) {
+      showToast('已经收藏过啦', 'default', 1200);
+      return;
+    }
     const favId = generateId('fav');
     await setDB(STORES.favorites, favId, {
       id: favId,
@@ -289,10 +299,46 @@ export function openChatMoreMenu() {
 
 // ── 切换气泡/对话模式 ──
 async function toggleChatMode(curMode) {
+  const state = getState();
+  // 流式中切模式会让正在流的气泡 DOM 被重建→流式回调写到一个已脱离文档的旧节点上，
+  // 且 AI 消息还没落库 → 新渲染的列表里看不到这条回复，相当于回复丢了。
+  // 直接拦住，等回复完再切。
+  if (state.isReplying) {
+    showToast('等回复完再切模式嘛', 'default', 1400);
+    return;
+  }
   const next = curMode === 'bubble' ? 'dialog' : 'bubble';
   setData(KEYS.chatMode, next);
   showToast(next === 'bubble' ? '已切回气泡模式' : '已切换为对话模式，像剧本一样', 'default', 1400);
-  await render();
+  // 记下切换前的滚动位置：loadAndRenderMessages 默认强制滚到底，
+  // 如果用户原本在读历史（不在底部），切完模式被甩到底部会很烦。
+  // 用 _skipAutoScroll 让 loadAndRenderMessages 跳过自动滚底，由这里自行恢复。
+  const el = state.messageListEl;
+  let scrollRatio = 0;
+  let wasNearBottom = true;
+  if (el) {
+    const range = el.scrollHeight - el.clientHeight;
+    if (range > 4) {
+      scrollRatio = Math.min(1, Math.max(0, el.scrollTop / range));
+      wasNearBottom = scrollRatio > 0.85;
+    }
+  }
+  state._skipAutoScroll = true;
+  try {
+    await render();
+  } finally {
+    state._skipAutoScroll = false;
+  }
+  // 重渲染后同步恢复滚动位置（原本在底部的就滚到底，否则按比例恢复）
+  const el2 = state.messageListEl;
+  if (el2) {
+    if (wasNearBottom) {
+      try { el2.scrollTop = el2.scrollHeight; } catch (e) {}
+    } else {
+      const range2 = el2.scrollHeight - el2.clientHeight;
+      try { el2.scrollTop = Math.round(scrollRatio * range2); } catch (e) {}
+    }
+  }
 }
 
 // ── 换个角色聊：选角色后切换当前会话的角色，并清空当前对话 ──

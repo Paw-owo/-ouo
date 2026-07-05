@@ -11,7 +11,7 @@ import { injectStyle, debounce } from '../../core/util.js';
 import { applyAppBg } from '../../core/app-bg.js';
 import { renderSessionListPage, renderSessionListItems } from './session-list.js';
 import { renderChatDetailView, flushDraft, stopChatTTS, refreshAvatar } from './detail-view.js';
-import { cancelStreaming } from './sending.js';
+import { cancelStreaming, recalcChatUnread } from './sending.js';
 import { cleanupExtras } from './extras.js';
 
 // re-export 给 message-actions.js / session-list.js 等子文件用（保持原 import 路径不变）
@@ -962,6 +962,30 @@ export async function mount(container, context) {
   // 草稿防抖（800ms 写入 DB）
   state.saveDraftDebounced = debounce(() => { flushDraft(); }, 800);
 
+  // 软键盘适配：用 visualViewport 监听键盘弹起/收起，把容器高度限制为可视区域，
+  // 让输入框始终露在键盘上方，不会被遮挡。
+  // 原版只靠 100% 高度，而 100% 解析到布局视口（不随键盘缩小）→ 输入框被键盘盖住。
+  state._onVpResize = () => {
+    const vp = window.visualViewport;
+    if (!vp || !state.containerEl) return;
+    // 容器高度跟随可视区域（键盘弹起时变小，收起时恢复满屏）
+    state.containerEl.style.height = vp.height + 'px';
+    // 详情页里：如果用户原本就在底部附近，键盘弹起后跟着滚到底，保证最新消息可见
+    if ((state.view === 'chat' || state.view === 'group') && state.messageListEl) {
+      const el = state.messageListEl;
+      const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+      if (distFromBottom < 100) {
+        requestAnimationFrame(() => {
+          try { el.scrollTo({ top: el.scrollHeight }); } catch (e) {}
+        });
+      }
+    }
+  };
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', state._onVpResize);
+    window.visualViewport.addEventListener('scroll', state._onVpResize);
+  }
+
   // 监听消息中心事件：在列表页时自动刷新（AI 在后台回复完时列表能更新）
   const onMsgReceived = () => {
     if (state.view === 'list') renderSessionListItems(state.lastSearchKeyword);
@@ -1000,6 +1024,36 @@ export async function mount(container, context) {
   bus.on('character:updated', onCharacterUpdated);
   state.busListeners.push(['character:updated', onCharacterUpdated]);
 
+  // per-character 偏好变更：如果在详情页且改的是当前角色，重渲染让新偏好生效
+  // （字号 / 模式 / 回车发送 / 思维链 / 打字提示 等都靠这个实时刷新）
+  // 流式中不重渲染，避免冲掉正在流的气泡（偏好会在下条消息或下次进入时生效）。
+  const onPrefsChanged = (p) => {
+    if (state.view !== 'chat') return;
+    if (state.isReplying) return;
+    if (p?.characterId && p.characterId !== state.currentCharacterId) return;
+    state.currentPrefs = null; // 清缓存，让 getEffectivePrefs 重读
+    render();
+  };
+  bus.on('chat:prefs-changed', onPrefsChanged);
+  state.busListeners.push(['chat:prefs-changed', onPrefsChanged]);
+
+  // 全局消息偏好变更：影响所有会话（如全局 chatMode 兜底值变了），详情页也要刷新
+  const onGlobalPrefsChanged = () => {
+    if (state.view !== 'chat') return;
+    if (state.isReplying) return;
+    state.currentPrefs = null;
+    render();
+  };
+  bus.on('chat:global-prefs-changed', onGlobalPrefsChanged);
+  state.busListeners.push(['chat:global-prefs-changed', onGlobalPrefsChanged]);
+
+  // 清空对话缓存：清掉本地回复去重用的 lastReply，让下一条本地回复不被上一条带偏
+  const onInvalidateCache = () => {
+    state.lastReply = null;
+  };
+  bus.on('chat:invalidate-cache', onInvalidateCache);
+  state.busListeners.push(['chat:invalidate-cache', onInvalidateCache]);
+
   // 旧数据迁移：把没有 sessionId 的消息归到按角色生成的会话里
   await maybeMigrateLegacyMessages();
 
@@ -1035,6 +1089,16 @@ export function unmount() {
     try { state.messageListEl.removeEventListener('scroll', state._onMessagesScroll); } catch (e) {}
     state._onMessagesScroll = null;
   }
+
+  // 移除软键盘 visualViewport 监听 + 清掉手动设的容器高度（避免影响别的 App）
+  if (state._onVpResize && window.visualViewport) {
+    try {
+      window.visualViewport.removeEventListener('resize', state._onVpResize);
+      window.visualViewport.removeEventListener('scroll', state._onVpResize);
+    } catch (e) {}
+  }
+  state._onVpResize = null;
+  if (state.containerEl) state.containerEl.style.height = '';
 
   state.containerEl = null;
   state.messageListEl = null;
@@ -1128,9 +1192,15 @@ export async function enterChat(sessionId) {
   // 先落盘当前草稿（如果在别的会话里）
   await flushDraft();
   // 切会话前先停掉旧会话的流式（避免两段对话交叉）
-  if (state.typingTimer) { clearTimeout(state.typingTimer); state.typingTimer = null; }
+  // 修复：原版 clearTimeout(typingTimer) + reset streamCancelled=false 会让 streamLocalReply
+  // 的 tick 链断掉且检测不到取消标志，Promise 永久挂起 → finishAIMessage 不执行 →
+  // setReplying(false) 不调用 → isReplying 永久锁死，新会话发不出消息。
+  // 正确做法：只 cancelStreaming（设 streamCancelled=true），不清 typingTimer、不 reset，
+  // 让 streamLocalReply 的下一个 tick 自己检测到 streamCancelled=true 后 resolve，
+  // finishAIMessage 自然执行 setReplying(false) + reset streamCancelled。
   cancelStreaming();
-  state.streamCancelled = false;
+  // 清掉旧会话的引用预览，防止 A 会话引用串到 B 会话（原版只在 backToSessionList 清）
+  state.pendingQuote = null;
 
   // 读会话
   let session = null;
@@ -1150,7 +1220,11 @@ export async function enterChat(sessionId) {
 
   // 进入即清未读
   if ((session.unread || 0) > 0) {
-    try { await setDB(STORES.chatSessions, sessionId, { ...session, unread: 0 }); } catch (e) {}
+    try {
+      await setDB(STORES.chatSessions, sessionId, { ...session, unread: 0 });
+      // 聚合全局未读数，让桌面图标提示同步消失
+      recalcChatUnread().catch(() => {});
+    } catch (e) {}
   }
 
   // 缓存角色（群聊无单一角色，留 null）
@@ -1166,7 +1240,10 @@ export async function enterChat(sessionId) {
 export async function backToSessionList() {
   // 落盘草稿
   await flushDraft();
-  // 不取消进行中的流式——让 AI 在后台跑完，消息中心也能收到
+  // 修复：原版"让 AI 在后台跑完"，但 isReplying 是全局锁，用户回到列表进入任一会话
+  // 都发不出消息，直到旧会话流式结束。改为取消流式释放锁，代价是 AI 回复被截断，
+  // 但比永久锁死卡用户更合理（与 enterChat 切会话行为一致）。
+  cancelStreaming();
   // 但 TTS 要停掉，避免回到列表还在念
   try { stopChatTTS(); } catch (e) {}
   state.view = 'list';

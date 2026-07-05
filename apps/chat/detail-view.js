@@ -29,9 +29,37 @@ import {
 } from './plus-content.js';
 // 代码块增强（复制 / 下载 / 预览 / 折叠）
 import { enhanceCodeBlocks } from './code-block.js';
+// 聊天偏好（按角色读 per-character 设置，没设过回落全局）
+import { getChatPrefs } from './chat-settings/widgets.js';
 
 // 注册感叹号图标（用于消息发送失败状态）
 registerIcon('alert', 'M12 3v10 M12 17h.01');
+
+/**
+ * 取当前会话生效的聊天偏好。
+ * 单聊：按角色 id 读 per-character 配置；没设过的字段回落到全局默认。
+ * 群聊走 group-detail-view.js，不会进到这里。
+ * 结果缓存在 state.currentPrefs，避免每条消息都重复读 localStorage。
+ */
+function getEffectivePrefs() {
+  const state = getState();
+  if (state.currentPrefs) return state.currentPrefs;
+  const characterId = state.currentCharacterId;
+  // per-character 偏好（chatMode / fontSize / enterToSend 等都在这里）
+  const prefs = characterId ? getChatPrefs(characterId) : {};
+  // chatMode 没在 per-character 里设过时，回落到全局 chat_mode key
+  if (!prefs.chatMode) prefs.chatMode = getData(KEYS.chatMode, 'bubble');
+  state.currentPrefs = prefs;
+  return prefs;
+}
+
+/** 应用字号到消息列表（通过 CSS 变量 --chat-font-size） */
+function applyFontSizeToMessages(size) {
+  const state = getState();
+  if (!state.messageListEl) return;
+  const map = { small: '14px', medium: '16px', large: '18px' };
+  state.messageListEl.style.setProperty('--chat-font-size', map[size] || '16px');
+}
 
 // 注入思维链 / 滚动按钮 / 加载更多 样式（全部走 CSS 变量）
 injectStyle('app-chat-thinking-scroll', `
@@ -145,7 +173,10 @@ export async function renderChatDetailView() {
     return;
   }
 
-  const mode = getData(KEYS.chatMode, 'bubble');
+  // 重置偏好缓存：切会话 / 重渲染时重新读 per-character 偏好
+  state.currentPrefs = null;
+  const prefs = getEffectivePrefs();
+  const mode = prefs.chatMode || getData(KEYS.chatMode, 'bubble');
   const charName = state.currentCharacter?.name || state.currentCharacter?.nickname || session.title || '聊天';
 
   container.innerHTML = `
@@ -248,6 +279,8 @@ export async function renderChatDetailView() {
 
   // 应用壁纸
   applySessionWallpaper();
+  // 应用字号（per-character 偏好）
+  applyFontSizeToMessages(prefs.fontSize);
 
   // 恢复草稿 + 引用
   if (session.draft) state.inputEl.value = session.draft;
@@ -315,7 +348,9 @@ async function loadAndRenderMessages() {
 
   renderVisibleMessages();
   updateChatHeader(messages[messages.length - 1].timestamp || messages[messages.length - 1].createdAt);
-  scrollToBottom();
+  // per-character 偏好 autoScroll=false 时不强制滚到底（停在最后看到的位置）
+  // 切模式时由调用方（toggleChatMode）自行恢复滚动位置，跳过这里的自动滚底
+  if (getEffectivePrefs().autoScroll !== false && !state._skipAutoScroll) scrollToBottom();
 }
 
 /** 渲染当前 visibleCount 范围内的消息（最后 N 条） */
@@ -384,6 +419,10 @@ const _onScrollThrottled = throttle(() => {
   // 距顶部 < 30 触发加载更多
   if (el.scrollTop < 30 && !state.allMessagesLoaded) {
     loadMoreMessages();
+  }
+  // 用户手动滚到底部时清掉未读新消息徽章（原版只在点"回到底部"按钮时清，手动滚到底徽章残留）
+  if (distToBottom < 30 && (state.unseenNewCount || 0) > 0) {
+    state.unseenNewCount = 0;
   }
   updateScrollBtn(distToBottom > 200);
 }, 80);
@@ -646,7 +685,7 @@ ensureRichBubbleStyle();
 
 function createMessageEl(msg, opts = {}) {
   const state = getState();
-  const mode = getData(KEYS.chatMode, 'bubble');
+  const mode = getEffectivePrefs().chatMode || getData(KEYS.chatMode, 'bubble');
   const isUser = msg.role === 'user';
   const isImage = msg.type === 'image';
   const isVoice = msg.type === 'voice' || msg.type === 'audio';
@@ -665,7 +704,9 @@ function createMessageEl(msg, opts = {}) {
   // 1对1会话判断：当前所有会话都是单角色，未来支持群聊时扩展
   const isOneOnOne = isOneOnOneSession(state.currentSession);
   // 思维链 HTML：AI 消息且有 thinking 字段时渲染（流式中由 updateThinkingUI 动态创建）
-  const showThinking = !isUser && !opts.stream && !!(msg.thinking && msg.thinking.trim());
+  // per-character 偏好 showThinking=false 时不显示思维链
+  const showThinking = !isUser && !opts.stream && !!(msg.thinking && msg.thinking.trim())
+    && getEffectivePrefs().showThinking !== false;
   const thinkingHTML = showThinking ? renderThinkingHTML(msg.thinking, { streaming: false }) : '';
 
   const el = document.createElement('div');
@@ -1140,8 +1181,10 @@ export function updateSendButtonState() {
 
 function onInputKeyDown(e) {
   // 回车发送，Shift+回车换行；回复中不拦截
+  // per-character 偏好 enterToSend=false 时回车只换行，需点按钮发送
   const state = getState();
   if (e.key === 'Enter' && !e.shiftKey && !state.isReplying) {
+    if (getEffectivePrefs().enterToSend === false) return; // 关了回车发送就只换行
     e.preventDefault();
     sendMessage();
   }
@@ -1252,7 +1295,9 @@ export function showTypingIndicator() {
   const state = getState();
   if (!state.messageListEl) return;
   hideTypingIndicator();
-  const mode = getData(KEYS.chatMode, 'bubble');
+  // 显示打字提示前先看 per-character 偏好，关了就不显示
+  if (getEffectivePrefs().showTyping === false) return;
+  const mode = getEffectivePrefs().chatMode || getData(KEYS.chatMode, 'bubble');
   state.typingIndicatorEl = document.createElement('div');
   // dialog 模式下呼吸气泡也走卡片背景，与 AI 消息卡片一致
   state.typingIndicatorEl.className = mode === 'dialog'

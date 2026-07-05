@@ -17,17 +17,24 @@ const INBOX_MAX = 100;
 // 事件 -> 消息卡片生成器映射
 // 每个生成器返回 { app, title, body, type } 或 null（不生成消息）
 const EVENT_HANDLERS = {
-  'chat:message-received': (p) => ({
-    app: 'chat', type: 'message',
-    title: p?.characterName ? `${p.characterName} 发来消息` : '新消息',
-    body: p?.preview || ''
-  }),
+  // 免打扰会话的新消息只更新未读角标，不进消息中心、不弹横幅
+  'chat:message-received': (p) => {
+    if (p?.muted) return null;
+    return {
+      app: 'chat', type: 'message',
+      title: p?.characterName ? `${p.characterName} 发来消息` : '新消息',
+      body: p?.preview || ''
+    };
+  },
   // 群聊里 AI 成员回复：也写一条消息卡片，让消息中心能看到群聊动态
-  'chat:group-ai-message': (p) => ({
-    app: 'chat', type: 'message',
-    title: p?.senderName ? `${p.senderName} 在群里回了你` : '群聊新消息',
-    body: p?.preview || ''
-  }),
+  'chat:group-ai-message': (p) => {
+    if (p?.muted) return null;
+    return {
+      app: 'chat', type: 'message',
+      title: p?.senderName ? `${p.senderName} 在群里回了你` : '群聊新消息',
+      body: p?.preview || ''
+    };
+  },
   'moments:new': (p) => ({
     app: 'moments', type: 'social',
     title: p?.author ? `${p.author} 发了新动态` : '朋友圈新动态',

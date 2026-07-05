@@ -46,19 +46,14 @@ export function buildPrefsGroup(ctx) {
     }
   }));
 
-  // 聊天模式
+  // 聊天模式（per-character：只影响当前角色，不动全局 chat_mode key）
   content.appendChild(makeSegmented({
     label: '显示模式',
     value: p.chatMode || 'bubble',
     options: CHAT_MODE_OPTIONS,
-    helper: '气泡像微信，对话像剧本',
+    helper: '气泡像微信，对话像剧本（只对当前角色生效）',
     onChange: (v) => {
       saveChatPrefs(ownerId, { chatMode: v });
-      try {
-        const { getData, setData } = requireStorage();
-        // 同步到全局 chatMode key（detail-view 读这个）
-        setData('chat_mode', v);
-      } catch (e) {}
       showToast(v === 'bubble' ? '已切到气泡模式' : '已切到对话模式', 'default', 1200);
     }
   }));
@@ -151,16 +146,4 @@ function applyFontSize(size) {
       el.style.setProperty('--chat-font-size', map[size] || '16px');
     }
   } catch (e) {}
-}
-
-// 同步拿 storage（避免顶层 import 循环）
-let _storage = null;
-function requireStorage() {
-  if (_storage) return _storage;
-  // 兜底：localStorage
-  _storage = {
-    getData: (k, d) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
-    setData: (k, v) => { try { localStorage.setItem(k, typeof v === 'string' ? v : JSON.stringify(v)); } catch (e) {} }
-  };
-  return _storage;
 }

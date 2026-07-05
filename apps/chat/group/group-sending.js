@@ -18,6 +18,7 @@ import { buildGroupMemoryPrompt, recordInteraction } from '../../core/memory.js'
 import { archiveOldGroupMemories } from '../../js/ai/ai-memory.js';
 import { getRecentEventsPrompt } from '../../core/inbox.js';
 import { getState } from '../index.js';
+import { recalcChatUnread } from '../sending.js';
 import {
   appendGroupMessageEl, updateGroupChatHeader, scrollToBottom,
   showGroupTypingIndicator, hideGroupTypingIndicator,
@@ -107,10 +108,12 @@ export async function sendGroupMessage() {
   }
 
   await bumpGroupSession(session, text.slice(0, 60), userMsg.timestamp);
+  // 带 muted 标志：免打扰群聊的发言事件不生成消息卡片、不弹横幅
   bus.emit('chat:group-user-message', {
     groupId: session.groupId,
     sessionId: session.id,
-    preview: text.slice(0, 60)
+    preview: text.slice(0, 60),
+    muted: !!session.muted
   });
 
   await triggerGroupAIReply(userMsg);
@@ -562,13 +565,14 @@ async function finishGroupAIMessage(sess, replier, aiMsg, msgEl, bubbleEl, final
   archiveOldGroupMemories(sess.groupId).catch((e) => {
     console.warn('[group] 群记忆归档失败', e);
   });
-  // 通知其他 App
+  // 通知其他 App（带 muted 标志：免打扰群聊的 AI 回复不生成消息卡片、不弹横幅）
   bus.emit('chat:group-ai-message', {
     groupId: sess.groupId,
     sessionId: sess.id,
     senderId: replier.id,
     senderName: replier.name,
-    preview: aiMsg.content.slice(0, 60)
+    preview: aiMsg.content.slice(0, 60),
+    muted: !!sess.muted
   });
   setGroupReplying(false);
   state.abortController = null;
@@ -598,6 +602,10 @@ async function bumpGroupSession(sess, preview, timestamp, addUnread = 0) {
   } catch (e) {
     console.warn('[group] 更新群会话失败', e);
   }
+  // 聚合全局未读数写入 chatUnreadCount，让桌面 chat 图标角标跟着变
+  // 修复：原版只更新单个会话 unread，桌面 desktop.js getBadgeMap 读 chatUnreadCount，
+  // 群聊消息也走 chatSessions，但不聚合就导致群聊新消息不计入桌面角标。
+  recalcChatUnread().catch(() => {});
 }
 
 // ════════════════════════════════════════

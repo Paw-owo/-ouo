@@ -145,19 +145,29 @@ export async function sendImageMessage() {
     content: '[图片]',
     type: 'image',
     mediaUrl: dataURL,
+    status: 'sending',
     timestamp: getNow()
   };
+
+  // 先渲染（status: sending）再写 DB；写完后更新状态图标（与文字消息一致）
+  appendMessageEl(userMsg);
+  updateChatHeader(userMsg.timestamp);
+  scrollToBottom();
+
   try {
     await setDB(STORES.messages, userMsg.id, userMsg);
+    userMsg.status = 'sent';
+    try { await setDB(STORES.messages, userMsg.id, userMsg); } catch (e) {}
+    updateMessageStatus(userMsg.id, 'sent');
   } catch (e) {
     console.warn('[chat] 保存图片消息失败', e);
+    userMsg.status = 'failed';
+    try { await setDB(STORES.messages, userMsg.id, userMsg); } catch (e2) {}
+    updateMessageStatus(userMsg.id, 'failed', userMsg);
     showToast('图片没发出去，再试一下嘛', 'error');
     return;
   }
 
-  appendMessageEl(userMsg);
-  updateChatHeader(userMsg.timestamp);
-  scrollToBottom();
   await bumpSession(session, '[图片]', userMsg.timestamp);
   bus.emit('chat:user-message', {
     characterId: session.characterId,
@@ -624,12 +634,13 @@ async function finishAIMessage(sess, character, aiMsg, msgEl, bubbleEl, finalTex
   await bumpSession(sess, finalText.slice(0, 60), aiMsg.timestamp, inThisChat ? 0 : 1);
   if (inThisChat) updateChatHeader(aiMsg.timestamp);
 
-  // 通知消息中心
+  // 通知消息中心（带 muted 标志：免打扰会话不生成消息卡片、不弹横幅）
   bus.emit('chat:message-received', {
     characterId: sess.characterId,
     characterName: character?.name || character?.nickname || '',
     preview: finalText.slice(0, 60),
-    sessionId: sess.id
+    sessionId: sess.id,
+    muted: !!sess.muted
   });
 
   // 写长期记忆（来源 chat）
@@ -692,6 +703,23 @@ async function bumpSession(sess, preview, timestamp, addUnread = 0) {
     }
   } catch (e) {
     console.warn('[chat] 更新会话失败', e);
+  }
+  // 聚合全局未读数写到 chatUnreadCount，让桌面图标提示能跟着变
+  recalcChatUnread().catch(() => {});
+}
+
+/**
+ * 聚合所有聊天会话的未读数，写入全局 KEYS.chatUnreadCount，并通知桌面刷新角标。
+ * 桌面 desktop.js getBadgeMap 读这个 key；之前从不写入导致桌面 chat 图标角标永远 0。
+ */
+export async function recalcChatUnread() {
+  try {
+    const all = await getAllDB(STORES.chatSessions);
+    const total = all.reduce((sum, s) => sum + (Number(s?.unread) || 0), 0);
+    setData(KEYS.chatUnreadCount, total);
+    bus.emit('desktop:refresh-badges');
+  } catch (e) {
+    console.warn('[chat] 未读数聚合失败', e);
   }
 }
 
