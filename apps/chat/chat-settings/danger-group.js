@@ -153,19 +153,43 @@ function confirmDeleteSession(session, onDeleteSession) {
     danger: true,
     onConfirm: async () => {
       try {
-        // 删消息
-        const all = await getAllDB(STORES.messages);
-        const toDelete = all.filter((m) =>
-          m.sessionId === session.id ||
-          (!m.sessionId && m.characterId === session.characterId)
-        );
-        for (const m of toDelete) {
-          try { await deleteDB(STORES.messages, m.id); } catch (e) {}
+        const isGroup = !!session.isGroup;
+        const groupId = session.groupId;
+        if (isGroup && groupId) {
+          // 群聊：删 STORES.groupMessages（按 groupId 过滤）
+          let groupMsgs = [];
+          try { groupMsgs = await getAllDB(STORES.groupMessages); } catch (e) {}
+          const groupToDelete = groupMsgs.filter((m) => m.groupId === groupId);
+          for (const m of groupToDelete) {
+            try { await deleteDB(STORES.groupMessages, m.id); } catch (e) {}
+          }
+          // 清群记忆（scope='group'）
+          try {
+            const mem = await import('../../core/memory.js');
+            if (typeof mem.clearGroupMemories === 'function') {
+              await mem.clearGroupMemories(groupId);
+            }
+          } catch (e) {}
+          // 清群配置 + 群快捷回复
+          try {
+            removeData(KEYS.groupConfig(groupId));
+            removeData(KEYS.groupQuickReplies(groupId));
+          } catch (e) {}
+        } else {
+          // 单聊：删 STORES.messages
+          const all = await getAllDB(STORES.messages);
+          const toDelete = all.filter((m) =>
+            m.sessionId === session.id ||
+            (!m.sessionId && m.characterId === session.characterId)
+          );
+          for (const m of toDelete) {
+            try { await deleteDB(STORES.messages, m.id); } catch (e) {}
+          }
         }
-        // 删会话
+        // 删会话本身
         await deleteDB(STORES.chatSessions, session.id);
-        bus.emit('chat:session-deleted', { sessionId: session.id });
-        showToast('会话已删掉', 'default', 1200);
+        bus.emit('chat:session-deleted', { sessionId: session.id, isGroup, groupId });
+        showToast(isGroup ? '群聊已删掉' : '会话已删掉', 'default', 1200);
         if (typeof onDeleteSession === 'function') onDeleteSession();
       } catch (e) {
         console.warn('[chat-settings] 删除会话失败', e);

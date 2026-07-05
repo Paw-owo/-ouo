@@ -41,6 +41,42 @@ export function getAIConfig() {
   return { ...DEFAULT_AI_CONFIG, ...saved };
 }
 
+/**
+ * 我读"生效的" AI 配置：全局配置 + 角色/群的专属覆盖（aiOverride）。
+ * @param {string} [ownerId] 角色 ID 或群 ID；不传则等价于 getAIConfig()
+ *   - 群聊传 groupId，单聊传 characterId；prefs 都存在 KEYS.chatConfig(ownerId) 里
+ *   - aiOverride.enabled 为 true 时，其非空字段覆盖全局配置
+ *   - url/apiKey/model 为空字符串时回退到全局（避免专属开了但没填接口）
+ */
+export function getEffectiveAIConfig(ownerId) {
+  const base = getAIConfig();
+  if (!ownerId) return base;
+  let prefs = null;
+  try {
+    prefs = getData(KEYS.chatConfig(ownerId), null);
+  } catch (e) { return base; }
+  if (!prefs || typeof prefs !== 'object') return base;
+  const ov = prefs.aiOverride;
+  if (!ov || typeof ov !== 'object' || !ov.enabled) return base;
+  const merged = { ...base };
+  // 接口三件套：空则回退全局
+  if (typeof ov.url === 'string' && ov.url.trim()) merged.url = ov.url;
+  if (typeof ov.apiKey === 'string' && ov.apiKey.trim()) merged.apiKey = ov.apiKey;
+  if (typeof ov.model === 'string' && ov.model.trim()) merged.model = ov.model;
+  // 数值类参数：有值就覆盖
+  if (typeof ov.temperature === 'number' && !isNaN(ov.temperature)) merged.temperature = ov.temperature;
+  if (typeof ov.maxTokens === 'number' && !isNaN(ov.maxTokens)) merged.maxTokens = ov.maxTokens;
+  if (typeof ov.timeoutMs === 'number' && !isNaN(ov.timeoutMs) && ov.timeoutMs > 0) merged.timeoutMs = ov.timeoutMs;
+  if (typeof ov.topP === 'number' && !isNaN(ov.topP)) merged.topP = ov.topP;
+  if (typeof ov.presencePenalty === 'number' && !isNaN(ov.presencePenalty)) merged.presencePenalty = ov.presencePenalty;
+  if (typeof ov.frequencyPenalty === 'number' && !isNaN(ov.frequencyPenalty)) merged.frequencyPenalty = ov.frequencyPenalty;
+  // 布尔类
+  if (typeof ov.enableChain === 'boolean') merged.enableChain = ov.enableChain;
+  // 说话风格：空字符串视为未设
+  if (typeof ov.style === 'string' && ov.style.trim()) merged.style = ov.style;
+  return merged;
+}
+
 export function saveAIConfig(patch) {
   const cur = getAIConfig();
   const next = { ...cur, ...patch };
@@ -49,9 +85,9 @@ export function saveAIConfig(patch) {
   return next;
 }
 
-/** 我检查是否配置了可用 AI（url + apiKey 都有） */
-export function isAIConfigured() {
-  const c = getAIConfig();
+/** 我检查是否配置了可用 AI（url + apiKey 都有）。传 ownerId 时按角色/群专属配置判断 */
+export function isAIConfigured(ownerId) {
+  const c = ownerId ? getEffectiveAIConfig(ownerId) : getAIConfig();
   return !!(c.url && c.apiKey);
 }
 
@@ -127,7 +163,8 @@ export async function buildMessages(opts = {}) {
  * @returns {Promise<{ok, reason?, fullText}>}
  */
 export async function streamChat(opts = {}) {
-  const cfg = getAIConfig();
+  // ownerId 传入时按角色/群专属配置（aiOverride）合并全局配置
+  const cfg = opts.ownerId ? getEffectiveAIConfig(opts.ownerId) : getAIConfig();
   if (!cfg.url || !cfg.apiKey) {
     return { ok: false, reason: 'not_configured', fullText: '' };
   }
@@ -457,7 +494,7 @@ export function parseThinkingTags(text, stream = false) {
 // ════════════════════════════════════════
 
 export async function chatOnce(opts = {}) {
-  const cfg = getAIConfig();
+  const cfg = opts.ownerId ? getEffectiveAIConfig(opts.ownerId) : getAIConfig();
   if (!cfg.url || !cfg.apiKey) return { ok: false, reason: 'not_configured', text: '' };
   const { messages } = opts;
   try {

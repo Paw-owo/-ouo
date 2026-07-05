@@ -364,8 +364,8 @@ export async function triggerAIReply(userMsg) {
   }
   const bubbleEl = msgEl.querySelector('.chat-bubble');
 
-  // 本地模式提示：每个会话首次只提示一次
-  if (!isAIConfigured() && !state.localModeHintedSessions.has(sess.id)) {
+  // 本地模式提示：每个会话首次只提示一次（按角色专属配置判断）
+  if (!isAIConfigured(sess.characterId) && !state.localModeHintedSessions.has(sess.id)) {
     state.localModeHintedSessions.add(sess.id);
     const hint = document.createElement('div');
     hint.className = 'chat-local-hint';
@@ -378,7 +378,7 @@ export async function triggerAIReply(userMsg) {
   let thinkingText = '';
 
   // ── 走 AI 流式 ──
-  if (isAIConfigured()) {
+  if (isAIConfigured(sess.characterId)) {
     const result = await runAIStream(bubbleEl, messages, sess,
       () => accText, (t) => { accText = t; },
       () => thinkingText, (t) => { thinkingText = t; },
@@ -461,6 +461,7 @@ async function runAIStream(bubbleEl, messages, sess, getAcc, setAcc, getThinking
     }
     const result = await streamChat({
       messages,
+      ownerId: sess.characterId,  // 让角色专属 aiOverride 生效
       onChunk: (delta) => {
         acc += delta;
         setAcc(acc);

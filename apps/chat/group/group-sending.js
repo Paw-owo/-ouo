@@ -372,8 +372,8 @@ export async function triggerGroupAIReply(userMsg) {
   }
   const bubbleEl = msgEl.querySelector('.chat-bubble');
 
-  // 本地模式提示
-  if (!isAIConfigured() && !state.localModeHintedSessions.has(sess.id)) {
+  // 本地模式提示（按群专属配置判断）
+  if (!isAIConfigured(groupId) && !state.localModeHintedSessions.has(sess.id)) {
     state.localModeHintedSessions.add(sess.id);
     const hint = document.createElement('div');
     hint.className = 'chat-local-hint';
@@ -385,8 +385,8 @@ export async function triggerGroupAIReply(userMsg) {
   let accText = '';
   let thinkingText = '';
 
-  if (isAIConfigured()) {
-    const result = await runGroupAIStream(bubbleEl, messages, sess, replier,
+  if (isAIConfigured(groupId)) {
+    const result = await runGroupAIStream(bubbleEl, messages, sess, replier, groupId,
       () => accText, (t) => { accText = t; },
       () => thinkingText, (t) => { thinkingText = t; },
       msgEl, aiMsg);
@@ -450,12 +450,13 @@ function pickRepliers(sess, userMsg) {
 // 流式执行 + 完成（参照 sending.js 但走 groupMessages）
 // ════════════════════════════════════════
 
-async function runGroupAIStream(bubbleEl, messages, sess, replier, getAcc, setAcc, getThinking, setThinking, msgEl, aiMsg) {
+async function runGroupAIStream(bubbleEl, messages, sess, replier, groupId, getAcc, setAcc, getThinking, setThinking, msgEl, aiMsg) {
   const state = getState();
   const ctrl = new AbortController();
   state.abortController = ctrl;
   const result = await streamChat({
     messages,
+    ownerId: groupId,  // 让群专属 aiOverride 生效
     onChunk: (text) => {
       if (state.streamCancelled) return;
       if (!state.messageListEl || state.currentSession?.id !== sess.id) return;
