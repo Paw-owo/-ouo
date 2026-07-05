@@ -350,21 +350,29 @@ img { display: block; max-width: 100%; }
 .desktop-icon-img {
   width: var(--icon-size); height: var(--icon-size);
   border-radius: var(--radius-icon);
-  background: var(--accent);
+  /* 柔和磨砂底：accent-light 与 bg-card 混合，棉花糖质感，不再是实心色块 */
+  background: color-mix(in srgb, var(--accent-light) 55%, var(--bg-card));
   display: flex; align-items: center; justify-content: center;
-  color: var(--bubble-user-text);
-  box-shadow: var(--shadow-sm);
+  /* 图标线条用 text-primary：深浅主题下对比度都够，且同色系，靠线条形状区分 APP */
+  color: var(--text-primary);
+  /* neumorphism 凸起：双向同色系阴影，软萌不塑料 */
+  box-shadow: var(--shadow-neu-out);
+  /* 极淡内描边，增强磨砂层次，深浅主题都自然 */
+  border: 1px solid color-mix(in srgb, var(--accent-light) 45%, transparent);
   background-size: cover; background-position: center;
   transition: var(--motion);
   position: relative;
   overflow: hidden;
 }
-.desktop-icon-img svg { width: 60%; height: 60%; }
+.desktop-icon-img svg { width: 56%; height: 56%; }
 .desktop-icon:active .desktop-icon-img { transform: scale(var(--press-scale)); }
 .desktop-icon-label {
   font-size: var(--font-size-small);
   color: var(--text-primary);
-  text-shadow: 0 1px 2px color-mix(in srgb, var(--bg-primary) 80%, transparent);
+  /* 多向半透明描边，深浅壁纸下都能看清文字 */
+  text-shadow:
+    0 1px 3px color-mix(in srgb, var(--bg-card) 92%, transparent),
+    0 0 1px color-mix(in srgb, var(--bg-card) 80%, transparent);
   max-width: var(--icon-size);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
@@ -456,7 +464,12 @@ img { display: block; max-width: 100%; }
   gap: 2px; cursor: pointer; position: relative;
   flex: 1; max-width: 80px;
 }
-.dock-icon .desktop-icon-img { width: calc(var(--icon-size) * 0.78); height: calc(var(--icon-size) * 0.78); }
+.dock-icon .desktop-icon-img {
+  width: calc(var(--icon-size) * 0.78); height: calc(var(--icon-size) * 0.78);
+  /* dock 内毛玻璃浮层已自带 shadow-md + border，图标用轻阴影 + 去边框，避免层次过碎 */
+  box-shadow: var(--shadow-sm);
+  border-color: transparent;
+}
 .dock-icon-label { display: none; }
 
 /* ════════════════════════════════════════ */

@@ -388,7 +388,9 @@ function createDockIcon(app) {
   el.setAttribute('aria-label', app.name);
   const img = document.createElement('span');
   img.className = 'desktop-icon-img';
-  if (app.iconColor) img.style.background = app.iconColor;
+  // 底色由 CSS 统一柔和磨砂底控制（accent-light 系，同色系软萌），
+  // 不再用 registry.iconColor 硬色覆盖——避免 20+ 图标 20+ 种颜色花花绿绿。
+  // iconColor 字段保留在 registry 不动，不破坏数据。
   img.appendChild(createIcon(app.icon, 26));
   const label = document.createElement('span');
   label.className = 'dock-icon-label';
@@ -514,7 +516,9 @@ function createDesktopIcon(app) {
 
   const img = document.createElement('span');
   img.className = 'desktop-icon-img';
-  if (app.iconColor) img.style.background = app.iconColor;
+  // 底色由 CSS 统一柔和磨砂底控制（accent-light 系，同色系软萌），
+  // 不再用 registry.iconColor 硬色覆盖——避免 20+ 图标 20+ 种颜色花花绿绿。
+  // iconColor 字段保留在 registry 不动，不破坏数据。
   img.appendChild(createIcon(app.icon, 30));
 
   const label = document.createElement('span');
