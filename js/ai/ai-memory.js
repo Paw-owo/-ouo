@@ -5,7 +5,7 @@
 // 依赖：./ai-spec.js, ../../core/memory.js, ../../core/events.js
 
 import { MEMORY_PATTERNS } from './ai-spec.js';
-import { recordInteraction, getMemories, updateMemory } from '../../core/memory.js';
+import { recordInteraction, getMemories, getGroupMemories, updateMemory } from '../../core/memory.js';
 import bus from '../../core/events.js';
 
 // ════════════════════════════════════════
@@ -101,8 +101,16 @@ export async function archiveOldMemories(characterId) {
   }
   if (!Array.isArray(all) || all.length <= 100) return 0;
 
+  // 修复：getMemories 现在会合并 global 记忆进来，但归档只针对该角色的 character-scope 记忆。
+  // global 记忆是跨角色共享的，归档它会影响所有角色，不该在这里处理。
+  const charOnly = all.filter((m) => {
+    const s = m.scope || 'character';
+    return s === 'character';
+  });
+  if (charOnly.length <= 100) return 0;
+
   // 按重要度升序、时间升序排（低重要度 + 旧的先归档）
-  const toArchive = all
+  const toArchive = charOnly
     .filter((m) => m && (m.importance ?? 5) <= 4 && !m.archived)
     .sort((a, b) => {
       const ia = Number(a.importance ?? 5);
@@ -115,8 +123,8 @@ export async function archiveOldMemories(characterId) {
 
   let archived = 0;
   for (const m of toArchive) {
-    // 归档到剩余 100 条为止
-    if (all.length - archived <= 100) break;
+    // 归档到剩余 100 条为止（按 character-scope 计数）
+    if (charOnly.length - archived <= 100) break;
     try {
       await updateMemory(m.id, { archived: true });
       archived++;
@@ -127,6 +135,64 @@ export async function archiveOldMemories(characterId) {
   if (archived > 0) {
     try {
       bus.emit('memory:archived', { characterId, count: archived });
+    } catch (e) {}
+  }
+  return archived;
+}
+
+// ════════════════════════════════════════
+// 群聊记忆归档（与单聊对称，但按 groupId 维度）
+// ════════════════════════════════════════
+
+/**
+ * 归档某群的老记忆。规则与 archiveOldMemories 对称：
+ * 超过 100 条时，把 importance<=4 且未归档的标记 archived=true，归档到剩余 100 条为止。
+ * @param {string} groupId
+ * @returns {Promise<number>} 归档条数
+ */
+export async function archiveOldGroupMemories(groupId) {
+  if (!groupId) return 0;
+  let all = [];
+  try {
+    all = await getGroupMemories(groupId);
+  } catch (e) {
+    console.warn('[ai-memory] 读群记忆列表失败', e);
+    return 0;
+  }
+  if (!Array.isArray(all) || all.length <= 100) return 0;
+
+  // 修复：getGroupMemories 会合并 global 记忆，但归档只针对该群的 group-scope 记忆。
+  // global 记忆是跨群/跨角色共享的，不该在这里归档。
+  const groupOnly = all.filter((m) => {
+    const s = m.scope || 'character';
+    return s === 'group';
+  });
+  if (groupOnly.length <= 100) return 0;
+
+  const toArchive = groupOnly
+    .filter((m) => m && (m.importance ?? 5) <= 4 && !m.archived)
+    .sort((a, b) => {
+      const ia = Number(a.importance ?? 5);
+      const ib = Number(b.importance ?? 5);
+      if (ia !== ib) return ia - ib;
+      const ta = new Date(a.timestamp || 0).getTime();
+      const tb = new Date(b.timestamp || 0).getTime();
+      return ta - tb;
+    });
+
+  let archived = 0;
+  for (const m of toArchive) {
+    if (groupOnly.length - archived <= 100) break;
+    try {
+      await updateMemory(m.id, { archived: true });
+      archived++;
+    } catch (e) {
+      console.warn('[ai-memory] 群记忆归档单条失败', e);
+    }
+  }
+  if (archived > 0) {
+    try {
+      bus.emit('memory:archived', { groupId, count: archived, scope: 'group' });
     } catch (e) {}
   }
   return archived;

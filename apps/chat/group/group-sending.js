@@ -15,6 +15,7 @@ import bus from '../../core/events.js';
 import { pickImageFile } from '../../core/util.js';
 import { streamChat, buildMessages, isAIConfigured, parseThinkingTags } from '../../core/ai-client.js';
 import { buildGroupMemoryPrompt, recordInteraction } from '../../core/memory.js';
+import { archiveOldGroupMemories } from '../../js/ai/ai-memory.js';
 import { getRecentEventsPrompt } from '../../core/inbox.js';
 import { getState } from '../index.js';
 import {
@@ -557,6 +558,10 @@ async function finishGroupAIMessage(sess, replier, aiMsg, msgEl, bubbleEl, final
   } catch (e) {
     console.warn('[group] 写群记忆失败', e);
   }
+  // 群记忆归档：与单聊对称，超过 100 条时异步归档低重要度的，不阻塞回复
+  archiveOldGroupMemories(sess.groupId).catch((e) => {
+    console.warn('[group] 群记忆归档失败', e);
+  });
   // 通知其他 App
   bus.emit('chat:group-ai-message', {
     groupId: sess.groupId,

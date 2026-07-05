@@ -101,19 +101,33 @@ async function clearMemoriesFor(ownerId, scope) {
       bus.emit('chat:memory-cleared', { scope: 'group', groupId: ownerId });
       return;
     }
-    // 私聊：按 ownerId 删 character scope 的记忆
+    // 私聊：只删 scope='character' 且 ownerId 匹配的记忆。
+    // 修复：原版用 r.ownerId === ownerId || r.characterId === ownerId，
+    // 群记忆写入时 characterId=replier.id，如果 replier.id === ownerId（角色清自己记忆），
+    // 会把该角色在群里写的群记忆也删掉。必须按 scope 严格过滤。
     const all = await getAllDB(STORES.memories);
-    const toDelete = all.filter((r) => r.ownerId === ownerId || r.characterId === ownerId);
+    const toDelete = all.filter((r) => {
+      const s = r.scope || 'character';
+      if (s !== 'character') return false; // group / global 不在这里删
+      const owner = r.ownerId || r.characterId;
+      return owner === ownerId;
+    });
     for (const r of toDelete) {
       try { await deleteDB(STORES.memories, r.id); } catch (e) {}
     }
+    // 失效该角色缓存
+    if (typeof mem.invalidateCache === 'function') mem.invalidateCache(ownerId);
     bus.emit('chat:memory-cleared', { scope: 'character', ownerId });
   } catch (e) {
-    // memory.js 不可用时直接按 store 删
+    // memory.js 不可用时直接按 store 删（兜底，仍按 scope 过滤）
     const all = await getAllDB(STORES.memories);
-    const toDelete = all.filter((r) =>
-      r.ownerId === ownerId || r.characterId === ownerId || (scope === 'group' && r.groupId === ownerId)
-    );
+    const toDelete = all.filter((r) => {
+      const s = r.scope || 'character';
+      if (scope === 'group') {
+        return s === 'group' && (r.ownerId === ownerId || r.groupId === ownerId);
+      }
+      return s === 'character' && (r.ownerId === ownerId || r.characterId === ownerId);
+    });
     for (const r of toDelete) {
       try { await deleteDB(STORES.memories, r.id); } catch (e) {}
     }

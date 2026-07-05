@@ -133,13 +133,15 @@ function clampImportance(v) {
 // ════════════════════════════════════════
 
 export async function getMemories(characterId, filter = {}) {
+  if (!characterId) return [];
   try {
-    let list = await getByIndexDB(STORES.memories, 'characterId', characterId);
-    // 记忆隔离过滤：只返回属于该 characterId 的 character-scope 记忆 + global 记忆
-    // 旧数据没有 scope 字段 -> 兼容视为 'character'（不丢历史记忆）
-    list = list.filter((m) => {
+    // 修复：getByIndexDB('characterId', characterId) 只能查到 characterId 字段匹配的记录。
+    // 但 global-scope 记忆的 characterId='global'，查 getMemories('char_xxx') 时不在结果里。
+    // 所以必须额外查 characterId='global' 的记录，按 scope=global 过滤后合并进来。
+    const ownList = await getByIndexDB(STORES.memories, 'characterId', characterId);
+    let list = ownList.filter((m) => {
       const s = m.scope || 'character';
-      if (s === 'global') return true; // 全局共享记忆所有角色可见
+      if (s === 'global') return true; // 老数据可能 characterId=characterId 但 scope=global
       if (s === 'character') {
         const owner = m.ownerId || m.characterId;
         return owner === characterId;
@@ -147,6 +149,26 @@ export async function getMemories(characterId, filter = {}) {
       // group scope 的记忆不在单聊里出现（避免群聊隐私泄漏到私聊）
       return false;
     });
+
+    // 合并真正的 global 记忆（characterId='global' 的记录）
+    if (characterId !== 'global') {
+      try {
+        const globalRaw = await getByIndexDB(STORES.memories, 'characterId', 'global');
+        const globalList = globalRaw.filter((m) => (m.scope || 'character') === 'global');
+        // 用 id 去重（理论上不会重复，但防御一下）
+        const seen = new Set(list.map((m) => m.id));
+        for (const g of globalList) {
+          if (!seen.has(g.id)) list.push(g);
+        }
+      } catch (e) {
+        // global 读取失败不阻断主流程
+        console.warn('[memory] 读取 global 记忆失败', e);
+      }
+    }
+
+    // 过滤归档记忆：archived=true 的不再返回给业务层和 AI 上下文
+    list = list.filter((m) => !m.archived);
+
     if (filter.source) list = list.filter((m) => m.source === filter.source);
     if (filter.mood) list = list.filter((m) => m.mood === filter.mood);
     if (filter.relatedApp) list = list.filter((m) => m.relatedApp === filter.relatedApp);
@@ -192,6 +214,8 @@ export async function getGroupMemories(groupId, filter = {}) {
       }
       return false; // 私聊记忆不进群聊
     });
+    // 过滤归档记忆：群聊也认 archived
+    list = list.filter((m) => !m.archived);
     if (filter.source) list = list.filter((m) => m.source === filter.source);
     if (filter.mood) list = list.filter((m) => m.mood === filter.mood);
     if (filter.relatedApp) list = list.filter((m) => m.relatedApp === filter.relatedApp);
@@ -217,14 +241,39 @@ export async function updateMemory(id, patch) {
     if (!cur) return null;
     const updated = { ...cur, ...patch, updatedAt: getNow() };
     const saved = await setDB(STORES.memories, id, updated);
-    promptCache.delete(cur.characterId);
-    if (cur.scope && cur.ownerId) promptCache.delete(`${cur.scope}:${cur.ownerId}`);
-    if (cur.scope === 'group' && cur.groupId) promptCache.delete(`group:${cur.groupId}:${JSON.stringify({})}`);
+    // 修复：原版只删了 characterId 和 scope:ownerId 和 group:gid:{} 三个键，
+    // 但 buildMemoryPrompt 的 key 是 `${characterId}:${JSON.stringify(context)}`，
+    // buildGroupMemoryPrompt 的 key 是 `group:${groupId}:${JSON.stringify(context)}`，
+    // 不同 context 的缓存删不掉。改成按前缀清，把该记录相关的所有 context 缓存都失效。
+    invalidateCacheForRecord(cur);
+    if (saved && (saved.characterId !== cur.characterId || saved.scope !== cur.scope || saved.ownerId !== cur.ownerId || saved.groupId !== cur.groupId)) {
+      // 记录归属变了，新归属的缓存也要清
+      invalidateCacheForRecord(saved);
+    }
     bus.emit('memory:updated', { memory: saved });
     return saved;
   } catch (e) {
     console.warn('[memory] 更新失败', e);
     return null;
+  }
+}
+
+/** 按记录的 scope/ownerId/characterId/groupId 失效所有相关 context 缓存 */
+function invalidateCacheForRecord(rec) {
+  if (!rec) return;
+  if (rec.characterId) {
+    for (const k of promptCache.keys()) {
+      if (k.startsWith(`${rec.characterId}:`)) promptCache.delete(k);
+    }
+  }
+  if (rec.scope === 'group' && rec.groupId) {
+    for (const k of promptCache.keys()) {
+      if (k.startsWith(`group:${rec.groupId}:`)) promptCache.delete(k);
+    }
+  }
+  // scope:ownerId 维度的旧缓存键（兼容）
+  if (rec.scope && rec.ownerId) {
+    promptCache.delete(`${rec.scope}:${rec.ownerId}`);
   }
 }
 
@@ -256,6 +305,25 @@ export async function touchMemory(id) {
   } catch (e) {
     console.warn('[memory] touch 失败', e);
   }
+}
+
+// 后台异步 touch：同一 cacheKey 限流一次（与缓存 TTL 对齐），避免每次构建 prompt 都写 DB。
+// 失败静默（fire-and-forget），不影响主流程。
+const _touchedRecently = new Map(); // cacheKey -> ts
+function touchMemoriesInBackground(memories, cacheKey) {
+  if (!memories || !memories.length) return;
+  const now = Date.now();
+  const last = _touchedRecently.get(cacheKey) || 0;
+  if (now - last < CACHE_TTL) return; // 限流
+  _touchedRecently.set(cacheKey, now);
+  // 串行 touch，避免并发写冲突
+  (async () => {
+    for (const m of memories) {
+      try {
+        await touchMemory(m.id);
+      } catch (e) { /* 静默 */ }
+    }
+  })();
 }
 
 // ════════════════════════════════════════
@@ -298,6 +366,11 @@ export async function buildMemoryPrompt(characterId, context = {}) {
       promptCache.set(cacheKey, { ts: Date.now(), prompt });
       return prompt;
     }
+
+    // 修复：检索后异步更新 lastUsedAt / usedCount，让 useScore 评分公式真正生效。
+    // 不 await（fire-and-forget），失败不影响主流程；只 touch 排名前几条避免每条都写。
+    // 限流：同一缓存 key 30 秒内只 touch 一次（与缓存 TTL 对齐），避免频繁写 DB。
+    touchMemoriesInBackground(top.slice(0, 5), cacheKey);
 
     // 第一人称视角组装
     const lines = top.map((m) => {
@@ -353,6 +426,8 @@ export async function buildGroupMemoryPrompt(groupId, context = {}) {
       promptCache.set(cacheKey, { ts: Date.now(), prompt: '' });
       return '';
     }
+    // 修复：群聊检索后也异步 touch，与单聊对称
+    touchMemoriesInBackground(top.slice(0, 5), cacheKey);
     const lines = top.map((m) => {
       const time = new Date(m.timestamp);
       const timeStr = isNaN(time.getTime()) ? '' : `${time.getMonth() + 1}月${time.getDate()}日`;
@@ -434,18 +509,33 @@ export async function clearMemories(characterId) {
   try {
     if (characterId) {
       const list = await getByIndexDB(STORES.memories, 'characterId', characterId);
+      // 修复：群聊记忆写入时 characterId=replier.id（角色回复群消息），
+      // 如果按 characterId 直接删，会把该角色写过的群记忆也误删。
+      // 必须只删 scope='character' 的记忆，group/global 的留着。
+      const toDelete = list.filter((m) => {
+        const s = m.scope || 'character';
+        if (s === 'character') {
+          const owner = m.ownerId || m.characterId;
+          return owner === characterId;
+        }
+        return false; // group / global 不在这里删
+      });
       await runTransaction(STORES.memories, 'readwrite', ([store]) => {
         return new Promise((resolve) => {
-          let pending = list.length;
+          let pending = toDelete.length;
           if (pending === 0) { resolve(); return; }
-          list.forEach((m) => {
+          toDelete.forEach((m) => {
             const req = store.delete(m.id);
             req.onsuccess = () => { pending--; if (pending === 0) resolve(); };
             req.onerror = () => { pending--; if (pending === 0) resolve(); };
           });
         });
       });
-      promptCache.delete(characterId);
+      // 失效该角色所有 context 缓存（按前缀）
+      for (const k of promptCache.keys()) {
+        if (k.startsWith(`${characterId}:`)) promptCache.delete(k);
+        if (k.startsWith(`character:${characterId}`)) promptCache.delete(k);
+      }
     } else {
       const { clearStoreDB } = await import('./storage.js');
       await clearStoreDB(STORES.memories);
