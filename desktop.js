@@ -6,7 +6,7 @@
 
 import { initDB, ensureDefaultSettings, getData, setData, removeData, getDB, setDB, deleteDB, getAllDB, generateId, getNow, compressImage } from './core/storage.js';
 import { STORES, KEYS } from './core/storage-keys.js';
-import { loadTheme, applyTheme, getCurrentTheme, setTheme, applyFontFamily, applyDesktopScale, getPresets, restoreCustomColors } from './core/theme.js';
+import { loadTheme, applyTheme, getCurrentTheme, setTheme, applyFontFamily, applyDesktopScale, getPresets, restoreCustomColors, applyPersonalization, clearPersonalizeCache } from './core/theme.js';
 import { createIcon, showToast, showConfirm, showBottomSheet, hideBottomSheet } from './core/ui.js';
 import { pickImageFile, clamp, debounce, throttle, cssUrl, isUsableImage, injectStyle } from './core/util.js';
 import { get as getConfig } from './core/config.js';
@@ -215,6 +215,7 @@ async function boot() {
     ensureDefaultSettings();
     loadTheme();
     restoreCustomColors();
+    applyPersonalization(); // 应用保存的字号缩放/气泡圆角/动效强度覆盖
     applyDesktopScaleFromConfig();
     await applyCustomFont();
     await seedDefaultCharacter();
@@ -1615,6 +1616,7 @@ function subscribeBus() {
   bus.on('desktop:refresh', async () => {
     loadTheme();
     restoreCustomColors();
+    applyPersonalization();
     applyDesktopScaleFromConfig();
     await applyCustomFont();
     await renderAll();
@@ -1622,7 +1624,13 @@ function subscribeBus() {
     refreshBadges();
   });
   bus.on('desktop:refresh-badges', refreshBadges);
-  bus.on('theme:changed', () => { /* theme.js 已应用变量，无需额外动作 */ });
+  bus.on('theme:changed', () => {
+    // theme.js 的 applyTheme 会先 removeProperty 所有变量再重设，
+    // 我们叠在上面的个性化覆盖（字号/圆角/动效）被一起清掉了。
+    // 必须清掉原值缓存（新主题的原值可能不同）再重新应用。
+    clearPersonalizeCache();
+    applyPersonalization();
+  });
   bus.on('character:updated', async () => {
     currentCharacter = await getDefaultCharacter();
     refreshLockScreen();

@@ -21,7 +21,8 @@ import {
   appendGroupMessageEl, updateGroupChatHeader, scrollToBottom,
   showGroupTypingIndicator, hideGroupTypingIndicator,
   clearGroupQuote, autoResizeGroupInput, updateGroupSendButtonState,
-  updateGroupMessageStatus, updateGroupThinkingUI
+  updateGroupMessageStatus, updateGroupThinkingUI,
+  isNearBottom
 } from './group-detail-view.js';
 import { renderMarkdown } from '../markdown.js';
 import { enhanceCodeBlocks } from '../code-block.js';
@@ -458,37 +459,59 @@ async function runGroupAIStream(bubbleEl, messages, sess, replier, groupId, getA
   const state = getState();
   const ctrl = new AbortController();
   state.abortController = ctrl;
+  // 首次进入时初始化气泡：显示已有内容 + 光标（与单聊 runAIStream 一致）
+  const initAcc = getAcc() || '';
+  if (bubbleEl.isConnected) {
+    bubbleEl.innerHTML = escapeHTML(initAcc) + '<span class="chat-cursor"></span>';
+  }
   const result = await streamChat({
     messages,
     ownerId: groupId,  // 让群专属 aiOverride 生效
-    onChunk: (text) => {
+    onChunk: (delta) => {
+      // streamChat 传的是 delta（增量），不是累积文本
+      // 流式期间用 textContent 增量显示，不调 renderMarkdown/enhanceCodeBlocks（与单聊一致）
       if (state.streamCancelled) return;
       if (!state.messageListEl || state.currentSession?.id !== sess.id) return;
-      setAcc(text);
-      // 思维链剥离：parseThinkingTags 返回 [{type:'thinking'|'content', text}] 数组
-      const segs = parseThinkingTags(text);
-      let content = '';
-      let thinking = '';
-      for (const seg of segs) {
-        if (seg.type === 'thinking') thinking += seg.text;
-        else content += seg.text;
+      const acc = (getAcc() || '') + delta;  // 累加
+      setAcc(acc);
+      if (bubbleEl.isConnected) {
+        renderGroupStreamToken(bubbleEl, acc);
+        if (isNearBottom()) scrollToBottom();
       }
-      if (thinking) {
-        setThinking(thinking);
-        updateGroupThinkingUI(msgEl, thinking, { streaming: true });
-      }
-      bubbleEl.innerHTML = renderMarkdown(content || '');
-      enhanceCodeBlocks(bubbleEl);
-      scrollToBottom();
     },
-    onThinking: (text) => {
+    onThinking: (delta) => {
       if (state.streamCancelled) return;
-      setThinking(text);
-      updateGroupThinkingUI(msgEl, text, { streaming: true });
+      if (!delta) return;
+      const next = (getThinking() || '') + delta;  // 累加
+      setThinking(next);
+      if (msgEl && msgEl.isConnected) {
+        updateGroupThinkingUI(msgEl, next, { streaming: true });
+        if (isNearBottom()) scrollToBottom();
+      }
     },
     signal: ctrl.signal
   });
   return result;
+}
+
+/**
+ * 流式渲染单个 token：维护一个 textNode，仅追加新内容，避免全量 innerHTML 重排。
+ * 与单聊 sending.js 的 renderStreamToken 逻辑一致（群聊独立实现，避免循环依赖）。
+ */
+function renderGroupStreamToken(bubbleEl, fullText) {
+  let textNode = bubbleEl.firstChild;
+  if (!textNode || textNode.nodeType !== Node.TEXT_NODE) {
+    textNode = document.createTextNode('');
+    bubbleEl.insertBefore(textNode, bubbleEl.firstChild);
+  }
+  if (textNode.textContent !== fullText) {
+    textNode.textContent = fullText;
+  }
+  if (!bubbleEl.querySelector('.chat-cursor')) {
+    const cursor = document.createElement('span');
+    cursor.className = 'chat-cursor';
+    bubbleEl.appendChild(cursor);
+  }
 }
 
 async function finishGroupAIMessage(sess, replier, aiMsg, msgEl, bubbleEl, finalText, userMsg, thinkingText = '') {

@@ -4,8 +4,8 @@
 //       core/ai-client.js, core/memory.js, core/inbox.js, core/util.js, ./local-replies.js
 // 状态由 index.js 持有，通过 getState 拿；发送函数 export 给 detail-view.js 调用。
 
-import { STORES } from '../../core/storage-keys.js';
-import { getDB, setDB, getAllDB, generateId, getNow, compressImage } from '../../core/storage.js';
+import { STORES, KEYS } from '../../core/storage-keys.js';
+import { getDB, setDB, getAllDB, generateId, getNow, compressImage, getData } from '../../core/storage.js';
 import { showToast, createIcon, registerIcon } from '../../core/ui.js';
 import bus from '../../core/events.js';
 import { pickImageFile } from '../../core/util.js';
@@ -561,6 +561,9 @@ function streamLocalReply(bubbleEl, fullText) {
   const chars = Array.from(fullText); // Array.from 正确处理 surrogate pair
   let i = 0;
   let acc = '';
+  // 本地打字速度：用户在设置里调。speed=1 → 50ms/字，speed=4 → 12ms/字，speed=0.5 → 100ms/字
+  const typingSpeed = Number(getData(KEYS.appTypingSpeed, 1)) || 1;
+  const tickDelay = Math.max(8, Math.round(50 / typingSpeed));
   return new Promise((resolve) => {
     function tick() {
       // 被取消 / 组件已卸载 -> 直接结束
@@ -581,7 +584,7 @@ function streamLocalReply(bubbleEl, fullText) {
         renderStreamToken(bubbleEl, acc);
         if (isNearBottom()) scrollToBottom();
       }
-      state.typingTimer = setTimeout(tick, 50);
+      state.typingTimer = setTimeout(tick, tickDelay);
     }
     tick();
   });

@@ -6,7 +6,7 @@
 // 依赖：core/theme.js, core/storage.js, core/storage-keys.js, core/util.js,
 //      core/storage-manager.js, core/ui.js, core/events.js
 
-import { getPresets, getCurrentThemeId, setTheme, exportTheme, importTheme, applyDesktopScale, applyFontFamily, getCurrentTheme, applyCustomColors, clearCustomColors, getCustomColors, getThemeVar } from '../../core/theme.js';
+import { getPresets, getCurrentThemeId, setTheme, exportTheme, importTheme, applyDesktopScale, applyFontFamily, getCurrentTheme, applyCustomColors, clearCustomColors, getCustomColors, getThemeVar, applyPersonalization } from '../../core/theme.js';
 import { STORES, KEYS } from '../../core/storage-keys.js';
 import { compressImage, fileToDataURL, getDB, setDB, deleteDB, getData, setData, removeData } from '../../core/storage.js';
 import { pickImageFile, isUsableImage, cssUrl, clamp, injectStyle } from '../../core/util.js';
@@ -142,6 +142,7 @@ async function renderSections() {
   // APP 背景内容多，默认折叠收纳
   body.appendChild(wrapCollapsible(await renderAppBgCard(), 'appearance'));
   body.appendChild(wrapCard(renderFontCard(), 'appearance'));
+  body.appendChild(wrapCard(renderPersonalizeCard(), 'appearance'));
   body.appendChild(wrapCard(renderScaleCard(), 'appearance'));
 
   // ── AI 与陪伴：AI 配置 / 小工具箱 / 我的声音 / 通知 / 自定义图标 ──
@@ -405,6 +406,104 @@ function renderLockCard() {
       showToast('密码改好啦，下次用新密码解锁哦', 'success');
     });
   });
+  return card;
+}
+
+// ════════════════════════════════════════
+// 个性化：字号 / 气泡圆角 / 动效强度 / 打字速度
+// ════════════════════════════════════════
+function renderPersonalizeCard() {
+  const card = document.createElement('div');
+  card.className = 'card';
+  const fontScale = Number(getData(KEYS.appFontScale, 1));
+  const bubbleRadius = Number(getData(KEYS.appBubbleRadius, 1));
+  const motionLevel = getData(KEYS.appMotionLevel, 'full');
+  const typingSpeed = Number(getData(KEYS.appTypingSpeed, 1));
+  card.innerHTML = `
+    <div class="card-title">个性化</div>
+    <div style="font-size:var(--font-size-small);color:var(--text-hint);margin-bottom:10px;line-height:1.5">
+      字号、气泡圆角、动效、打字速度，慢慢调出最舒服的样子
+    </div>
+    <div class="card-row">
+      <span class="card-row-label">字号大小</span>
+      <div style="display:flex;align-items:center;gap:8px;flex:1;max-width:180px">
+        <input type="range" id="pers-font-scale" min="0.85" max="1.25" step="0.05" value="${fontScale}" style="flex:1">
+        <span style="min-width:36px;text-align:right;color:var(--text-secondary);font-size:var(--font-size-small)" id="pers-font-scale-val">${fontScale.toFixed(2)}</span>
+      </div>
+    </div>
+    <div class="card-row">
+      <span class="card-row-label">气泡圆角</span>
+      <div style="display:flex;align-items:center;gap:8px;flex:1;max-width:180px">
+        <input type="range" id="pers-bubble-radius" min="0.5" max="1.8" step="0.1" value="${bubbleRadius}" style="flex:1">
+        <span style="min-width:36px;text-align:right;color:var(--text-secondary);font-size:var(--font-size-small)" id="pers-bubble-radius-val">${bubbleRadius.toFixed(1)}</span>
+      </div>
+    </div>
+    <div class="card-row">
+      <span class="card-row-label">动效强度</span>
+      <select id="pers-motion" style="padding:6px 10px;border-radius:var(--radius-sm);background:var(--bg-secondary);color:var(--text-primary)">
+        <option value="full" ${motionLevel === 'full' ? 'selected' : ''}>完整（默认）</option>
+        <option value="reduced" ${motionLevel === 'reduced' ? 'selected' : ''}>减弱（更安静）</option>
+        <option value="none" ${motionLevel === 'none' ? 'selected' : ''}>关闭（最省电）</option>
+      </select>
+    </div>
+    <div class="card-row">
+      <span class="card-row-label">本地打字速度</span>
+      <div style="display:flex;align-items:center;gap:8px;flex:1;max-width:180px">
+        <input type="range" id="pers-typing" min="0.5" max="4" step="0.5" value="${typingSpeed}" style="flex:1">
+        <span style="min-width:36px;text-align:right;color:var(--text-secondary);font-size:var(--font-size-small)" id="pers-typing-val">${typingSpeed.toFixed(1)}</span>
+      </div>
+    </div>
+    <button class="btn ghost block" id="pers-reset" style="margin-top:10px">还原默认</button>
+  `;
+
+  // 字号缩放 / 气泡圆角 / 动效强度都走 theme.js 的 applyPersonalization()：
+  // 它会读 localStorage 里的值并覆盖 CSS 变量，且能正确处理主题切换（清缓存重应用）。
+  // 这里只负责把滑块值存起来，再调 applyPersonalization 让它生效。
+
+  // 滑块实时回填
+  const fontInput = card.querySelector('#pers-font-scale');
+  const fontVal = card.querySelector('#pers-font-scale-val');
+  fontInput.addEventListener('input', () => { fontVal.textContent = Number(fontInput.value).toFixed(2); });
+  fontInput.addEventListener('change', () => {
+    setData(KEYS.appFontScale, Number(fontInput.value));
+    applyPersonalization();
+  });
+
+  const bubbleInput = card.querySelector('#pers-bubble-radius');
+  const bubbleVal = card.querySelector('#pers-bubble-radius-val');
+  bubbleInput.addEventListener('input', () => { bubbleVal.textContent = Number(bubbleInput.value).toFixed(1); });
+  bubbleInput.addEventListener('change', () => {
+    setData(KEYS.appBubbleRadius, Number(bubbleInput.value));
+    applyPersonalization();
+  });
+
+  const motionSel = card.querySelector('#pers-motion');
+  motionSel.addEventListener('change', () => {
+    setData(KEYS.appMotionLevel, motionSel.value);
+    applyPersonalization();
+    showToast(motionSel.value === 'none' ? '动效关掉啦' : motionSel.value === 'reduced' ? '动效减弱啦' : '动效恢复啦', 'default', 1200);
+  });
+
+  const typingInput = card.querySelector('#pers-typing');
+  const typingVal = card.querySelector('#pers-typing-val');
+  typingInput.addEventListener('input', () => { typingVal.textContent = Number(typingInput.value).toFixed(1); });
+  typingInput.addEventListener('change', () => {
+    setData(KEYS.appTypingSpeed, Number(typingInput.value));
+  });
+
+  card.querySelector('#pers-reset').addEventListener('click', () => {
+    setData(KEYS.appFontScale, 1);
+    setData(KEYS.appBubbleRadius, 1);
+    setData(KEYS.appMotionLevel, 'full');
+    setData(KEYS.appTypingSpeed, 1);
+    applyPersonalization();
+    fontInput.value = '1'; fontVal.textContent = '1.00';
+    bubbleInput.value = '1'; bubbleVal.textContent = '1.0';
+    motionSel.value = 'full';
+    typingInput.value = '1'; typingVal.textContent = '1.0';
+    showToast('还原好啦', 'default', 1200);
+  });
+
   return card;
 }
 
