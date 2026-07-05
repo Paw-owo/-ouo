@@ -22,6 +22,11 @@ import {
   toggleInChatSearch, runInChatSearch, searchPrev, searchNext,
   scrollToMessageAndHighlight
 } from './extras.js';
+// + 菜单富消息渲染（文件 / 位置 / 名片）
+import {
+  renderFileBubble, renderLocationBubble, renderContactBubble,
+  bindRichBubble, ensureRichBubbleStyle
+} from './plus-content.js';
 
 // 注册感叹号图标（用于消息发送失败状态）
 registerIcon('alert', 'M12 3v10 M12 17h.01');
@@ -152,8 +157,8 @@ export async function renderChatDetailView() {
         </div>
       </div>
       <button class="chat-header-search" id="chat-header-search" aria-label="搜索聊天记录">${createIcon('search', 18).outerHTML}</button>
-      <button class="app-header-gear" id="chat-settings" aria-label="聊天设置">${createIcon('settings', 18).outerHTML}</button>
-      <button class="chat-more" id="chat-more" aria-label="聊天设置">${createIcon('more', 20).outerHTML}</button>
+      <button class="app-header-gear" id="chat-settings" aria-label="聊天与AI调试设置">${createIcon('settings', 18).outerHTML}</button>
+      <button class="chat-more" id="chat-more" aria-label="更多操作">${createIcon('more', 20).outerHTML}</button>
     </div>
     <div class="chat-search-bar" id="chat-search-bar" aria-hidden="true">
       <input class="chat-search-input" id="chat-search-input" type="search" placeholder="找找聊过的话..." aria-label="搜索消息">
@@ -196,7 +201,20 @@ export async function renderChatDetailView() {
   container.querySelector('#chat-back').addEventListener('click', backToSessionList);
   container.querySelector('#chat-more').addEventListener('click', openChatMoreMenu);
   // 齿轮跳到设置「AI 与陪伴」分组
-  container.querySelector('#chat-settings').addEventListener('click', () => openApp('settings', { deepLink: { tab: 'ai' } }));
+  container.querySelector('#chat-settings').addEventListener('click', async () => {
+    // 独立聊天设置页：不跳全局设置 APP，直接动态 import 本目录的 chat-settings-view.js
+    try {
+      const mod = await import('./chat-settings-view.js');
+      if (typeof mod.openChatSettings === 'function') {
+        mod.openChatSettings();
+      } else {
+        showToast('设置页还在准备中，稍等一下嘛', 'default');
+      }
+    } catch (e) {
+      console.warn('[chat] 加载设置页失败', e);
+      showToast('设置页打不开呢，再试一下嘛', 'error');
+    }
+  });
   container.querySelector('#chat-plus').addEventListener('click', openInputPlusMenu);
   state.sendBtnEl.addEventListener('click', onSendClick);
   state.inputEl.addEventListener('keydown', onInputKeyDown);
@@ -614,12 +632,25 @@ function bindInteractiveControls(el, msg) {
   }
 }
 
+// 富消息气泡分发：file / location / contact
+function renderRichBubble(kind, msg) {
+  if (kind === 'file') return renderFileBubble(msg);
+  if (kind === 'location') return renderLocationBubble(msg);
+  if (kind === 'contact') return renderContactBubble(msg);
+  return '';
+}
+// 注入富消息样式（模块加载时跑一次）
+ensureRichBubbleStyle();
+
 function createMessageEl(msg, opts = {}) {
   const state = getState();
   const mode = getData(KEYS.chatMode, 'bubble');
   const isUser = msg.role === 'user';
   const isImage = msg.type === 'image';
   const isVoice = msg.type === 'voice' || msg.type === 'audio';
+  const isFile = msg.type === 'file';
+  const isLocation = msg.type === 'location';
+  const isContact = msg.type === 'contact';
 
   // ── 撤回占位 ──
   if (msg.recalled) {
@@ -654,6 +685,12 @@ function createMessageEl(msg, opts = {}) {
       inner = `<img class="chat-image" src="${safeUrl}" alt="图片" loading="lazy">`;
     } else if (isVoice) {
       inner = renderAudioHTML(msg);
+    } else if (isFile) {
+      inner = renderRichBubble('file', msg);
+    } else if (isLocation) {
+      inner = renderRichBubble('location', msg);
+    } else if (isContact) {
+      inner = renderRichBubble('contact', msg);
     } else if (opts.stream) {
       inner = '';
     } else if (isUser) {
@@ -698,6 +735,8 @@ function createMessageEl(msg, opts = {}) {
     }
     if (showThinking) bindThinkingToggle(el);
     bindInteractiveControls(el, msg);
+    // 富消息交互（文件下载 / 位置查看 / 名片跳转）
+    if (isFile || isLocation || isContact) bindRichBubble(el, msg);
     attachLongPress(el, () => openMessageActionSheet(msg));
     return el;
   }
@@ -729,6 +768,12 @@ function createMessageEl(msg, opts = {}) {
     }
   } else if (isVoice) {
     bubbleInner += renderAudioHTML(msg);
+  } else if (isFile) {
+    bubbleInner += renderRichBubble('file', msg);
+  } else if (isLocation) {
+    bubbleInner += renderRichBubble('location', msg);
+  } else if (isContact) {
+    bubbleInner += renderRichBubble('contact', msg);
   } else if (opts.stream) {
     bubbleInner += '';
   } else {
@@ -767,6 +812,8 @@ function createMessageEl(msg, opts = {}) {
   if (showThinking) bindThinkingToggle(el);
   // 引用卡片点击 + 语音播放
   bindInteractiveControls(el, msg);
+  // 富消息交互（文件下载 / 位置查看 / 名片跳转）
+  if (isFile || isLocation || isContact) bindRichBubble(el, msg);
   // 长按操作（TTS 已改为长按菜单，不再常驻按钮）
   attachLongPress(el, () => openMessageActionSheet(msg));
   return el;
@@ -1156,13 +1203,13 @@ function onSendClick() {
 function openInputPlusMenu() {
   const body = document.createElement('div');
   body.className = 'chat-action-grid chat-plus-menu';
-  // 各项配置：key / label / icon / 是否启用（暂未实现的入口先 disabled）
+  // 各项配置：全部已接入真实功能（plus-content.js）
   const items = [
-    { key: 'image',    label: '相册',  icon: 'camera',   enabled: true,  onClick: () => sendImageMessage() },
-    { key: 'shoot',    label: '拍照',  icon: 'camera',   enabled: false, onClick: () => showToast('拍照入口待接入嘛', 'default', 1400) },
-    { key: 'file',     label: '文件',  icon: 'file',     enabled: false, onClick: () => showToast('文件发送待接入嘛', 'default', 1400) },
-    { key: 'location', label: '位置',  icon: 'location', enabled: false, onClick: () => showToast('位置发送待接入嘛', 'default', 1400) },
-    { key: 'contact',  label: '名片',  icon: 'contact',  enabled: false, onClick: () => showToast('名片发送待接入嘛', 'default', 1400) }
+    { key: 'image',    label: '相册',  icon: 'camera',   enabled: true, onClick: () => sendImageMessage() },
+    { key: 'shoot',    label: '拍照',  icon: 'camera',   enabled: true, onClick: () => import('./plus-content.js').then(m => m.sendShootMessage({ group: false })) },
+    { key: 'file',     label: '文件',  icon: 'file',     enabled: true, onClick: () => import('./plus-content.js').then(m => m.sendFileMessage({ group: false })) },
+    { key: 'location', label: '位置',  icon: 'location', enabled: true, onClick: () => import('./plus-content.js').then(m => m.sendLocationMessage({ group: false })) },
+    { key: 'contact',  label: '名片',  icon: 'contact',  enabled: true, onClick: () => import('./plus-content.js').then(m => m.sendContactMessage({ group: false })) }
   ];
   body.innerHTML = items.map((a) => `
     <button class="chat-action-grid-item${a.enabled ? '' : ' disabled'}" data-key="${a.key}" type="button" role="menuitem"${a.enabled ? '' : ' aria-disabled="true"'}>

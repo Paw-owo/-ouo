@@ -269,7 +269,7 @@ export function openChatMoreMenu() {
   `).join('');
 
   const sheet = showBottomSheet({
-    title: '聊天设置',
+    title: '更多操作',
     bodyElement: body,
     dismissible: true
   });

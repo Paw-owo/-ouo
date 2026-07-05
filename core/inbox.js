@@ -22,6 +22,12 @@ const EVENT_HANDLERS = {
     title: p?.characterName ? `${p.characterName} 发来消息` : '新消息',
     body: p?.preview || ''
   }),
+  // 群聊里 AI 成员回复：也写一条消息卡片，让消息中心能看到群聊动态
+  'chat:group-ai-message': (p) => ({
+    app: 'chat', type: 'message',
+    title: p?.senderName ? `${p.senderName} 在群里回了你` : '群聊新消息',
+    body: p?.preview || ''
+  }),
   'moments:new': (p) => ({
     app: 'moments', type: 'social',
     title: p?.author ? `${p.author} 发了新动态` : '朋友圈新动态',
@@ -180,6 +186,8 @@ export function getUnreadCount() {
 
 const EVENT_LABELS = {
   'chat:message-received': '聊天',
+  'chat:group-ai-message': '群聊回复',
+  'chat:group-user-message': '群聊发言',
   'moments:new': '朋友圈发动态',
   'moments:commented': '朋友圈被评论',
   'moments:liked': '朋友圈被点赞',

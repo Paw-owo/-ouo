@@ -24,8 +24,13 @@ const CACHE_TTL = 30_000;
 
 /**
  * 统一记忆写入。所有 App 必须走这个，禁止自己 try/catch 静默吞错。
+ * 记忆隔离：每条记忆有 scope 字段（'character' | 'group' | 'global'），
+ *   - scope='character'：characterId 必填，只对该角色可见，不污染其他角色
+ *   - scope='group'：groupId 必填，只对该群聊可见
+ *   - scope='global'：全局共享，留作未来「跨角色通用常识」
+ * 读取（getMemories / buildMemoryPrompt）按 scope+ownerId 严格过滤，A 角色的记忆绝不会出现在 B 角色的对话里。
  * @param {object} entry
- *   { characterId, role, source, content, mood, importance, relatedApp, relatedId, timestamp }
+ *   { characterId?, groupId?, scope?, role, source, content, mood, importance, relatedApp, relatedId, timestamp }
  */
 export async function recordInteraction(entry) {
   if (!entry || !entry.content) {
@@ -34,9 +39,24 @@ export async function recordInteraction(entry) {
   }
   try {
     const now = getNow();
+    // 解析 scope + ownerId：优先 entry.scope；不传时按 characterId / groupId 自动推断
+    const scope = entry.scope || (entry.groupId ? 'group' : (entry.characterId ? 'character' : 'global'));
+    if (scope === 'character' && !entry.characterId) {
+      console.warn('[memory] scope=character 但缺 characterId，拒绝写入');
+      return null;
+    }
+    if (scope === 'group' && !entry.groupId) {
+      console.warn('[memory] scope=group 但缺 groupId，拒绝写入');
+      return null;
+    }
     const record = {
       id: entry.id || generateId('mem'),
+      // 兼容旧字段：characterId 仍保留，但读取时按 scope 区分
       characterId: entry.characterId || 'global',
+      groupId: entry.groupId || null,
+      scope,                                  // 'character' | 'group' | 'global'
+      ownerId: scope === 'group' ? entry.groupId
+        : (scope === 'character' ? entry.characterId : 'global'),
       role: entry.role || 'assistant',
       source: entry.source || 'manual',
       content: String(entry.content).slice(0, 2000),
@@ -50,7 +70,7 @@ export async function recordInteraction(entry) {
       lastUsedAt: now,
       usedCount: 0
     };
-    // 去重：同 characterId + 同 source + 内容前 40 字相同 -> 视为同一条，更新
+    // 去重：同 scope + 同 ownerId + 同 source + 内容前 40 字相同 -> 视为同一条，更新
     const existing = await findDuplicate(record);
     let saved;
     if (existing) {
@@ -66,10 +86,11 @@ export async function recordInteraction(entry) {
     } else {
       saved = await setDB(STORES.memories, record.id, record);
     }
-    // 失效缓存
-    promptCache.delete(record.characterId);
+    // 失效缓存（按 scope:ownerId 维度）
+    promptCache.delete(cacheKeyOf(record));
+    promptCache.delete(record.characterId); // 兼容旧缓存键
     // 通知可视化记忆卡片
-    bus.emit('memory:written', { memory: saved, characterId: record.characterId });
+    bus.emit('memory:written', { memory: saved, characterId: record.characterId, scope: record.scope, ownerId: record.ownerId });
     return saved;
   } catch (e) {
     // 失败返回空不污染数据
@@ -78,11 +99,19 @@ export async function recordInteraction(entry) {
   }
 }
 
+/** 计算缓存键：scope:ownerId 维度，避免不同角色记忆互相命中缓存 */
+function cacheKeyOf(record) {
+  return `${record.scope || 'character'}:${record.ownerId || 'global'}`;
+}
+
 async function findDuplicate(record) {
   try {
+    // 严格按 scope + ownerId 过滤，避免不同角色/群聊的同内容记忆被误判为重复
     const all = await getByIndexDB(STORES.memories, 'characterId', record.characterId);
     const prefix = record.content.slice(0, 40);
     return all.find((m) =>
+      (m.scope || 'character') === record.scope &&
+      (m.ownerId || m.characterId) === record.ownerId &&
       m.source === record.source &&
       m.content.slice(0, 40) === prefix
     ) || null;
@@ -106,6 +135,18 @@ function clampImportance(v) {
 export async function getMemories(characterId, filter = {}) {
   try {
     let list = await getByIndexDB(STORES.memories, 'characterId', characterId);
+    // 记忆隔离过滤：只返回属于该 characterId 的 character-scope 记忆 + global 记忆
+    // 旧数据没有 scope 字段 -> 兼容视为 'character'（不丢历史记忆）
+    list = list.filter((m) => {
+      const s = m.scope || 'character';
+      if (s === 'global') return true; // 全局共享记忆所有角色可见
+      if (s === 'character') {
+        const owner = m.ownerId || m.characterId;
+        return owner === characterId;
+      }
+      // group scope 的记忆不在单聊里出现（避免群聊隐私泄漏到私聊）
+      return false;
+    });
     if (filter.source) list = list.filter((m) => m.source === filter.source);
     if (filter.mood) list = list.filter((m) => m.mood === filter.mood);
     if (filter.relatedApp) list = list.filter((m) => m.relatedApp === filter.relatedApp);
@@ -132,6 +173,39 @@ export async function getMemories(characterId, filter = {}) {
   }
 }
 
+/**
+ * 读取群聊的记忆（只返回该群 scope=group 的记忆 + global 记忆）。
+ * 群聊记忆不泄漏到私聊，私聊记忆也不污染群聊。
+ * @param {string} groupId
+ * @param {object} filter 同 getMemories
+ */
+export async function getGroupMemories(groupId, filter = {}) {
+  if (!groupId) return [];
+  try {
+    const all = await getAllDB(STORES.memories);
+    let list = all.filter((m) => {
+      const s = m.scope || 'character';
+      if (s === 'global') return true;
+      if (s === 'group') {
+        const owner = m.ownerId || m.groupId;
+        return owner === groupId;
+      }
+      return false; // 私聊记忆不进群聊
+    });
+    if (filter.source) list = list.filter((m) => m.source === filter.source);
+    if (filter.mood) list = list.filter((m) => m.mood === filter.mood);
+    if (filter.relatedApp) list = list.filter((m) => m.relatedApp === filter.relatedApp);
+    list.sort((a, b) => {
+      if (b.importance !== a.importance) return b.importance - a.importance;
+      return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+    });
+    return list;
+  } catch (e) {
+    console.warn('[memory] 群聊记忆读取失败', e);
+    return [];
+  }
+}
+
 export async function getMemory(id) {
   try { return await getDB(STORES.memories, id); }
   catch (e) { console.warn('[memory] 读取单条失败', e); return null; }
@@ -144,6 +218,8 @@ export async function updateMemory(id, patch) {
     const updated = { ...cur, ...patch, updatedAt: getNow() };
     const saved = await setDB(STORES.memories, id, updated);
     promptCache.delete(cur.characterId);
+    if (cur.scope && cur.ownerId) promptCache.delete(`${cur.scope}:${cur.ownerId}`);
+    if (cur.scope === 'group' && cur.groupId) promptCache.delete(`group:${cur.groupId}:${JSON.stringify({})}`);
     bus.emit('memory:updated', { memory: saved });
     return saved;
   } catch (e) {
@@ -156,7 +232,10 @@ export async function deleteMemory(id) {
   try {
     const cur = await getDB(STORES.memories, id);
     const ok = await deleteDB(STORES.memories, id);
-    if (cur) promptCache.delete(cur.characterId);
+    if (cur) {
+      promptCache.delete(cur.characterId);
+      if (cur.scope && cur.ownerId) promptCache.delete(`${cur.scope}:${cur.ownerId}`);
+    }
     bus.emit('memory:deleted', { id, memory: cur });
     return ok;
   } catch (e) {
@@ -240,6 +319,53 @@ export async function buildMemoryPrompt(characterId, context = {}) {
 function moodLabel(m) {
   const map = { happy: '开心', sad: '难过', angry: '生气', calm: '平静', excited: '兴奋', anxious: '焦虑' };
   return map[m] || m;
+}
+
+/**
+ * 构建群聊的记忆 prompt（只取该群 scope=group 的记忆 + global 记忆）。
+ * 与 buildMemoryPrompt 对称，但走 getGroupMemories，确保群聊记忆与私聊记忆互不污染。
+ * @param {string} groupId
+ * @param {object} context
+ */
+export async function buildGroupMemoryPrompt(groupId, context = {}) {
+  if (!groupId) return '';
+  const cacheKey = `group:${groupId}:${JSON.stringify(context)}`;
+  const cached = promptCache.get(cacheKey);
+  if (cached && Date.now() - cached.ts < CACHE_TTL) return cached.prompt;
+  try {
+    let list = await getGroupMemories(groupId, context);
+    if (context.keyword) {
+      const kw = String(context.keyword).toLowerCase();
+      list = list.filter((m) => m.content.toLowerCase().includes(kw));
+    }
+    const limit = context.limit || getConfig('ai.contextMessageLimit', 20);
+    const now = Date.now();
+    const scored = list.map((m) => {
+      const ageDays = (now - new Date(m.timestamp).getTime()) / 86400_000;
+      const recencyScore = Math.max(0, 1 - ageDays / 30);
+      const importanceScore = (m.importance || 5) / 10;
+      const useScore = Math.min(1, (m.usedCount || 0) / 5);
+      return { m, score: importanceScore * 0.5 + recencyScore * 0.4 + useScore * 0.1 };
+    });
+    scored.sort((a, b) => b.score - a.score);
+    const top = scored.slice(0, limit).map((s) => s.m);
+    if (!top.length) {
+      promptCache.set(cacheKey, { ts: Date.now(), prompt: '' });
+      return '';
+    }
+    const lines = top.map((m) => {
+      const time = new Date(m.timestamp);
+      const timeStr = isNaN(time.getTime()) ? '' : `${time.getMonth() + 1}月${time.getDate()}日`;
+      const moodTag = m.mood ? `[心情:${moodLabel(m.mood)}]` : '';
+      return `- (${timeStr}${moodTag}) ${m.content}`;
+    });
+    const prompt = `这是群里发生过的事：\n${lines.join('\n')}`;
+    promptCache.set(cacheKey, { ts: Date.now(), prompt });
+    return prompt;
+  } catch (e) {
+    console.warn('[memory] buildGroupMemoryPrompt 失败', e);
+    return '';
+  }
 }
 
 // ════════════════════════════════════════
@@ -336,4 +462,41 @@ export async function clearMemories(characterId) {
 export function invalidateCache(characterId) {
   if (characterId) promptCache.delete(characterId);
   else promptCache.clear();
+}
+
+/**
+ * 清空指定群聊的所有 group-scope 记忆（不动 global 记忆，也不动私聊记忆）。
+ * @param {string} groupId
+ */
+export async function clearGroupMemories(groupId) {
+  if (!groupId) return false;
+  try {
+    const all = await getAllDB(STORES.memories);
+    const toDelete = all.filter((m) => {
+      const s = m.scope || 'character';
+      if (s !== 'group') return false;
+      const owner = m.ownerId || m.groupId;
+      return owner === groupId;
+    });
+    await runTransaction(STORES.memories, 'readwrite', ([store]) => {
+      return new Promise((resolve) => {
+        let pending = toDelete.length;
+        if (pending === 0) { resolve(); return; }
+        toDelete.forEach((m) => {
+          const req = store.delete(m.id);
+          req.onsuccess = () => { pending--; if (pending === 0) resolve(); };
+          req.onerror = () => { pending--; if (pending === 0) resolve(); };
+        });
+      });
+    });
+    // 清群聊相关缓存
+    for (const k of promptCache.keys()) {
+      if (k.startsWith(`group:${groupId}:`)) promptCache.delete(k);
+    }
+    bus.emit('memory:cleared', { groupId, scope: 'group' });
+    return true;
+  } catch (e) {
+    console.warn('[memory] 清空群聊记忆失败', e);
+    return false;
+  }
 }

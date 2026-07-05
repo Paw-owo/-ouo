@@ -267,7 +267,8 @@ export async function retrySendMessage(msg) {
 // AI 回复（核心）
 // ════════════════════════════════════════
 
-async function triggerAIReply(userMsg) {
+// 导出供 extras.js（表情包发送）与 group/group-sending.js（群聊回复）调用
+export async function triggerAIReply(userMsg) {
   const state = getState();
   // 用 userMsg.sessionId 从 DB 查会话，避免 sendMessage 的 await 期间用户切走会话造成串话
   let sess = null;

@@ -1,14 +1,14 @@
 // apps/chat/extras.js
-// 聊天增强模块——表情面板、语音录制、消息转发、页内搜索、引用消息定位。
+// 聊天增强模块——表情包面板、语音录制、消息转发、页内搜索、引用消息定位。
 // 全部走 CSS 变量，纯 ES Module，无外部依赖。
 // 状态由 index.js 持有，本模块通过 getState 协作；导出函数供 detail-view.js 调用。
-// 红线：图标只准 SVG 线稿（表情面板内的 emoji 字符是用户输入内容，不算 UI 图标）。
+// 红线：禁止系统 emoji 字符，表情面板只展示用户收藏的表情包图片；图标只准 SVG 线稿。
 
 import { STORES } from '../../core/storage-keys.js';
-import { getDB, setDB, getAllDB, generateId, getNow } from '../../core/storage.js';
-import { showToast, showBottomSheet, createIcon, registerIcon } from '../../core/ui.js';
+import { getDB, setDB, getAllDB, deleteDB, generateId, getNow } from '../../core/storage.js';
+import { showToast, showBottomSheet, showConfirm, createIcon, registerIcon } from '../../core/ui.js';
 import bus from '../../core/events.js';
-import { clamp } from '../../core/util.js';
+import { clamp, pickImageFile, injectStyle } from '../../core/util.js';
 import { getState, enterChat } from './index.js';
 import { escapeHTML, escapeAttr } from './shared-utils.js';
 
@@ -35,69 +35,222 @@ registerIcon('voice-play', 'M8 5v14l11-7z');
 registerIcon('stop', 'M6 6h12v12H6z');
 
 // ════════════════════════════════════════
-// 表情面板
+// 表情包面板（用户收藏的表情包图片，禁止系统 emoji 字符）
 // ════════════════════════════════════════
 
-// 六个分类的表情数据（每类约 48-64 个，8 列网格自适应高度）
-// 注：这里是用户输入用的 emoji 字符，不是 UI 图标，不违反"禁止 emoji 代替图标"
-const EMOJI_CATEGORIES = [
-  {
-    key: 'face', label: '表情',
-    emojis: '😀 😃 😄 😁 😆 😅 😂 🤣 😊 😇 🙂 🙃 😉 😌 😍 🥰 😘 😗 😙 😚 😋 😛 😝 😜 🤪 🤨 🧐 🤓 😎 🤩 🥳 😏 😒 😞 😔 😟 😕 🙁 ☹️ 😣 😖 😫 😩 🥺 😢 😭 😤 😠 😡 🤬 🤯 😳 🥵 🥶 😱 😨 😰 😥 😓 🤗 🤔 🤭 🤫 🤥 😶 😐 😑 😬 🙄 😯 😦 😧 😮 😲 🥱 😴 🤤 😪 😵 🤐 🥴 🤢 🤮 🤧 😷 🤒 🤕'.split(/\s+/)
-  },
-  {
-    key: 'gesture', label: '手势',
-    emojis: '👍 👎 👊 ✊ 🤛 🤜 👏 🙌 👐 🤲 🙏 🤝 💪 🦾 👋 🤚 ✋ 🖖 👌 🤌 🤏 ✌️ 🤞 🤟 🤘 👈 👉 👆 👇 ☝️ ✍️ 🖐️ 💅 🤳 🦶 🦵 🦿 🦷 👂 🦻 👃 👀 👁️ 👅 👄 💋'.split(/\s+/)
-  },
-  {
-    key: 'animal', label: '动物',
-    emojis: '🐶 🐱 🐭 🐹 🐰 🦊 🐻 🐼 🐨 🐯 🦁 🐮 🐷 🐸 🐵 🐔 🐧 🐦 🐤 🐣 🐥 🦆 🦅 🦉 🦇 🐺 🐗 🐴 🦄 🐝 🐛 🦋 🐌 🐞 🐜 🦟 🦗 🕷️ 🦂 🐢 🐍 🦎 🦖 🦕 🐙 🦑 🦐 🦞 🦀 🐡 🐠 🐟 🐬 🐳 🐋 🦈 🐊 🐅 🐆 🦓 🦍 🦧 🐘 🦛 🦏 🐪 🐫 🦒 🦘'.split(/\s+/)
-  },
-  {
-    key: 'food', label: '食物',
-    emojis: '🍏 🍎 🍐 🍊 🍋 🍌 🍉 🍇 🍓 🫐 🍈 🍒 🍑 🥭 🍍 🥥 🥝 🍅 🍆 🥑 🥦 🥬 🥒 🌶️ 🫑 🌽 🥕 🫒 🧄 🧅 🥔 🍠 🥐 🥯 🍞 🥖 🥨 🧀 🥚 🍳 🧈 🥞 🧇 🥓 🥩 🍗 🍖 🦴 🌭 🍔 🍟 🍕 🥪 🥙 🧆 🌮 🌯 🫔 🥗 🥘 🫕 🥫 🍝 🍜 🍲 🍛 🍣'.split(/\s+/)
-  },
-  {
-    key: 'object', label: '物品',
-    emojis: '⌚ 📱 💻 ⌨️ 🖥️ 🖨️ 🖱️ 🕹️ 💾 💿 📀 📷 📸 🎥 📹 🎞️ 📽️ 🎬 📺 📡 📻 🎙️ 🎚️ 🎛️ ⏱️ ⏲️ ⏰ 🕰️ ⌛ ⏳ 🔋 🔌 💡 🔦 🕯️ 🪔 🧯 🛢️ 💸 💵 💴 💶 💷 🪙 💰 💳 💎 ⚖️ 🪜 🧰 🪛 🔧 🔨 ⚒️ 🛠️ ⛏️ 🪚 🔩 ⚙️ 🪤 ⛓️ 🧲 🔫 💣 🧨'.split(/\s+/)
-  },
-  {
-    key: 'symbol', label: '符号',
-    emojis: '❤️ 🧡 💛 💚 💙 💜 🖤 🤍 🤎 💔 ❣️ 💕 💞 💓 💗 💖 💘 💝 💟 ☮️ ✝️ ☪️ 🕉️ ☸️ ✡️ 🔯 🕎 ☯️ ☦️ 🛐 ⛎ ♈ ♉ ♊ ♋ ♌ ♍ ♎ ♏ ♐ ♑ ♒ ♓ 🆔 ⚛️ 🉑 ☢️ ☣️ 📴 📳 🈶 🈚 🈸 🈺 🈷️ ✴️ 🆚 💮 🉐 ㊙️ ㊗️ 🈴 🈵 🈹 🈲 🅰️ 🅱️ 🆎 🆑 🅾️ 🆘 ❌ ⭕ 🛑 ⛔ 📛 🚫 💯 💢 ♨️'.split(/\s+/)
-  }
-];
+// 图片：从相册添加表情包入口（线稿，描边 1.5px）
+registerIcon('image', 'M21 19V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2z M8.5 11a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z M21 15l-5-5L5 21');
+// 链接：从图片链接添加表情包
+registerIcon('link', 'M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71 M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71');
 
-let _emojiPanelEl = null;       // 当前展开的表情面板元素
-let _emojiActiveCategory = 'face';
+// 注入表情包面板样式（仅注入一次，全部走 CSS 变量）
+injectStyle('chat-sticker-panel-style', `
+  .chat-sticker-panel{
+    max-height:0; overflow:hidden;
+    background:var(--bg-primary);
+    border-top:1px solid color-mix(in srgb, var(--text-hint) 16%, transparent);
+    transition:max-height 320ms ease;
+    display:flex; flex-direction:column;
+    flex-shrink:0;
+  }
+  .chat-sticker-panel.show{ max-height:40vh; }
+  .chat-sticker-panel-inner{
+    height:40vh;
+    display:flex; flex-direction:column;
+    transform:translateY(100%);
+    opacity:0;
+    transition:transform 320ms cubic-bezier(0.34, 1.56, 0.64, 1), opacity 220ms ease;
+    background:var(--bg-surface);
+    border-top-left-radius:var(--radius-xl);
+    border-top-right-radius:var(--radius-xl);
+  }
+  .chat-sticker-panel.show .chat-sticker-panel-inner{
+    transform:translateY(0);
+    opacity:1;
+  }
+  /* tab 栏 */
+  .chat-sticker-tabs{
+    display:flex; flex-shrink:0;
+    border-bottom:1px solid color-mix(in srgb, var(--text-hint) 14%, transparent);
+    background:var(--bg-surface);
+    border-top-left-radius:var(--radius-xl);
+    border-top-right-radius:var(--radius-xl);
+  }
+  .chat-sticker-tab{
+    flex:1; padding:12px 0; border:none; cursor:pointer;
+    background:transparent; color:var(--text-secondary);
+    font-size:var(--font-size-base); font-family:inherit;
+    position:relative; transition:color var(--motion);
+  }
+  .chat-sticker-tab:active{ transform:scale(var(--press-scale)); }
+  .chat-sticker-tab.active{ color:var(--accent); font-weight:600; }
+  .chat-sticker-tab.active::after{
+    content:''; position:absolute; left:50%; bottom:0;
+    width:28px; height:3px; border-radius:2px;
+    background:var(--accent);
+    transform:translateX(-50%);
+  }
+  /* 内容区 */
+  .chat-sticker-content{
+    flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch;
+    padding:12px;
+  }
+  /* 收藏表情网格：4 列 */
+  .chat-sticker-grid{
+    display:grid;
+    grid-template-columns:repeat(4, 1fr);
+    gap:8px;
+  }
+  .chat-sticker-item{
+    aspect-ratio:1; padding:0; border:none; cursor:pointer;
+    background:color-mix(in srgb, var(--bg-secondary) 50%, transparent);
+    border-radius:var(--radius-md);
+    overflow:hidden;
+    transition:transform var(--motion), background var(--motion);
+    -webkit-tap-highlight-color:transparent;
+  }
+  .chat-sticker-item:active{ transform:scale(0.97); }
+  .chat-sticker-item.long-press{
+    background:color-mix(in srgb, var(--accent-light) 60%, transparent);
+  }
+  .chat-sticker-item img{
+    width:100%; height:100%;
+    object-fit:contain;
+    display:block;
+    pointer-events:none;
+    -webkit-user-drag:none;
+  }
+  /* 空状态 */
+  .chat-sticker-empty{
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:14px; padding:32px 16px; min-height:200px;
+    color:var(--text-hint);
+  }
+  .chat-sticker-empty-icon{
+    width:96px; height:96px;
+    color:var(--text-hint);
+    opacity:0.6;
+  }
+  .chat-sticker-empty-icon svg{
+    width:100%; height:100%;
+    stroke:currentColor; stroke-width:1.5;
+    stroke-linecap:round; stroke-linejoin:round;
+    fill:none;
+  }
+  .chat-sticker-empty-text{
+    font-size:var(--font-size-small);
+    color:var(--text-hint);
+    text-align:center;
+  }
+  /* 添加表情 tab */
+  .chat-sticker-add{
+    display:flex; flex-direction:column; gap:18px;
+    padding:8px 4px;
+  }
+  .chat-sticker-add-btn{
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:12px; padding:28px 16px;
+    border:1.5px dashed color-mix(in srgb, var(--text-hint) 35%, transparent);
+    border-radius:var(--radius-lg);
+    background:transparent; cursor:pointer;
+    color:var(--text-secondary);
+    transition:var(--motion);
+  }
+  .chat-sticker-add-btn:active{
+    transform:scale(0.98);
+    border-color:var(--accent);
+    color:var(--accent);
+    background:color-mix(in srgb, var(--accent-light) 30%, transparent);
+  }
+  .chat-sticker-add-btn-icon{
+    width:48px; height:48px;
+    display:flex; align-items:center; justify-content:center;
+    color:var(--accent);
+  }
+  .chat-sticker-add-btn-label{
+    font-size:var(--font-size-base);
+    color:var(--text-primary);
+  }
+  /* 链接添加表单 */
+  .chat-sticker-url-form{
+    display:flex; gap:8px; align-items:stretch;
+  }
+  .chat-sticker-url-input{
+    flex:1; padding:10px 12px;
+    border:1px solid color-mix(in srgb, var(--text-hint) 25%, transparent);
+    border-radius:var(--radius-md);
+    background:var(--bg-secondary);
+    color:var(--text-primary);
+    font-size:var(--font-size-small); font-family:inherit;
+    outline:none;
+    transition:border-color var(--motion);
+  }
+  .chat-sticker-url-input:focus{ border-color:var(--accent); }
+  .chat-sticker-url-input::placeholder{ color:var(--text-hint); }
+  .chat-sticker-url-btn{
+    flex-shrink:0; padding:10px 16px;
+    border:none; cursor:pointer;
+    border-radius:var(--radius-md);
+    background:var(--accent); color:var(--bubble-user-text);
+    font-size:var(--font-size-small); font-weight:500; font-family:inherit;
+    display:flex; align-items:center; gap:4px;
+    transition:var(--motion);
+  }
+  .chat-sticker-url-btn:active{ transform:scale(var(--press-scale)); }
+  .chat-sticker-url-btn:disabled{ opacity:0.5; cursor:not-allowed; }
+  @media (prefers-reduced-motion:reduce){
+    .chat-sticker-panel, .chat-sticker-panel-inner, .chat-sticker-tab,
+    .chat-sticker-item, .chat-sticker-add-btn{
+      animation-duration:0.01ms!important; transition-duration:0.01ms!important;
+    }
+  }
+`);
+
+let _stickerPanelEl = null;            // 当前展开的表情包面板元素
+let _stickerActiveTab = 'favorites';   // 当前激活的 tab：'favorites' | 'add'
 
 /**
- * 打开 / 关闭表情面板。面板挂在输入区上方，点击表情直接插入输入框。
+ * 打开 / 关闭表情包面板。面板挂在输入区上方，点击表情直接发送。
+ * 导出签名保持兼容（detail-view.js 调用）。
  * @returns {boolean} 打开后的状态：true=已展开，false=已收起
  */
 export function toggleEmojiPanel() {
   const state = getState();
   if (!state.containerEl) return false;
   // 已展开则收起
-  if (_emojiPanelEl && _emojiPanelEl.isConnected) {
+  if (_stickerPanelEl && _stickerPanelEl.isConnected) {
     closeEmojiPanel();
     return false;
   }
   // 收起语音模式（如果开着），避免冲突
   try { closeVoiceMode(); } catch (e) {}
+  // 异步打开（先关加号面板，避免重叠）
   openEmojiPanel();
   return true;
 }
 
-/** 展开表情面板 */
-function openEmojiPanel() {
+/** 展开表情包面板（异步：先关加号面板，再渲染） */
+async function openEmojiPanel() {
   const state = getState();
   const inputBar = state.containerEl?.querySelector('.chat-input-bar');
   if (!inputBar) return;
+
+  // 与加号面板互斥：动态 import detail-view.js 调用 closeInputPlusMenu（如果有），
+  // 没有就退而求其次关掉栈顶 sheet（加号面板是 showBottomSheet 创建的）
+  try {
+    const mod = await import('./detail-view.js');
+    if (typeof mod.closeInputPlusMenu === 'function') {
+      mod.closeInputPlusMenu();
+    }
+  } catch (e) {}
+
   const panel = document.createElement('div');
-  panel.className = 'chat-emoji-panel';
+  panel.className = 'chat-sticker-panel';
   panel.innerHTML = `
-    <div class="chat-emoji-tabs" role="tablist"></div>
-    <div class="chat-emoji-grid" id="chat-emoji-grid"></div>
+    <div class="chat-sticker-panel-inner">
+      <div class="chat-sticker-tabs" role="tablist"></div>
+      <div class="chat-sticker-content" id="chat-sticker-content"></div>
+    </div>
   `;
   // 插在 quote-preview 之后、input-row 之前
   const quotePreview = inputBar.querySelector('#chat-quote-preview');
@@ -106,86 +259,412 @@ function openEmojiPanel() {
   } else {
     inputBar.prepend(panel);
   }
-  _emojiPanelEl = panel;
+  _stickerPanelEl = panel;
 
-  // 渲染分类标签
-  const tabsEl = panel.querySelector('.chat-emoji-tabs');
-  tabsEl.innerHTML = EMOJI_CATEGORIES.map((c) => `
-    <button class="chat-emoji-tab ${c.key === _emojiActiveCategory ? 'active' : ''}" data-key="${c.key}" role="tab" aria-selected="${c.key === _emojiActiveCategory}">
-      ${escapeHTML(c.label)}
-    </button>
-  `).join('');
-  tabsEl.querySelectorAll('.chat-emoji-tab').forEach((tab) => {
-    tab.addEventListener('click', () => {
-      _emojiActiveCategory = tab.dataset.key;
-      tabsEl.querySelectorAll('.chat-emoji-tab').forEach((t) => {
-        t.classList.toggle('active', t === tab);
-        t.setAttribute('aria-selected', t === tab);
-      });
-      renderEmojiGrid();
-    });
-  });
-
-  renderEmojiGrid();
+  renderStickerTabs();
+  renderStickerContent();
   // 入场动画
   requestAnimationFrame(() => panel.classList.add('show'));
   // 点击表情面板内部不收起；点击外部收起
   setTimeout(() => {
-    document.addEventListener('click', _onEmojiOutsideClick, true);
+    document.addEventListener('click', _onStickerOutsideClick, true);
   }, 0);
 }
 
-/** 渲染当前分类的表情网格 */
-function renderEmojiGrid() {
-  if (!_emojiPanelEl || !_emojiPanelEl.isConnected) return;
-  const gridEl = _emojiPanelEl.querySelector('#chat-emoji-grid');
-  if (!gridEl) return;
-  const cat = EMOJI_CATEGORIES.find((c) => c.key === _emojiActiveCategory) || EMOJI_CATEGORIES[0];
-  gridEl.innerHTML = cat.emojis.map((e) => `
-    <button class="chat-emoji-item" type="button" data-emoji="${escapeAttr(e)}" aria-label="插入表情 ${escapeAttr(e)}">${e}</button>
+/** 渲染 tab 栏（收藏表情 / 添加表情） */
+function renderStickerTabs() {
+  if (!_stickerPanelEl || !_stickerPanelEl.isConnected) return;
+  const tabsEl = _stickerPanelEl.querySelector('.chat-sticker-tabs');
+  if (!tabsEl) return;
+  const tabs = [
+    { key: 'favorites', label: '收藏表情' },
+    { key: 'add', label: '添加表情' }
+  ];
+  tabsEl.innerHTML = tabs.map((t) => `
+    <button class="chat-sticker-tab ${t.key === _stickerActiveTab ? 'active' : ''}" data-key="${t.key}" role="tab" aria-selected="${t.key === _stickerActiveTab}">
+      ${escapeHTML(t.label)}
+    </button>
   `).join('');
-  gridEl.querySelectorAll('.chat-emoji-item').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const emoji = btn.dataset.emoji || '';
-      insertTextToInput(emoji);
-      // 轻微反馈：点击后短暂高亮
-      btn.classList.add('picked');
-      setTimeout(() => btn.classList.remove('picked'), 200);
+  tabsEl.querySelectorAll('.chat-sticker-tab').forEach((tab) => {
+    tab.addEventListener('click', () => {
+      _stickerActiveTab = tab.dataset.key;
+      tabsEl.querySelectorAll('.chat-sticker-tab').forEach((t) => {
+        t.classList.toggle('active', t === tab);
+        t.setAttribute('aria-selected', t === tab);
+      });
+      renderStickerContent();
     });
   });
 }
 
-/** 把文本插入到输入框光标处 */
-function insertTextToInput(text) {
-  const state = getState();
-  if (!state.inputEl) return;
-  const ta = state.inputEl;
-  const start = ta.selectionStart ?? ta.value.length;
-  const end = ta.selectionEnd ?? ta.value.length;
-  ta.value = ta.value.slice(0, start) + text + ta.value.slice(end);
-  const pos = start + text.length;
-  ta.setSelectionRange(pos, pos);
-  // 触发 input 事件，让自适应高度 + 草稿保存生效
-  ta.dispatchEvent(new Event('input', { bubbles: true }));
-  try { ta.focus(); } catch (e) {}
+/** 渲染当前 tab 的内容区 */
+function renderStickerContent() {
+  if (!_stickerPanelEl || !_stickerPanelEl.isConnected) return;
+  if (_stickerActiveTab === 'favorites') {
+    renderFavoritesTab();
+  } else {
+    renderAddTab();
+  }
 }
 
-/** 关闭表情面板 */
-export function closeEmojiPanel() {
-  if (_emojiPanelEl && _emojiPanelEl.isConnected) {
-    _emojiPanelEl.classList.remove('show');
-    const el = _emojiPanelEl;
-    setTimeout(() => el.remove(), 220);
+/** 渲染收藏表情 tab：从 STORES.stickers 读取并展示 4 列网格 */
+async function renderFavoritesTab() {
+  const contentEl = _stickerPanelEl?.querySelector('#chat-sticker-content');
+  if (!contentEl) return;
+  let stickers = [];
+  try {
+    stickers = await getAllDB(STORES.stickers);
+    // 按 createdAt 倒序，最新的排前面
+    stickers.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+  } catch (e) {
+    console.warn('[chat] 表情包读取失败', e);
   }
-  _emojiPanelEl = null;
-  document.removeEventListener('click', _onEmojiOutsideClick, true);
+  if (!stickers.length) {
+    // 空状态：线条风 SVG 插画 + 文案
+    contentEl.innerHTML = `
+      <div class="chat-sticker-empty">
+        <div class="chat-sticker-empty-icon" aria-hidden="true">
+          <svg viewBox="0 0 100 100">
+            <rect x="18" y="22" width="64" height="54" rx="6"/>
+            <path d="M18 62 L34 46 L46 58 L60 42 L82 64"/>
+            <circle cx="68" cy="38" r="4"/>
+            <path d="M42 90 L58 90"/>
+            <path d="M50 90 L50 76"/>
+          </svg>
+        </div>
+        <div class="chat-sticker-empty-text">还没有表情包呢，去添加一些吧~</div>
+      </div>
+    `;
+    return;
+  }
+  const grid = document.createElement('div');
+  grid.className = 'chat-sticker-grid';
+  grid.innerHTML = stickers.map((s) => `
+    <button class="chat-sticker-item" type="button" data-id="${escapeAttr(s.id)}" aria-label="发送表情包">
+      <img src="${escapeAttr(s.dataUrl || '')}" alt="表情" loading="lazy">
+    </button>
+  `).join('');
+  contentEl.innerHTML = '';
+  contentEl.appendChild(grid);
+  // 绑定点击 / 长按
+  const map = new Map(stickers.map((s) => [s.id, s]));
+  grid.querySelectorAll('.chat-sticker-item').forEach((btn) => {
+    const sticker = map.get(btn.dataset.id);
+    if (!sticker) return;
+    wireStickerItemEvents(btn, sticker);
+  });
+}
+
+/** 渲染添加表情 tab：相册按钮 + 链接表单 */
+function renderAddTab() {
+  const contentEl = _stickerPanelEl?.querySelector('#chat-sticker-content');
+  if (!contentEl) return;
+  contentEl.innerHTML = `
+    <div class="chat-sticker-add">
+      <button class="chat-sticker-add-btn" type="button" id="chat-sticker-album-btn">
+        <span class="chat-sticker-add-btn-icon">${createIcon('image', 36).outerHTML}</span>
+        <span class="chat-sticker-add-btn-label">从相册添加</span>
+      </button>
+      <div class="chat-sticker-url-form">
+        <input class="chat-sticker-url-input" type="url" id="chat-sticker-url-input" placeholder="粘贴图片链接（图床地址）" autocomplete="off">
+        <button class="chat-sticker-url-btn" type="button" id="chat-sticker-url-btn">
+          ${createIcon('link', 16).outerHTML}<span>添加</span>
+        </button>
+      </div>
+    </div>
+  `;
+  // 相册添加
+  const albumBtn = contentEl.querySelector('#chat-sticker-album-btn');
+  if (albumBtn) {
+    albumBtn.addEventListener('click', () => { addStickerFromAlbum(); });
+  }
+  // 链接添加
+  const urlBtn = contentEl.querySelector('#chat-sticker-url-btn');
+  const urlInput = contentEl.querySelector('#chat-sticker-url-input');
+  if (urlBtn && urlInput) {
+    const submit = () => {
+      const url = (urlInput.value || '').trim();
+      if (!url) {
+        showToast('先把链接填上嘛', 'default', 1200);
+        return;
+      }
+      urlBtn.disabled = true;
+      addStickerFromUrl(url).finally(() => { urlBtn.disabled = false; });
+    };
+    urlBtn.addEventListener('click', submit);
+    urlInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); submit(); }
+    });
+  }
+}
+
+/** 从相册添加表情包：选图 → 压缩 → 入库 → 切回收藏 tab */
+async function addStickerFromAlbum() {
+  let file;
+  try {
+    file = await pickImageFile('image/*');
+  } catch (e) {
+    return; // 用户取消，不报错
+  }
+  // 文件大小预检（5MB 上限）
+  if (file.size > 5 * 1024 * 1024) {
+    showToast('图片太大啦，换一张小一点的试试~', 'default', 1600);
+    return;
+  }
+  let dataUrl;
+  try {
+    // 表情包压缩：256 宽 + 0.8 质量，保持清晰但不太大
+    const { compressImage } = await import('../../core/storage.js');
+    dataUrl = await compressImage(file, { maxWidth: 256, maxHeight: 256, quality: 0.8 });
+  } catch (e) {
+    console.warn('[chat] 表情压缩失败', e);
+    showToast('图片处理不出来嘛', 'error');
+    return;
+  }
+  if (!dataUrl) {
+    showToast('图片太大啦，换一张小一点的试试~', 'default', 1600);
+    return;
+  }
+  // 压缩后体积兜底（base64 长度 ≈ 原始字节 × 1.37）
+  const approxBytes = Math.round(dataUrl.length * 0.75);
+  if (approxBytes > 500 * 1024) {
+    showToast('图片太大啦，换一张小一点的试试~', 'default', 1600);
+    return;
+  }
+  const sticker = {
+    id: generateId('stk'),
+    dataUrl,
+    source: 'album',
+    createdAt: getNow()
+  };
+  try {
+    await setDB(STORES.stickers, sticker.id, sticker);
+  } catch (e) {
+    console.warn('[chat] 表情保存失败', e);
+    showToast('保存失败了，再试一下嘛', 'error');
+    return;
+  }
+  showToast('加好啦~', 'success', 1200);
+  // 切回收藏 tab 并刷新
+  _stickerActiveTab = 'favorites';
+  renderStickerTabs();
+  renderStickerContent();
+}
+
+/** 从链接添加表情包：fetch → 转 dataUrl → 入库 → 切回收藏 tab */
+async function addStickerFromUrl(url) {
+  if (!url) return;
+  if (!/^https?:\/\//i.test(url)) {
+    showToast('链接不对嘛，要 http(s) 开头的', 'default', 1400);
+    return;
+  }
+  let dataUrl;
+  try {
+    const resp = await fetch(url, { mode: 'cors' });
+    if (!resp.ok) throw new Error('fetch 失败');
+    const blob = await resp.blob();
+    if (!blob.type || !blob.type.startsWith('image/')) {
+      showToast('这个链接不是图片嘛', 'default', 1400);
+      return;
+    }
+    if (blob.size > 5 * 1024 * 1024) {
+      showToast('图片太大啦，换一张小一点的试试~', 'default', 1600);
+      return;
+    }
+    const { compressImage } = await import('../../core/storage.js');
+    dataUrl = await compressImage(blob, { maxWidth: 256, maxHeight: 256, quality: 0.8 });
+  } catch (e) {
+    console.warn('[chat] 链接图片获取失败', e);
+    showToast('图片拉不到嘛，换个链接试试', 'error');
+    return;
+  }
+  if (!dataUrl) {
+    showToast('图片太大啦，换一张小一点的试试~', 'default', 1600);
+    return;
+  }
+  const sticker = {
+    id: generateId('stk'),
+    dataUrl,
+    source: 'url',
+    sourceUrl: url,
+    createdAt: getNow()
+  };
+  try {
+    await setDB(STORES.stickers, sticker.id, sticker);
+  } catch (e) {
+    console.warn('[chat] 表情保存失败', e);
+    showToast('保存失败了，再试一下嘛', 'error');
+    return;
+  }
+  // 清空链接输入框
+  const urlInput = _stickerPanelEl?.querySelector('#chat-sticker-url-input');
+  if (urlInput) urlInput.value = '';
+  showToast('加好啦~', 'success', 1200);
+  _stickerActiveTab = 'favorites';
+  renderStickerTabs();
+  renderStickerContent();
+}
+
+/** 长按删除表情包：弹 showConfirm 确认后从 STORES.stickers 删除并刷新 */
+function deleteSticker(sticker) {
+  if (!sticker || !sticker.id) return;
+  showConfirm({
+    title: '删掉这个表情包吗？',
+    body: '删掉后就不能再发了哦',
+    confirmText: '删掉',
+    cancelText: '不要',
+    danger: true,
+    onConfirm: async () => {
+      try {
+        await deleteDB(STORES.stickers, sticker.id);
+      } catch (e) {
+        console.warn('[chat] 表情删除失败', e);
+        showToast('没删掉，再试一下嘛', 'error');
+        return;
+      }
+      renderStickerContent();
+    }
+  });
+}
+
+/**
+ * 发送表情包消息：写 DB + 渲染 + 更新会话 + 触发 AI 回复。
+ * 因为 extras.js 不能静态 import sending.js（会循环依赖），用动态 import。
+ * 消息体：{ type:'sticker', mediaUrl:dataUrl, content:'[表情]' }
+ * @param {object} sticker 收藏表情包对象 { id, dataUrl, source, createdAt }
+ */
+async function sendSticker(sticker) {
+  const state = getState();
+  if (state.isReplying) {
+    showToast('等她回完再发表情嘛', 'default', 1400);
+    return;
+  }
+  const session = state.currentSession;
+  if (!session || !sticker || !sticker.dataUrl) return;
+
+  const userMsg = {
+    id: generateId('msg'),
+    sessionId: session.id,
+    characterId: session.characterId,
+    role: 'user',
+    type: 'sticker',
+    mediaUrl: sticker.dataUrl,
+    content: '[表情]',
+    status: 'sent',
+    timestamp: getNow()
+  };
+
+  // 写 DB
+  try {
+    await setDB(STORES.messages, userMsg.id, userMsg);
+  } catch (e) {
+    console.warn('[chat] 保存表情消息失败', e);
+    showToast('表情没发出去，再试一下嘛', 'error');
+    return;
+  }
+
+  // 渲染消息（动态 import detail-view.js，避免循环依赖）
+  try {
+    const dv = await import('./detail-view.js');
+    if (typeof dv.appendMessageEl === 'function') dv.appendMessageEl(userMsg);
+    if (typeof dv.updateChatHeader === 'function') dv.updateChatHeader(userMsg.timestamp);
+    if (typeof dv.scrollToBottom === 'function') dv.scrollToBottom();
+  } catch (e) {
+    console.warn('[chat] 渲染表情消息失败', e);
+  }
+
+  // 更新会话 lastMessage / lastAt（复刻 sending.js 的 bumpSession 逻辑）
+  try {
+    const cur = await getDB(STORES.chatSessions, session.id) || session;
+    const nextUnread = (state.view === 'chat' && state.currentSessionId === session.id) ? 0 : (cur.unread || 0);
+    await setDB(STORES.chatSessions, session.id, {
+      ...cur,
+      lastMessage: '[表情]',
+      lastAt: userMsg.timestamp,
+      unread: nextUnread
+    });
+    if (state.currentSessionId === session.id) {
+      state.currentSession = { ...cur, lastMessage: '[表情]', lastAt: userMsg.timestamp, unread: nextUnread };
+    }
+  } catch (e) {
+    console.warn('[chat] 更新会话失败', e);
+  }
+
+  // 通知其他模块
+  bus.emit('chat:user-message', {
+    characterId: session.characterId,
+    sessionId: session.id,
+    preview: '[表情]'
+  });
+
+  // 触发 AI 回复：sending.js 的 triggerAIReply 是私有的，
+  // 但 retrySendMessage 内部会调用 triggerAIReply，借道它来触发。
+  try {
+    const sending = await import('./sending.js');
+    if (typeof sending.triggerAIReply === 'function') {
+      // 优先用直接导出的 triggerAIReply（已为表情面板新增导出）
+      await sending.triggerAIReply(userMsg);
+    } else if (typeof sending.retrySendMessage === 'function') {
+      await sending.retrySendMessage(userMsg);
+    }
+  } catch (e) {
+    console.warn('[chat] 触发 AI 回复失败', e);
+  }
+
+  // 发送后自动关闭表情面板
+  closeEmojiPanel();
+}
+
+/** 绑定表情包项的点击 / 长按事件：短按发送，长按删除 */
+function wireStickerItemEvents(btn, sticker) {
+  let pressTimer = null;
+  let longPressed = false;
+
+  const start = () => {
+    longPressed = false;
+    pressTimer = setTimeout(() => {
+      longPressed = true;
+      btn.classList.add('long-press');
+      // 震动反馈（如果支持）
+      if (navigator.vibrate) { try { navigator.vibrate(30); } catch (e) {} }
+      // 长按 → 删除
+      deleteSticker(sticker);
+    }, 500);
+  };
+
+  const cancel = () => {
+    if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
+    btn.classList.remove('long-press');
+  };
+
+  btn.addEventListener('pointerdown', start);
+  btn.addEventListener('pointerup', (e) => {
+    cancel();
+    // 短按 → 发送
+    if (!longPressed) {
+      e.preventDefault();
+      sendSticker(sticker);
+    }
+  });
+  btn.addEventListener('pointerleave', cancel);
+  btn.addEventListener('pointercancel', cancel);
+}
+
+/** 关闭表情包面板 */
+export function closeEmojiPanel() {
+  if (_stickerPanelEl && _stickerPanelEl.isConnected) {
+    _stickerPanelEl.classList.remove('show');
+    const el = _stickerPanelEl;
+    setTimeout(() => el.remove(), 320);
+  }
+  _stickerPanelEl = null;
+  document.removeEventListener('click', _onStickerOutsideClick, true);
 }
 
 /** 点击表情面板外部时收起 */
-function _onEmojiOutsideClick(e) {
-  if (!_emojiPanelEl) return;
-  // 点击在面板内或表情按钮上，不收起
-  if (_emojiPanelEl.contains(e.target)) return;
+function _onStickerOutsideClick(e) {
+  if (!_stickerPanelEl) return;
+  if (_stickerPanelEl.contains(e.target)) return;
   const state = getState();
   const emojiBtn = state.containerEl?.querySelector('#chat-emoji-btn');
   if (emojiBtn && emojiBtn.contains(e.target)) return;

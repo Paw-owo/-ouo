@@ -6,12 +6,27 @@
 
 import { KEYS, STORES } from '../../core/storage-keys.js';
 import { getData, setData, getDB, setDB, deleteDB, getAllDB, generateId, getNow } from '../../core/storage.js';
-import { showToast, showConfirm, showBottomSheet, createIcon } from '../../core/ui.js';
+import { showToast, showConfirm, showBottomSheet, createIcon, registerIcon } from '../../core/ui.js';
 import bus from '../../core/events.js';
-import { formatRelative, debounce, isUsableImage, cssUrl } from '../../core/util.js';
+import { formatRelative, debounce, isUsableImage, cssUrl, injectStyle } from '../../core/util.js';
 import { getState, render, enterChat, refreshSessionList } from './index.js';
 import { escapeHTML, escapeAttr, attachLongPress } from './shared-utils.js';
 import { openApp } from '../../core/router.js';
+
+// 注册群聊用到的图标
+registerIcon('users', 'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2 M9 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M23 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75');
+
+// 群聊入口 + 群头像九宫格样式
+injectStyle('app-chat-session-list-group', `
+  .chat-list-group{background:none;border:none;color:var(--text-primary);padding:6px;border-radius:var(--radius-sm);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:var(--motion)}
+  .chat-list-group:active{transform:scale(var(--press-scale));background:color-mix(in srgb,var(--text-hint) 12%,transparent)}
+  .chat-group-mark{color:var(--accent);display:inline-flex;align-items:center;margin-right:4px;flex-shrink:0}
+  /* 群头像九宫格 */
+  .chat-list-avatar-grid{width:100%;height:100%;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:2px;padding:2px;background:color-mix(in srgb,var(--text-hint) 12%,transparent);border-radius:var(--radius-sm);overflow:hidden}
+  .chat-list-avatar-cell{background-size:cover;background-position:center;background-color:color-mix(in srgb,var(--text-hint) 18%,transparent);display:flex;align-items:center;justify-content:center;color:var(--text-hint);min-width:0;min-height:0}
+  .chat-list-avatar-cell-empty{background:color-mix(in srgb,var(--text-hint) 18%,transparent)}
+  .chat-list-avatar-group{background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--accent-dark)}
+`);
 
 // ════════════════════════════════════════
 // 列表页渲染
@@ -30,8 +45,9 @@ export async function renderSessionListPage(keyword = '') {
   container.innerHTML = `
     <div class="app-header">
       <button class="app-back" id="chat-list-back" aria-label="返回桌面">${createIcon('back', 20).outerHTML}</button>
-      <div class="app-header-title">消息</div>
+      <div class="app-app-title">消息</div>
       <button class="app-header-gear" id="chat-list-settings" aria-label="聊天设置">${createIcon('settings', 18).outerHTML}</button>
+      <button class="chat-list-group" id="chat-list-group" aria-label="发起群聊">${createIcon('users', 20).outerHTML}</button>
       <button class="chat-list-add" id="chat-list-add" aria-label="新建聊天">${createIcon('plus', 20).outerHTML}</button>
     </div>
     <div class="chat-list-body" id="chat-list-body">
@@ -46,8 +62,31 @@ export async function renderSessionListPage(keyword = '') {
   // 绑事件
   container.querySelector('#chat-list-back').addEventListener('click', () => bus.emit('router:home'));
   container.querySelector('#chat-list-add').addEventListener('click', openNewChatSheet);
+  // 发起群聊：动态 import 建群流程
+  container.querySelector('#chat-list-group').addEventListener('click', async () => {
+    try {
+      const { openCreateGroupSheet } = await import('./group/create-group.js');
+      openCreateGroupSheet();
+    } catch (e) {
+      console.warn('[chat] 建群入口加载失败', e);
+      showToast('建群入口打不开呢', 'error');
+    }
+  });
   // 齿轮跳到设置「AI 与陪伴」分组
-  container.querySelector('#chat-list-settings').addEventListener('click', () => openApp('settings', { deepLink: { tab: 'ai' } }));
+  container.querySelector('#chat-list-settings').addEventListener('click', async () => {
+    // 独立消息设置页（全局默认偏好）：不跳全局设置 APP
+    try {
+      const mod = await import('./chat-settings-view.js');
+      if (typeof mod.openGlobalMessageSettings === 'function') {
+        mod.openGlobalMessageSettings();
+      } else {
+        showToast('设置页还在准备中，稍等一下嘛', 'default');
+      }
+    } catch (e) {
+      console.warn('[chat] 加载消息设置页失败', e);
+      showToast('设置页打不开呢，再试一下嘛', 'error');
+    }
+  });
 
   const searchInput = container.querySelector('#chat-search');
   const onSearch = debounce((e) => {
@@ -99,6 +138,16 @@ export async function renderSessionListItems(keyword = '') {
     if (unmatched.length) {
       let allMessages = [];
       try { allMessages = await getAllDB(STORES.messages); } catch (e) {}
+      // 群消息在另一个 store，单独读一份用于搜索
+      const matchedGroupIds = new Set();
+      try {
+        const groupMsgs = await getAllDB(STORES.groupMessages);
+        for (const m of groupMsgs) {
+          if (m.groupId && String(m.content || '').toLowerCase().includes(kw)) {
+            matchedGroupIds.add(m.groupId);
+          }
+        }
+      } catch (e) {}
       // 按 sessionId / characterId 分组建 Map，避免对每个未命中会话全量扫描（O(会话数×消息数) -> O(消息数 + 命中会话消息数)）
       // 匹配逻辑与原一致：有 sessionId 用 sessionId，无 sessionId 才用 characterId
       const msgBySessionId = new Map();
@@ -115,6 +164,11 @@ export async function renderSessionListItems(keyword = '') {
         }
       }
       const msgMatches = unmatched.filter((s) => {
+        // 群聊：搜 STORES.groupMessages（按 groupId）
+        if (s.isGroup && s.groupId) {
+          // 群消息在另一个 store，单独匹配
+          return matchedGroupIds.has(s.groupId);
+        }
         const bySid = msgBySessionId.get(s.id) || [];
         if (bySid.some((m) => String(m.content || '').toLowerCase().includes(kw))) return true;
         const byCid = msgByCharacterId.get(s.characterId) || [];
@@ -170,7 +224,8 @@ export async function renderSessionListItems(keyword = '') {
 
 function renderSessionItem(session, character) {
   const avatarHTML = renderSessionAvatar(session, character);
-  const title = escapeHTML(session.title || character?.name || character?.nickname || '未知');
+  const isGroup = !!session.isGroup;
+  const title = escapeHTML(session.title || (isGroup ? '群聊' : (character?.name || character?.nickname || '未知')));
   const time = formatRelative(session.lastAt || session.updatedAt || session.createdAt);
   const unread = Number(session.unread || 0);
   const unreadBadge = unread > 0
@@ -178,6 +233,7 @@ function renderSessionItem(session, character) {
     : '';
   const pinnedIcon = session.pinned ? `<span class="chat-pin-mark">${createIcon('star', 14).outerHTML}</span>` : '';
   const mutedIcon = session.muted ? `<span class="chat-mute-mark">${createIcon('moon', 14).outerHTML}</span>` : '';
+  const groupIcon = isGroup ? `<span class="chat-group-mark">${createIcon('users', 14).outerHTML}</span>` : '';
 
   // 草稿优先显示：有未发送草稿时，预览位显示 [草稿] xxx，[草稿] 前缀用 accent 色，正文用 hint 色
   const draft = (session.draft || '').trim();
@@ -197,7 +253,7 @@ function renderSessionItem(session, character) {
       <div class="chat-list-avatar">${avatarHTML}</div>
       <div class="chat-list-main">
         <div class="chat-list-row1">
-          <span class="chat-list-title">${title}</span>
+          ${groupIcon}<span class="chat-list-title">${title}</span>
           ${pinnedIcon}${mutedIcon}
           <span class="chat-list-time">${escapeHTML(time)}</span>
         </div>
@@ -211,6 +267,23 @@ function renderSessionItem(session, character) {
 }
 
 function renderSessionAvatar(session, character) {
+  // 群聊头像：有群头像就显示群头像，否则用成员头像叠加（最多 4 个）
+  if (session.isGroup) {
+    if (session.avatar && isUsableImage(session.avatar)) {
+      return `<div class="chat-list-avatar-img" style="background-image:${cssUrl(session.avatar)}"></div>`;
+    }
+    const members = (session.participants || []).slice(0, 4);
+    if (members.length === 0) {
+      return `<div class="chat-list-avatar-fallback chat-list-avatar-group">${createIcon('users', 24).outerHTML}</div>`;
+    }
+    // 多头像九宫格
+    return `<div class="chat-list-avatar-grid">${members.map((p) => {
+      if (p.avatar && isUsableImage(p.avatar)) {
+        return `<div class="chat-list-avatar-cell" style="background-image:${cssUrl(p.avatar)}"></div>`;
+      }
+      return `<div class="chat-list-avatar-cell chat-list-avatar-cell-empty">${createIcon('smile', 14).outerHTML}</div>`;
+    }).join('')}</div>`;
+  }
   const av = character?.avatar;
   if (av && isUsableImage(av)) {
     return `<div class="chat-list-avatar-img" style="background-image:${cssUrl(av)}"></div>`;
@@ -304,19 +377,38 @@ async function toggleRead(session) {
 }
 
 function confirmDeleteSession(session) {
+  const isGroup = !!session.isGroup;
   showConfirm({
-    title: '删掉这个会话吗？',
-    body: '会话和里面所有消息都会一起删掉，确定嘛？',
+    title: isGroup ? '删掉这个群聊吗？' : '删掉这个会话吗？',
+    body: isGroup
+      ? '群聊和里面所有消息都会一起删掉，确定嘛？'
+      : '会话和里面所有消息都会一起删掉，确定嘛？',
     confirmText: '删掉吧',
     cancelText: '再想想',
     danger: true,
     onConfirm: async () => {
       try {
-        // 先删该会话的所有消息，再删会话本身
-        const all = await getAllDB(STORES.messages);
-        const toDelete = all.filter((m) => m.sessionId === session.id || (!m.sessionId && m.characterId === session.characterId));
-        for (const m of toDelete) {
-          try { await deleteDB(STORES.messages, m.id); } catch (e) {}
+        if (isGroup) {
+          // 群聊：删 STORES.groupMessages + 清群记忆 + 删会话
+          const allGroup = await getAllDB(STORES.groupMessages);
+          const toDelete = allGroup.filter((m) => m.groupId === session.groupId);
+          for (const m of toDelete) {
+            try { await deleteDB(STORES.groupMessages, m.id); } catch (e) {}
+          }
+          // 清群记忆（scope='group'）
+          try {
+            const { clearGroupMemories } = await import('../../core/memory.js');
+            if (session.groupId) await clearGroupMemories(session.groupId);
+          } catch (e) {}
+          // 清群配置
+          try { localStorage.removeItem(KEYS.groupConfig(session.groupId)); } catch (e) {}
+        } else {
+          // 单聊：删 STORES.messages
+          const all = await getAllDB(STORES.messages);
+          const toDelete = all.filter((m) => m.sessionId === session.id || (!m.sessionId && m.characterId === session.characterId));
+          for (const m of toDelete) {
+            try { await deleteDB(STORES.messages, m.id); } catch (e) {}
+          }
         }
         await deleteDB(STORES.chatSessions, session.id);
         showToast('删掉啦', 'default', 1200);

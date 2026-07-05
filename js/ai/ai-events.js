@@ -25,7 +25,9 @@ const EVENT_HINTS = {
   'grudge:forgiven': '我原谅主人了',
   'mood:saved': '主人记录了心情',
   'affection:changed': '好感度变了',
-  'chat:message-received': '刚收到消息'
+  'chat:message-received': '刚收到消息',
+  'chat:group-ai-message': '群里有人回我了',
+  'chat:group-user-message': '主人在群里说话了'
 };
 
 // ════════════════════════════════════════

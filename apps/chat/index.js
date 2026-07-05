@@ -1086,6 +1086,17 @@ export async function render() {
     await renderSessionListPage(state.lastSearchKeyword);
   } else if (state.view === 'chat') {
     await renderChatDetailView();
+  } else if (state.view === 'group') {
+    // 群聊视图：动态 import 避免循环依赖
+    try {
+      const { renderGroupDetailView } = await import('./group/group-detail-view.js');
+      await renderGroupDetailView();
+    } catch (e) {
+      console.warn('[chat] 群聊视图加载失败', e);
+      showToast('群聊页打不开呢', 'error');
+      state.view = 'list';
+      await render();
+    }
   }
 }
 
@@ -1109,7 +1120,7 @@ export async function enterChat(sessionId) {
     return;
   }
 
-  state.view = 'chat';
+  state.view = session.isGroup ? 'group' : 'chat';
   state.currentSessionId = sessionId;
   state.currentSession = session;
   state.currentCharacterId = session.characterId;
@@ -1120,9 +1131,11 @@ export async function enterChat(sessionId) {
     try { await setDB(STORES.chatSessions, sessionId, { ...session, unread: 0 }); } catch (e) {}
   }
 
-  // 缓存角色
+  // 缓存角色（群聊无单一角色，留 null）
   state.currentCharacter = null;
-  try { state.currentCharacter = await getDB(STORES.characters, session.characterId); } catch (e) {}
+  if (!session.isGroup && session.characterId) {
+    try { state.currentCharacter = await getDB(STORES.characters, session.characterId); } catch (e) {}
+  }
 
   await render();
 }
