@@ -288,7 +288,7 @@
   gap: 6px;
   padding: 6px 14px;
   border-radius: var(--radius-full);
-  background: var(--bg-glass);
+  background: var(--capsule-bg);
   backdrop-filter: var(--backdrop-blur);
   -webkit-backdrop-filter: var(--backdrop-blur);
   border: 1px solid var(--border-color);
@@ -557,7 +557,7 @@
   width: 60px;
   height: 60px;
   border-radius: var(--radius-lg);
-  background: var(--icon-bg);
+  background: var(--icon-tile-bg);
   position: relative;
   box-shadow:
     var(--icon-shadow-inset-top),
@@ -570,15 +570,15 @@
       0deg,
       transparent,
       transparent 17px,
-      var(--icon-grid) 17px,
-      var(--icon-grid) 17.5px
+      var(--icon-tile-pattern) 17px,
+      var(--icon-tile-pattern) 17.5px
     ),
     repeating-linear-gradient(
       90deg,
       transparent,
       transparent 17px,
-      var(--icon-grid) 17px,
-      var(--icon-grid) 17.5px
+      var(--icon-tile-pattern) 17px,
+      var(--icon-tile-pattern) 17.5px
     );
 }
 
@@ -611,7 +611,7 @@
   width: 70%;
   height: 70%;
   z-index: 1;
-  color: var(--color-primary);
+  color: var(--icon-stroke);
 }
 
 .app-grid-item .app-name {
@@ -661,7 +661,7 @@
   gap: 4px;
   padding: 8px 16px;
   border-radius: var(--radius-xl);
-  background: var(--bg-glass);
+  background: var(--dock-bg);
   backdrop-filter: var(--backdrop-blur);
   -webkit-backdrop-filter: var(--backdrop-blur);
   border: 1px solid var(--border-color);
@@ -688,15 +688,15 @@
   width: 44px;
   height: 44px;
   border-radius: var(--radius-md);
-  background: var(--icon-bg);
+  background: var(--icon-tile-bg);
   position: relative;
   box-shadow:
     var(--icon-shadow-inset-top),
     var(--icon-shadow-inset-btm),
     var(--icon-shadow-near);
   background-image:
-    repeating-linear-gradient(0deg, transparent, transparent 14px, var(--icon-grid) 14px, var(--icon-grid) 14.5px),
-    repeating-linear-gradient(90deg, transparent, transparent 14px, var(--icon-grid) 14px, var(--icon-grid) 14.5px);
+    repeating-linear-gradient(0deg, transparent, transparent 14px, var(--icon-tile-pattern) 14px, var(--icon-tile-pattern) 14.5px),
+    repeating-linear-gradient(90deg, transparent, transparent 14px, var(--icon-tile-pattern) 14px, var(--icon-tile-pattern) 14.5px);
 }
 
 .dock-item .dock-icon-chassis::before {
@@ -725,7 +725,7 @@
   width: 65%;
   height: 65%;
   z-index: 1;
-  color: var(--color-primary);
+  color: var(--icon-stroke);
 }
 
 .dock-item .dock-indicator {

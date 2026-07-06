@@ -7,33 +7,33 @@
 /* === 变量槽位（默认值仅作兜底，实际由 theme.js 写入） === */
 :root {
   /* 背景 */
-  --bg-base: #fffdf8;
-  --bg-surface: #fffbf0;
-  --bg-hover: #fff6e0;
-  --bg-glass: rgba(255, 253, 248, 0.88);
-  --bg-mask: rgba(80, 70, 55, 0.25);
+  --bg-base: #F9F8F4;
+  --bg-surface: #F3F1EC;
+  --bg-hover: #EDEAE3;
+  --bg-glass: rgba(249, 248, 244, 0.88);
+  --bg-mask: rgba(80, 65, 60, 0.25);
 
   /* 主色系 */
-  --color-primary: #d8d0a0;
-  --color-primary-light: #e8e0b8;
-  --color-primary-ultralight: #fdf8e8;
-  --color-primary-deep: #b8b080;
+  --color-primary: #CBB4A7;
+  --color-primary-light: #DDD2C8;
+  --color-primary-ultralight: #F5EFE8;
+  --color-primary-deep: #B5A095;
 
   /* 辅色 */
-  --color-accent: #e8e0b8;
-  --color-accent-light: #fdf8e8;
+  --color-accent: #FEF6DF;
+  --color-accent-light: #FFFBF0;
 
   /* 文字 */
-  --text-primary: #6b5e4f;
-  --text-secondary: #9b8e78;
-  --text-placeholder: #bfb4a0;
+  --text-primary: #5B3F41;
+  --text-secondary: #8B7A7B;
+  --text-placeholder: #BBAEAA;
 
   /* 阴影 */
-  --shadow-soft: 0 2px 8px rgba(180, 170, 140, 0.10);
-  --shadow-card: 0 4px 16px rgba(180, 170, 140, 0.12);
-  --shadow-float: 0 8px 24px rgba(180, 170, 140, 0.14);
-  --shadow-neu-out: 4px 4px 10px rgba(180, 170, 140, 0.10), -4px -4px 10px rgba(255, 253, 248, 0.9);
-  --shadow-neu-in: inset 2px 2px 6px rgba(180, 170, 140, 0.08), inset -2px -2px 6px rgba(255, 253, 248, 0.8);
+  --shadow-soft: 0 2px 8px rgba(180, 158, 145, 0.10);
+  --shadow-card: 0 4px 16px rgba(180, 158, 145, 0.12);
+  --shadow-float: 0 8px 24px rgba(180, 158, 145, 0.15);
+  --shadow-neu-out: 4px 4px 10px rgba(180, 158, 145, 0.10), -4px -4px 10px rgba(249, 248, 244, 0.9);
+  --shadow-neu-in: inset 2px 2px 6px rgba(180, 158, 145, 0.08), inset -2px -2px 6px rgba(249, 248, 244, 0.8);
 
   /* 圆角 */
   --radius-sm: 8px;
@@ -51,26 +51,27 @@
   --duration-normal: 280ms;
 
   /* 功能色 */
-  --color-success: #8cb88a;
-  --color-warning: #e0d8a0;
-  --color-error: #e0a8a8;
-  --color-info: #a8bcd8;
+  --color-success: #8CB88A;
+  --color-warning: #E0D8A0;
+  --color-error: #E0A8A8;
+  --color-info: #A8BCD8;
 
   /* 图标 / Stitch布料质感 */
-  --icon-bg: #fdf8e8;
-  --icon-grid: #efe8c8;
-  --icon-stitch: #d8d0a0;
-  --icon-inner: #fffefc;
-  --icon-shadow: 0 3px 10px rgba(180, 170, 140, 0.12);
-  --icon-shadow-near: 0 1px 3px rgba(180, 170, 140, 0.08);
+  --icon-stroke: #CBB4A7;
+  --icon-tile-bg: #F5EFE8;
+  --icon-tile-pattern: #E8DDD3;
+  --icon-stitch: #CBB4A7;
+  --icon-inner: #FFFEFC;
+  --icon-shadow: 0 3px 10px rgba(180, 158, 145, 0.12);
+  --icon-shadow-near: 0 1px 3px rgba(180, 158, 145, 0.08);
   --icon-shadow-inset-top: inset 0 1px 0 rgba(255, 254, 252, 0.95);
-  --icon-shadow-inset-btm: inset 0 -1px 0 rgba(180, 170, 140, 0.06);
-  --icon-deco: #d8d0a0;
+  --icon-shadow-inset-btm: inset 0 -1px 0 rgba(180, 158, 145, 0.06);
+  --icon-deco: #CBB4A7;
 
   /* 装饰 */
-  --deco-primary: #d8d0a0;
-  --deco-secondary: #e8e0b8;
-  --texture-dot: rgba(180, 160, 120, 0.06);
+  --deco-primary: #CBB4A7;
+  --deco-secondary: #DDD2C8;
+  --texture-dot: rgba(180, 158, 145, 0.06);
 
   /* 字体 */
   --font-family: 'HarmonyOS Sans SC', 'PingFang SC', 'Noto Sans SC', system-ui, sans-serif;
@@ -82,8 +83,12 @@
   /* 毛玻璃 */
   --backdrop-blur: blur(12px);
 
+  /* dock / 状态胶囊 */
+  --dock-bg: rgba(249, 248, 244, 0.88);
+  --capsule-bg: rgba(249, 248, 244, 0.85);
+
   /* 边框 */
-  --border-color: rgba(180, 160, 120, 0.10);
+  --border-color: rgba(180, 165, 155, 0.12);
 
   /* 思维链 */
   --chain-bg: var(--bg-surface);
@@ -107,12 +112,12 @@
 }
 
 /* === 主题切换类 === */
-[data-theme="honey"]  {} /* 默认，无需额外 */
-[data-theme="pink"]   {}
-[data-theme="blue"]   {}
-[data-theme="honey-night"] {}
-[data-theme="pink-night"]  {}
-[data-theme="blue-night"]  {}
+[data-theme="vanilla-milk"]  {}
+[data-theme="rice-pudding"]  {}
+[data-theme="almond-tofu"]   {}
+[data-theme="coconut-blue"]  {}
+[data-theme="coconut-pink"]  {}
+[data-theme="berry-cloud"]   {}
 
 /* === 通用工具类 === */
 .bg-base      { background: var(--bg-base); }

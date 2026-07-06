@@ -5,7 +5,7 @@
 
 const DEFAULT_SETTINGS = Object.freeze({
   // 外观
-  theme: 'honey',
+  theme: 'vanilla-milk',
   themeMode: 'manual', // 'manual' | 'auto'
 
   // 桌面

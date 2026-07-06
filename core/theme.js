@@ -14,8 +14,8 @@ let _currentTheme = null;
 function applyTheme(themeName) {
   const preset = THEME_PRESETS[themeName];
   if (!preset) {
-    console.warn(`[Theme] 主题 "${themeName}" 不存在，回退到 honey`);
-    return applyTheme('honey');
+    console.warn(`[Theme] 主题 "${themeName}" 不存在，回退到 vanilla-milk`);
+    return applyTheme('vanilla-milk');
   }
 
   const root = document.documentElement;
@@ -43,7 +43,7 @@ function applyTheme(themeName) {
 // 初始化：读取存储的主题或使用默认
 function initTheme() {
   const stored = get('theme');
-  const themeName = stored || 'honey';
+  const themeName = stored || 'vanilla-milk';
   applyTheme(themeName);
 }
 
@@ -78,19 +78,13 @@ function switchTheme(themeName) {
   applyTheme(themeName);
 }
 
-// 切换日间/夜间
+// 切换日间/夜间（所有主题均为日间，改为循环切换6套主题）
 function toggleMode() {
-  const current = getCurrentPreset();
-  if (!current) return;
-
-  const targetMode = current.mode === 'light' ? 'dark' : 'light';
-  const candidates = getThemesByMode(targetMode);
-
-  if (candidates.length > 0) {
-    const currentBase = _currentTheme.replace('-night', '');
-    const target = candidates.find(c => c.id === `${currentBase}-night` || c.id === currentBase);
-    applyTheme(target ? target.id : candidates[0].id);
-  }
+  const themeIds = Object.keys(THEME_PRESETS);
+  if (themeIds.length === 0) return;
+  const currentIndex = themeIds.indexOf(_currentTheme);
+  const nextIndex = (currentIndex + 1) % themeIds.length;
+  applyTheme(themeIds[nextIndex]);
 }
 
 export {
