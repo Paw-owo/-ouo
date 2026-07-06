@@ -569,16 +569,16 @@
     repeating-linear-gradient(
       0deg,
       transparent,
-      transparent 13px,
-      var(--icon-grid) 13px,
-      var(--icon-grid) 14px
+      transparent 17px,
+      var(--icon-grid) 17px,
+      var(--icon-grid) 17.5px
     ),
     repeating-linear-gradient(
       90deg,
       transparent,
-      transparent 13px,
-      var(--icon-grid) 13px,
-      var(--icon-grid) 14px
+      transparent 17px,
+      var(--icon-grid) 17px,
+      var(--icon-grid) 17.5px
     );
 }
 
@@ -587,10 +587,10 @@
   content: '';
   position: absolute;
   inset: 5px;
-  border: 1.5px dashed var(--icon-stitch);
+  border: 1px dashed var(--icon-stitch);
   border-radius: var(--radius-md);
   pointer-events: none;
-  opacity: 0.5;
+  opacity: 0.2;
 }
 
 /* 奶白垫片 */
@@ -695,8 +695,8 @@
     var(--icon-shadow-inset-btm),
     var(--icon-shadow-near);
   background-image:
-    repeating-linear-gradient(0deg, transparent, transparent 10px, var(--icon-grid) 10px, var(--icon-grid) 11px),
-    repeating-linear-gradient(90deg, transparent, transparent 10px, var(--icon-grid) 10px, var(--icon-grid) 11px);
+    repeating-linear-gradient(0deg, transparent, transparent 14px, var(--icon-grid) 14px, var(--icon-grid) 14.5px),
+    repeating-linear-gradient(90deg, transparent, transparent 14px, var(--icon-grid) 14px, var(--icon-grid) 14.5px);
 }
 
 .dock-item .dock-icon-chassis::before {
@@ -706,7 +706,7 @@
   border: 1px dashed var(--icon-stitch);
   border-radius: var(--radius-sm);
   pointer-events: none;
-  opacity: 0.4;
+  opacity: 0.15;
 }
 
 .dock-item .dock-icon-chassis::after {
