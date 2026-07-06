@@ -71,79 +71,151 @@ img { display: block; max-width: 100%; }
 .lock-screen {
   position: fixed; inset: 0; z-index: 200;
   display: flex; flex-direction: column; align-items: center;
+  background-color: var(--bg-primary);
   background-size: cover; background-position: center;
-  transition: transform 360ms var(--motion-spring), opacity 360ms var(--motion-spring);
+  transition: transform 320ms var(--motion-spring), opacity 320ms var(--motion-spring);
+  overflow: hidden;
 }
+/* 壁纸模糊层：继承背景图并做强模糊，无壁纸时隐藏 */
 .lock-screen::before {
-  content: ''; position: absolute; inset: 0;
-  background: var(--bg-overlay);
+  content: ''; position: absolute; inset: -24px;
+  background: inherit; background-size: cover; background-position: center;
+  filter: blur(28px) saturate(1.08);
+  transform: scale(1.06);
   pointer-events: none;
+  transition: opacity 320ms var(--motion-spring);
 }
-/* 壁纸透明度遮罩：盖在背景图上、内容之下，opacity 由 --lock-bg-mask 控制
-   （0 = 完全显示壁纸，1 = 完全用 --bg-primary 盖住壁纸）*/
+.lock-screen:not(.has-wallpaper)::before { opacity: 0; }
+/* 主题氛围遮罩：同色系柔和渐变，无壁纸时显主题色，有壁纸时按用户透明度覆盖 */
 .lock-screen::after {
   content: ''; position: absolute; inset: 0;
-  background: var(--bg-primary);
-  opacity: var(--lock-bg-mask, 0);
+  background:
+    radial-gradient(ellipse at 50% 0%, color-mix(in srgb, var(--accent) 14%, transparent) 0%, transparent 55%),
+    radial-gradient(ellipse at 50% 100%, color-mix(in srgb, var(--accent) 9%, transparent) 0%, transparent 50%),
+    color-mix(in srgb, var(--bg-primary) 94%, transparent);
   pointer-events: none;
+  transition: opacity 320ms var(--motion-spring);
+  opacity: 1;
+}
+.lock-screen.has-wallpaper::after {
+  background:
+    radial-gradient(ellipse at 50% 0%, color-mix(in srgb, var(--accent) 20%, transparent) 0%, transparent 50%),
+    radial-gradient(ellipse at 50% 100%, color-mix(in srgb, var(--bg-primary) 40%, transparent) 0%, transparent 55%),
+    color-mix(in srgb, var(--bg-primary) 62%, transparent);
+  opacity: var(--lock-bg-mask, 0);
 }
 .lock-screen.unlocked { transform: translateY(-100%); opacity: 0; pointer-events: none; }
 .lock-screen.hidden { display: none; }
 .lock-avatar {
   position: relative; z-index: 1;
-  margin-top: calc(env(safe-area-inset-top, 0px) + clamp(48px, 14vh, 96px));
-  width: clamp(88px, 22vw, 108px); height: clamp(88px, 22vw, 108px);
-  border-radius: 50%; background: var(--accent);
-  border: 3px solid color-mix(in srgb, var(--bubble-user-text) 60%, transparent);
-  box-shadow: var(--shadow-lg);
+  margin-top: calc(env(safe-area-inset-top, 0px) + clamp(52px, 13vh, 92px));
+  width: clamp(92px, 24vw, 116px); height: clamp(92px, 24vw, 116px);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--bg-card) 82%, transparent);
+  border: 3px solid color-mix(in srgb, var(--accent) 50%, transparent);
+  box-shadow:
+    var(--shadow-float),
+    0 0 0 8px color-mix(in srgb, var(--accent-light) 24%, transparent);
   background-size: cover; background-position: center;
   display: flex; align-items: center; justify-content: center;
-  color: var(--text-on-wallpaper); font-size: var(--font-size-huge);
-  animation: popoBreathe 3.2s ease-in-out infinite;
+  color: var(--text-primary); font-size: var(--font-size-huge);
+  animation: popoBreathe 3.6s ease-in-out infinite;
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
 }
 .lock-title {
   position: relative; z-index: 1;
-  margin-top: 16px; color: var(--text-on-wallpaper);
+  margin-top: 18px; color: var(--text-primary);
   font-size: var(--font-size-title); font-weight: 600;
-  text-shadow: 0 1px 8px rgba(48,40,48,0.45);
+  letter-spacing: 0.3px;
 }
 .lock-hint {
   position: relative; z-index: 1;
-  margin-top: 4px; color: color-mix(in srgb, var(--bubble-user-text) 85%, transparent);
+  margin-top: 6px; color: var(--text-secondary);
   font-size: var(--font-size-small);
-  text-shadow: 0 1px 4px rgba(48,40,48,0.45);
+}
+.lock-error {
+  position: relative; z-index: 1;
+  margin-top: 10px; min-height: 22px;
+  color: var(--danger); font-size: var(--font-size-small);
+  text-align: center;
 }
 .lock-dots {
   position: relative; z-index: 1;
-  margin-top: 28px; display: flex; gap: 14px;
+  margin-top: 24px; display: flex; gap: 14px;
 }
 .lock-dot {
   width: 14px; height: 14px; border-radius: 50%;
-  border: 1.5px solid color-mix(in srgb, var(--bubble-user-text) 70%, transparent);
+  border: 2px solid color-mix(in srgb, var(--text-primary) 42%, transparent);
   background: transparent; transition: var(--motion);
 }
-.lock-dot.filled { background: var(--text-on-wallpaper); transform: scale(1.1); }
-.lock-dot.shake { animation: popoShake 360ms ease; }
+.lock-dot.filled {
+  background: var(--accent); border-color: var(--accent);
+  transform: scale(1.14);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--accent) 55%, transparent);
+}
+.lock-dot.shake { animation: popoShake 320ms ease; }
 
 .lock-keypad {
   position: relative; z-index: 1;
-  margin-top: auto; margin-bottom: calc(env(safe-area-inset-bottom, 0px) + 24px);
+  margin-top: auto; margin-bottom: calc(env(safe-area-inset-bottom, 0px) + 28px);
   display: grid; grid-template-columns: repeat(3, 1fr);
-  gap: clamp(10px, 3vw, 18px);
-  width: min(82vw, 320px);
+  gap: clamp(12px, 3.4vw, 20px);
+  width: min(84vw, 320px);
 }
 .lock-key {
-  height: clamp(56px, 14vw, 72px);
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  max-width: 76px;
+  justify-self: center;
   border-radius: 50%;
-  background: color-mix(in srgb, var(--bubble-user-text) 18%, transparent);
-  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
-  border: 1px solid color-mix(in srgb, var(--bubble-user-text) 25%, transparent);
-  color: var(--text-on-wallpaper); font-size: var(--font-size-large); font-weight: 500;
+  background: color-mix(in srgb, var(--bg-card) 76%, transparent);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);
+  color: var(--text-primary); font-size: var(--font-size-large); font-weight: 500;
   display: flex; align-items: center; justify-content: center;
+  box-shadow: var(--shadow-sm);
   transition: var(--motion);
+  user-select: none; -webkit-user-select: none;
 }
-.lock-key:active { transform: scale(0.92); background: color-mix(in srgb, var(--bubble-user-text) 32%, transparent); }
-.lock-key.secondary { font-size: var(--font-size-small); background: color-mix(in srgb, var(--bubble-user-text) 8%, transparent); }
+.lock-key:active {
+  transform: scale(0.92);
+  background: color-mix(in srgb, var(--accent-light) 68%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 42%, transparent);
+}
+.lock-key svg {
+  width: 26px; height: 26px;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  fill: none;
+}
+
+/* 有壁纸可见时：内容反白，保证在复杂壁纸上仍可辨 */
+.lock-screen.has-wallpaper .lock-avatar {
+  color: var(--text-on-wallpaper);
+  border-color: color-mix(in srgb, var(--text-on-wallpaper) 48%, transparent);
+  box-shadow:
+    var(--shadow-float),
+    0 0 0 8px color-mix(in srgb, var(--text-on-wallpaper) 16%, transparent);
+}
+.lock-screen.has-wallpaper .lock-title,
+.lock-screen.has-wallpaper .lock-key { color: var(--text-on-wallpaper); }
+.lock-screen.has-wallpaper .lock-hint { color: color-mix(in srgb, var(--text-on-wallpaper) 80%, transparent); }
+.lock-screen.has-wallpaper .lock-dot { border-color: color-mix(in srgb, var(--text-on-wallpaper) 55%, transparent); }
+.lock-screen.has-wallpaper .lock-dot.filled {
+  background: var(--text-on-wallpaper); border-color: var(--text-on-wallpaper);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--text-on-wallpaper) 48%, transparent);
+}
+.lock-screen.has-wallpaper .lock-key {
+  background: color-mix(in srgb, var(--text-on-wallpaper) 18%, transparent);
+  border-color: color-mix(in srgb, var(--text-on-wallpaper) 24%, transparent);
+}
+.lock-screen.has-wallpaper .lock-key:active {
+  background: color-mix(in srgb, var(--text-on-wallpaper) 30%, transparent);
+}
 
 /* ════════════════════════════════════════ */
 /* 桌面 */

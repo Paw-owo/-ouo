@@ -1266,7 +1266,7 @@ async function checkLockPassword() {
     saveLockFailState();               // 持久化：解锁成功，清空失败计数
     setData(KEYS.appLockUnlocked, true);
     lockScreenEl.classList.add('unlocked');
-    setTimeout(() => lockScreenEl.classList.add('hidden'), 360);
+    setTimeout(() => lockScreenEl.classList.add('hidden'), 320);
     showToast('解锁啦，见到你真好', 'success');
     return;
   }
@@ -1279,7 +1279,7 @@ async function checkLockPassword() {
   }
   lockErrorEl.textContent = '嘿嘿，不对哦';
   [...lockDotsEl.children].forEach((dot) => dot.classList.add('shake'));
-  setTimeout(() => [...lockDotsEl.children].forEach((dot) => dot.classList.remove('shake')), 360);
+  setTimeout(() => [...lockDotsEl.children].forEach((dot) => dot.classList.remove('shake')), 320);
   renderLockDots();
 }
 
@@ -1618,6 +1618,9 @@ async function applyLockBackground() {
   const userOpacity = Number(getData(KEYS.appLockWallpaperOpacity, 100));
   const maskOpacity = Math.max(0, Math.min(1, (100 - userOpacity) / 100));
   lockScreenEl.style.setProperty('--lock-bg-mask', String(maskOpacity));
+  // 壁纸实际可见时才启用反白模式；被遮罩完全盖住时跟随主题色
+  const hasWallpaper = isUsableImage(url) && maskOpacity < 0.55;
+  lockScreenEl.classList.toggle('has-wallpaper', hasWallpaper);
   if (isUsableImage(url)) {
     lockScreenEl.style.backgroundImage = `url("${cssUrl(url)}")`;
     lockScreenEl.style.backgroundSize = 'cover';
@@ -1862,6 +1865,8 @@ function subscribeBus() {
     // 切主题后遮罩色可能仍为旧值。补刷一次壁纸让遮罩跟随主题。
     // 原版 applyWallpaper 是 async 但未 await，try-catch 捕获不到异步抛错 → 改 await。
     try { await applyWallpaper(); } catch (e) { /* 静默 */ }
+    // 修复：锁屏背景遮罩与主题氛围同样依赖主题变量，切主题后需补刷。
+    try { await applyLockBackground(); } catch (e) { /* 静默 */ }
   });
   bus.on('character:updated', async () => {
     try { currentCharacter = await getDefaultCharacter(); } catch (e) { /* 静默 */ }
@@ -1999,7 +2004,10 @@ window.popoRefreshDesktop = async () => {
     console.warn('[desktop] popoRefreshDesktop 失败', e);
   }
 };
-window.popoRefreshLock = refreshLockScreen;
+window.popoRefreshLock = async () => {
+  try { await applyLockBackground(); } catch (e) { /* 静默 */ }
+  refreshLockScreen();
+};
 window.popoGetPageCount = getDesktopPageCount;
 window.popoSetPageCount = setDesktopPageCount;
 // 删除 window.popoLock：全代码库无调用方的死接口。未来需要手动锁屏时再补。
