@@ -32,7 +32,7 @@ export const APPS = [
     name: '备忘录',
     icon: 'app-memo',
     iconColor: '#8BADD4',
-    dock: false,
+    dock: true,
     page: 0,
     loader: () => import('./apps/memo/index.js')
   },
@@ -77,7 +77,7 @@ export const APPS = [
     name: '聊天',
     icon: 'app-chat',
     iconColor: '#F5B0B8',
-    dock: false,
+    dock: true,
     page: 0,
     loader: () => import('./apps/chat/index.js')
   },

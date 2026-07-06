@@ -421,7 +421,8 @@ img { display: block; max-width: 100%; }
   display: flex; flex-direction: column; align-items: center;
   gap: 6px; cursor: pointer;
   position: relative;
-  user-select: none;
+  user-select: none; -webkit-user-select: none;
+  -webkit-touch-callout: none; /* 阻止 iOS 长按弹出系统菜单（拷贝/粘贴等） */
 }
 .desktop-icon-img {
   width: var(--icon-size); height: var(--icon-size);
