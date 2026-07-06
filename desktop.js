@@ -411,7 +411,13 @@ function createDockIcon(app) {
   const label = document.createElement('span');
   label.className = 'dock-icon-label';
   label.textContent = app.name;
-  el.append(img, label);
+  // 通知提示徽章（温柔提示：ring/breathe/tag，禁红点数字角标）
+  // 和桌面图标用同一套 refreshBadges 逻辑，dock 图标也能显示未读提示
+  const badge = document.createElement('span');
+  badge.className = 'icon-badge';
+  badge.dataset.badge = app.id;
+  badge.style.display = 'none';
+  el.append(img, label, badge);
   el.addEventListener('click', () => { if (!editing) openApp(app.id); });
   el.addEventListener('pointerdown', (e) => handleIconPointerDown(e, el));
   return el;

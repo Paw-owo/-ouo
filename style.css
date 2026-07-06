@@ -427,15 +427,15 @@ img { display: block; max-width: 100%; }
 .desktop-icon-img {
   width: var(--icon-size); height: var(--icon-size);
   border-radius: var(--radius-icon);
-  /* 柔和磨砂底：accent-light 与 bg-card 混合，棉花糖质感，不再是实心色块 */
-  background: color-mix(in srgb, var(--accent-light) 55%, var(--bg-card));
+  /* 柔和磨砂底：accent 与 bg-card 混合，带明显主色调，让 rich 图标白色主体浮起来 */
+  background: color-mix(in srgb, var(--accent) 35%, var(--bg-card));
   display: flex; align-items: center; justify-content: center;
   /* 图标线条用 text-primary：深浅主题下对比度都够，且同色系，靠线条形状区分 APP */
   color: var(--text-primary);
   /* neumorphism 凸起：双向同色系阴影，软萌不塑料 */
   box-shadow: var(--shadow-neu-out);
-  /* 极淡内描边，增强磨砂层次，深浅主题都自然 */
-  border: 1px solid color-mix(in srgb, var(--accent-light) 45%, transparent);
+  /* 内描边用 accent 系，增强层次，深浅主题都自然 */
+  border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent);
   background-size: cover; background-position: center;
   transition: var(--motion);
   position: relative;

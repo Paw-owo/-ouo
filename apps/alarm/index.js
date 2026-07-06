@@ -21,6 +21,8 @@ let firedSet = new Set();
 let lastMinute = '';
 // 正在响的闹钟（贪睡用）：{ alarm, snoozeCount, soundLoop }
 let ringingAlarm = null;
+// 保存当前响铃弹窗引用，unmount 时关闭，避免弹窗残留在桌面
+let ringDialog = null;
 
 // 贪睡次数上限
 const MAX_SNOOZE = 3;
@@ -274,6 +276,11 @@ export function unmount() {
   // 我走了，定时器也要带走，不然会偷偷在后台跑
   if (timer) { clearInterval(timer); timer = null; }
   stopRingLoop();
+  // 关闭可能残留的响铃弹窗，避免退出 APP 后弹窗还挂在桌面
+  if (ringDialog && typeof ringDialog.close === 'function') {
+    ringDialog.close();
+    ringDialog = null;
+  }
   firedSet.clear();
   lastMinute = '';
   ringingAlarm = null;
@@ -531,7 +538,7 @@ function showRingDialog(a) {
   }
   // 贪睡次数用完，只能起床啦，不再给"再睡5分钟"按钮
   if (remaining <= 0) {
-    showAlert({
+    ringDialog = showAlert({
       title: '该起床啦宝贝',
       body: '不能再贪睡啦，新的一天开始啦',
       okText: '起床啦',
@@ -540,7 +547,7 @@ function showRingDialog(a) {
     return;
   }
   // 用 showConfirm 实现两个按钮：取消=起床，确认=贪睡
-  showConfirm({
+  ringDialog = showConfirm({
     title: '该起床啦宝贝',
     body,
     confirmText: '再睡5分钟',
@@ -562,6 +569,7 @@ function snooze(a) {
   }
   ringingAlarm.snoozeCount += 1;
   stopRingLoop();
+  ringDialog = null; // 旧弹窗已被 showConfirm 关闭，清引用避免悬空
   const remaining = MAX_SNOOZE - ringingAlarm.snoozeCount;
   // 最后一次贪睡的话，温柔提醒一下下次就得起来啦
   if (remaining > 0) {
@@ -583,6 +591,7 @@ function snooze(a) {
 function dismissRing(a) {
   stopRingLoop();
   ringingAlarm = null;
+  ringDialog = null; // 弹窗已被 onOk/onCancel 关闭，清引用即可
   showToast('早安呀，今天也要软乎乎的', 'success', 1600);
 }
 
