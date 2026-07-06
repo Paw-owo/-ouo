@@ -1,213 +1,157 @@
 // ============================================
 // theme-presets.js — 6套主题色值，唯一来源
-// 全部日间温柔主题，由 core/theme.js 读取并写入 CSS 变量槽位
+// 日间3套 + 夜间3套，由 core/theme.js 读取写入 CSS 变量槽位
 //
-// 1. vanilla-milk    雪山香草酪   (默认)
-// 2. rice-pudding    香草米布丁
-// 3. almond-tofu     杏仁豆花露
-// 4. coconut-blue    椰青冰美式
-// 5. coconut-pink    椰乳四季春
-// 6. berry-cloud     莓莓云顶奶
+// 日间：
+//   1. berry-cloud        莓莓云顶奶   (默认)
+//   2. taro-coconut       芋泥椰奶冻
+//   3. coconut-americano  椰青冰美式
+//
+// 夜间：
+//   4. night-milk-brown   夜奶棕
+//   5. night-black-pink   夜黑粉
+//   6. night-coffee       夜咖色
 // ============================================
 
 const THEME_PRESETS = {
 
   // ==========================================
-  // 1. 雪山香草酪 — 默认主题
-  // 气质：奶油、香草、轻甜、柔和
-  // 参考：text=#5B3F41  neutral=#CBB4A7  bg=#F9F8F4  accent=#FEF6DF
+  // 1. 莓莓云顶奶 — 默认主题
+  // 蓝粉奶油糖纸，最梦幻、最软、最讨喜
+  // 参考：蓝=#D1E3FF 粉白底=#FFF4F5 雾蓝=#E2F3FF 糖霜粉=#FAC7DA
   // ==========================================
-  'vanilla-milk': {
-    label: '雪山香草酪',
+  'berry-cloud': {
+    label: '莓莓云顶奶',
     mode: 'light',
     colors: {
       // 背景
-      '--bg-base':                 '#F9F8F4',
-      '--bg-surface':              '#F3F1EC',
-      '--bg-hover':                '#EDEAE3',
-      '--bg-glass':                'rgba(249,248,244,0.88)',
-      '--bg-mask':                 'rgba(80,65,60,0.25)',
+      '--bg-base':                 '#FFF4F5',
+      '--bg-surface':              '#F9EEF0',
+      '--bg-hover':                '#F3E6E9',
+      '--bg-glass':                'rgba(255,244,245,0.88)',
+      '--bg-mask':                 'rgba(100,80,85,0.25)',
 
-      // 主色系（暖中性 = 图标线条、小装饰、按钮重点）
-      '--color-primary':           '#CBB4A7',
-      '--color-primary-light':     '#DDD2C8',
-      '--color-primary-ultralight':'#F5EFE8',
-      '--color-primary-deep':      '#B5A095',
+      // 主色系（糖霜粉 = 重点、按钮、小装饰）
+      '--color-primary':           '#FAC7DA',
+      '--color-primary-light':     '#FCDEE9',
+      '--color-primary-ultralight':'#FDE8F0',
+      '--color-primary-deep':      '#E8A8C0',
 
-      // 辅色（奶黄强调）
-      '--color-accent':            '#FEF6DF',
-      '--color-accent-light':      '#FFFBF0',
+      // 辅色（雾蓝 = 气氛、卡片、胶囊浅层）
+      '--color-accent':            '#E2F3FF',
+      '--color-accent-light':      '#F0F8FF',
 
-      // 文字（深棕柔棕，禁止纯黑）
-      '--text-primary':            '#5B3F41',
-      '--text-secondary':          '#8B7A7B',
-      '--text-placeholder':        '#BBAEAA',
+      // 文字（柔粉棕，不纯黑）
+      '--text-primary':            '#6B5A60',
+      '--text-secondary':          '#9B8A90',
+      '--text-placeholder':        '#C8B8BC',
 
-      // 阴影（同色系半透明，不发灰黑）
-      '--shadow-soft':             '0 2px 8px rgba(180,158,145,0.10)',
-      '--shadow-card':             '0 4px 16px rgba(180,158,145,0.12)',
-      '--shadow-float':            '0 8px 24px rgba(180,158,145,0.15)',
-      '--shadow-neu-out':          '4px 4px 10px rgba(180,158,145,0.10), -4px -4px 10px rgba(249,248,244,0.9)',
-      '--shadow-neu-in':           'inset 2px 2px 6px rgba(180,158,145,0.08), inset -2px -2px 6px rgba(249,248,244,0.8)',
+      // 阴影（粉系半透明）
+      '--shadow-soft':             '0 2px 8px rgba(210,180,190,0.10)',
+      '--shadow-card':             '0 4px 16px rgba(210,180,190,0.12)',
+      '--shadow-float':            '0 8px 24px rgba(210,180,190,0.15)',
+      '--shadow-neu-out':          '4px 4px 10px rgba(210,180,190,0.10), -4px -4px 10px rgba(255,244,245,0.9)',
+      '--shadow-neu-in':           'inset 2px 2px 6px rgba(210,180,190,0.08), inset -2px -2px 6px rgba(255,244,245,0.8)',
 
       // 功能色
       '--color-success':           '#8CB88A',
-      '--color-warning':           '#E0D8A0',
-      '--color-error':             '#E0A8A8',
-      '--color-info':              '#A8BCD8',
+      '--color-warning':           '#D8C898',
+      '--color-error':             '#D8A0A8',
+      '--color-info':              '#A0B8D8',
 
-      // 图标（图标线条、底盘、底纹）
-      '--icon-stroke':             '#CBB4A7',
-      '--icon-tile-bg':            '#F5EFE8',
-      '--icon-tile-pattern':       '#E8DDD3',
-      '--icon-stitch':             '#CBB4A7',
-      '--icon-inner':              '#FFFEFC',
-      '--icon-shadow':             '0 3px 10px rgba(180,158,145,0.12)',
-      '--icon-shadow-near':        '0 1px 3px rgba(180,158,145,0.08)',
-      '--icon-shadow-inset-top':   'inset 0 1px 0 rgba(255,254,252,0.95)',
-      '--icon-shadow-inset-btm':   'inset 0 -1px 0 rgba(180,158,145,0.06)',
-      '--icon-deco':               '#CBB4A7',
+      // 图标（蓝底 + 粉线稿，蓝粉都带出来）
+      '--icon-stroke':             '#C49DB0',
+      '--icon-tile-bg':            '#D1E3FF',
+      '--icon-tile-pattern':       '#C0D8F8',
+      '--icon-stitch':             '#C49DB0',
+      '--icon-inner':              '#FFFDFD',
+      '--icon-shadow':             '0 3px 10px rgba(190,170,200,0.12)',
+      '--icon-shadow-near':        '0 1px 3px rgba(190,170,200,0.08)',
+      '--icon-shadow-inset-top':   'inset 0 1px 0 rgba(255,253,253,0.95)',
+      '--icon-shadow-inset-btm':   'inset 0 -1px 0 rgba(190,170,200,0.06)',
+      '--icon-deco':               '#FAC7DA',
 
       // 装饰
-      '--deco-primary':            '#CBB4A7',
-      '--deco-secondary':          '#DDD2C8',
-      '--texture-dot':             'rgba(180,158,145,0.06)',
+      '--deco-primary':            '#FAC7DA',
+      '--deco-secondary':          '#D1E3FF',
+      '--texture-dot':             'rgba(210,180,195,0.06)',
 
       // dock / 状态胶囊
-      '--dock-bg':                 'rgba(249,248,244,0.88)',
-      '--capsule-bg':              'rgba(249,248,244,0.85)',
+      '--dock-bg':                 'rgba(255,244,245,0.88)',
+      '--capsule-bg':              'rgba(255,244,245,0.85)',
 
       // 边框
-      '--border-color':            'rgba(180,165,155,0.12)',
+      '--border-color':            'rgba(220,195,200,0.15)',
     }
   },
 
   // ==========================================
-  // 2. 香草米布丁 — 比奶黄更安静、更糯
-  // 适合做第二套温柔中性色，不要做成灰脏奶茶
-  // 参考：text=#594027  neutral=#C3AB99  bg=#FBF8F7  accent=#F3EEE9
+  // 2. 芋泥椰奶冻 — 紫色系
+  // 紫雾感、奶甜、轻盈
+  // 参考：主色=#D5CFEC 辅助浅紫=#EDECFA 页面浅底=#F8F6FB 强调紫=#CAB7E3
   // ==========================================
-  'rice-pudding': {
-    label: '香草米布丁',
+  'taro-coconut': {
+    label: '芋泥椰奶冻',
     mode: 'light',
     colors: {
-      '--bg-base':                 '#FBF8F7',
-      '--bg-surface':              '#F5F1EF',
-      '--bg-hover':                '#EFEAE7',
-      '--bg-glass':                'rgba(251,248,247,0.88)',
-      '--bg-mask':                 'rgba(75,55,40,0.25)',
+      '--bg-base':                 '#F8F6FB',
+      '--bg-surface':              '#F2EFF7',
+      '--bg-hover':                '#EBE7F2',
+      '--bg-glass':                'rgba(248,246,251,0.88)',
+      '--bg-mask':                 'rgba(80,70,95,0.25)',
 
-      '--color-primary':           '#C3AB99',
-      '--color-primary-light':     '#D8C5B8',
-      '--color-primary-ultralight':'#F2EBE6',
-      '--color-primary-deep':      '#AD9583',
+      '--color-primary':           '#D5CFEC',
+      '--color-primary-light':     '#E5E0F4',
+      '--color-primary-ultralight':'#F2EFF7',
+      '--color-primary-deep':      '#BEB5D8',
 
-      '--color-accent':            '#F3EEE9',
-      '--color-accent-light':      '#FAF6F3',
+      '--color-accent':            '#CAB7E3',
+      '--color-accent-light':      '#E0D8F0',
 
-      '--text-primary':            '#594027',
-      '--text-secondary':          '#8B7A6B',
-      '--text-placeholder':        '#B8ACA6',
+      '--text-primary':            '#5B4E6B',
+      '--text-secondary':          '#8B7E9B',
+      '--text-placeholder':        '#B8AEC8',
 
-      '--shadow-soft':             '0 2px 8px rgba(172,150,132,0.10)',
-      '--shadow-card':             '0 4px 16px rgba(172,150,132,0.12)',
-      '--shadow-float':            '0 8px 24px rgba(172,150,132,0.15)',
-      '--shadow-neu-out':          '4px 4px 10px rgba(172,150,132,0.10), -4px -4px 10px rgba(251,248,247,0.9)',
-      '--shadow-neu-in':           'inset 2px 2px 6px rgba(172,150,132,0.08), inset -2px -2px 6px rgba(251,248,247,0.8)',
+      '--shadow-soft':             '0 2px 8px rgba(180,170,200,0.10)',
+      '--shadow-card':             '0 4px 16px rgba(180,170,200,0.12)',
+      '--shadow-float':            '0 8px 24px rgba(180,170,200,0.15)',
+      '--shadow-neu-out':          '4px 4px 10px rgba(180,170,200,0.10), -4px -4px 10px rgba(248,246,251,0.9)',
+      '--shadow-neu-in':           'inset 2px 2px 6px rgba(180,170,200,0.08), inset -2px -2px 6px rgba(248,246,251,0.8)',
 
       '--color-success':           '#8CB88A',
-      '--color-warning':           '#E0D8A0',
-      '--color-error':             '#E0A8A8',
-      '--color-info':              '#A8BCD8',
+      '--color-warning':           '#D8C898',
+      '--color-error':             '#D8A0A8',
+      '--color-info':              '#A0B8D8',
 
-      '--icon-stroke':             '#C3AB99',
-      '--icon-tile-bg':            '#F2EBE6',
-      '--icon-tile-pattern':       '#E5DCD5',
-      '--icon-stitch':             '#C3AB99',
-      '--icon-inner':              '#FFFDFB',
-      '--icon-shadow':             '0 3px 10px rgba(172,150,132,0.12)',
-      '--icon-shadow-near':        '0 1px 3px rgba(172,150,132,0.08)',
-      '--icon-shadow-inset-top':   'inset 0 1px 0 rgba(255,253,251,0.95)',
-      '--icon-shadow-inset-btm':   'inset 0 -1px 0 rgba(172,150,132,0.06)',
-      '--icon-deco':               '#C3AB99',
+      // 图标（浅紫底 + 强调紫线稿）
+      '--icon-stroke':             '#CAB7E3',
+      '--icon-tile-bg':            '#EDECFA',
+      '--icon-tile-pattern':       '#E0DCF0',
+      '--icon-stitch':             '#CAB7E3',
+      '--icon-inner':              '#FFFCFD',
+      '--icon-shadow':             '0 3px 10px rgba(180,170,200,0.12)',
+      '--icon-shadow-near':        '0 1px 3px rgba(180,170,200,0.08)',
+      '--icon-shadow-inset-top':   'inset 0 1px 0 rgba(255,252,253,0.95)',
+      '--icon-shadow-inset-btm':   'inset 0 -1px 0 rgba(180,170,200,0.06)',
+      '--icon-deco':               '#CAB7E3',
 
-      '--deco-primary':            '#C3AB99',
-      '--deco-secondary':          '#D8C5B8',
-      '--texture-dot':             'rgba(172,150,132,0.06)',
+      '--deco-primary':            '#D5CFEC',
+      '--deco-secondary':          '#CAB7E3',
+      '--texture-dot':             'rgba(190,180,210,0.06)',
 
-      '--dock-bg':                 'rgba(251,248,247,0.88)',
-      '--capsule-bg':              'rgba(251,248,247,0.85)',
+      '--dock-bg':                 'rgba(248,246,251,0.88)',
+      '--capsule-bg':              'rgba(248,246,251,0.85)',
 
-      '--border-color':            'rgba(175,160,148,0.12)',
+      '--border-color':            'rgba(200,190,215,0.15)',
     }
   },
 
   // ==========================================
-  // 3. 杏仁豆花露 — 更轻、更软、更淡
-  // 低对比护眼主题，不要偏紫灰过头
-  // 参考：text=#A58F8B  neutral=#D6C8B9  bg=#FAF7F5  accent=#FAF1E7
+  // 3. 椰青冰美式 — 蓝棕系
+  // 浅蓝空气感 + 奶咖平衡，蓝只做气氛
+  // 参考：天空浅蓝=#E1EFF4 冷棕=#9D7C6D 奶咖底=#EDDFD4 深色文字=#512128
   // ==========================================
-  'almond-tofu': {
-    label: '杏仁豆花露',
-    mode: 'light',
-    colors: {
-      '--bg-base':                 '#FAF7F5',
-      '--bg-surface':              '#F4F0ED',
-      '--bg-hover':                '#EEE8E3',
-      '--bg-glass':                'rgba(250,247,245,0.88)',
-      '--bg-mask':                 'rgba(140,120,115,0.25)',
-
-      '--color-primary':           '#D6C8B9',
-      '--color-primary-light':     '#E6DCD0',
-      '--color-primary-ultralight':'#F5F0EB',
-      '--color-primary-deep':      '#C0B2A3',
-
-      '--color-accent':            '#FAF1E7',
-      '--color-accent-light':      '#FDF8F2',
-
-      '--text-primary':            '#A58F8B',
-      '--text-secondary':          '#C0B0AB',
-      '--text-placeholder':        '#D8D0CC',
-
-      '--shadow-soft':             '0 2px 8px rgba(190,176,162,0.10)',
-      '--shadow-card':             '0 4px 16px rgba(190,176,162,0.12)',
-      '--shadow-float':            '0 8px 24px rgba(190,176,162,0.15)',
-      '--shadow-neu-out':          '4px 4px 10px rgba(190,176,162,0.10), -4px -4px 10px rgba(250,247,245,0.9)',
-      '--shadow-neu-in':           'inset 2px 2px 6px rgba(190,176,162,0.08), inset -2px -2px 6px rgba(250,247,245,0.8)',
-
-      '--color-success':           '#8CB88A',
-      '--color-warning':           '#E0D8A0',
-      '--color-error':             '#E0A8A8',
-      '--color-info':              '#A8BCD8',
-
-      '--icon-stroke':             '#D6C8B9',
-      '--icon-tile-bg':            '#F5F0EB',
-      '--icon-tile-pattern':       '#E9E2D9',
-      '--icon-stitch':             '#D6C8B9',
-      '--icon-inner':              '#FFFDFB',
-      '--icon-shadow':             '0 3px 10px rgba(190,176,162,0.12)',
-      '--icon-shadow-near':        '0 1px 3px rgba(190,176,162,0.08)',
-      '--icon-shadow-inset-top':   'inset 0 1px 0 rgba(255,253,251,0.95)',
-      '--icon-shadow-inset-btm':   'inset 0 -1px 0 rgba(190,176,162,0.06)',
-      '--icon-deco':               '#D6C8B9',
-
-      '--deco-primary':            '#D6C8B9',
-      '--deco-secondary':          '#E6DCD0',
-      '--texture-dot':             'rgba(190,176,162,0.06)',
-
-      '--dock-bg':                 'rgba(250,247,245,0.88)',
-      '--capsule-bg':              'rgba(250,247,245,0.85)',
-
-      '--border-color':            'rgba(195,182,170,0.12)',
-    }
-  },
-
-  // ==========================================
-  // 4. 椰青冰美式 — 浅蓝空气感 + 奶咖平衡
-  // 不是纯蓝系统，蓝只做气氛，不要冷硬科技风
-  // 参考：text=#512128  neutral=#9D7C6D  bg=#EDDFD4  accent=#E1EFF4
-  // ==========================================
-  'coconut-blue': {
+  'coconut-americano': {
     label: '椰青冰美式',
     mode: 'light',
     colors: {
@@ -236,13 +180,14 @@ const THEME_PRESETS = {
       '--shadow-neu-in':           'inset 2px 2px 6px rgba(140,108,94,0.08), inset -2px -2px 6px rgba(237,223,212,0.8)',
 
       '--color-success':           '#8CB88A',
-      '--color-warning':           '#E0D8A0',
-      '--color-error':             '#E0A8A8',
-      '--color-info':              '#A8BCD8',
+      '--color-warning':           '#D8C898',
+      '--color-error':             '#D8A0A8',
+      '--color-info':              '#A0B8D8',
 
+      // 图标（浅蓝底 + 冷棕线稿）
       '--icon-stroke':             '#9D7C6D',
-      '--icon-tile-bg':            '#DDD3CC',
-      '--icon-tile-pattern':       '#CEC2B8',
+      '--icon-tile-bg':            '#E1EFF4',
+      '--icon-tile-pattern':       '#D0E2EC',
       '--icon-stitch':             '#9D7C6D',
       '--icon-inner':              '#FFFCFA',
       '--icon-shadow':             '0 3px 10px rgba(140,108,94,0.12)',
@@ -252,133 +197,193 @@ const THEME_PRESETS = {
       '--icon-deco':               '#9D7C6D',
 
       '--deco-primary':            '#9D7C6D',
-      '--deco-secondary':          '#B8A094',
-      '--texture-dot':             'rgba(140,108,94,0.06)',
+      '--deco-secondary':          '#E1EFF4',
+      '--texture-dot':             'rgba(140,108,94,0.05)',
 
       '--dock-bg':                 'rgba(237,223,212,0.88)',
       '--capsule-bg':              'rgba(237,223,212,0.85)',
 
-      '--border-color':            'rgba(150,120,105,0.12)',
+      '--border-color':            'rgba(150,120,105,0.15)',
     }
   },
 
   // ==========================================
-  // 5. 椰乳四季春 — 粉要嫩，不要荧光，不要桃红
-  // 保持奶感和呼吸感
-  // 参考：text=#8B736C  pink=#FFE7E8  bg=#FBF8EA  purple=#ECC7D6
+  // 4. 夜奶棕 — 暗奶感，不做死黑
+  // 参考：主色=#CDB8AB 辅助深棕=#8E6F63 深底=#2B2321 奶白强调=#F3E3D8
   // ==========================================
-  'coconut-pink': {
-    label: '椰乳四季春',
-    mode: 'light',
+  'night-milk-brown': {
+    label: '夜奶棕',
+    mode: 'dark',
     colors: {
-      '--bg-base':                 '#FBF8EA',
-      '--bg-surface':              '#F5F1E0',
-      '--bg-hover':                '#EFEAD6',
-      '--bg-glass':                'rgba(251,248,234,0.88)',
-      '--bg-mask':                 'rgba(120,100,95,0.25)',
+      '--bg-base':                 '#2B2321',
+      '--bg-surface':              '#352D2A',
+      '--bg-hover':                '#403732',
+      '--bg-glass':                'rgba(43,35,33,0.92)',
+      '--bg-mask':                 'rgba(10,8,5,0.40)',
 
-      '--color-primary':           '#ECC7D6',
-      '--color-primary-light':     '#F5DEE7',
-      '--color-primary-ultralight':'#FBF0F4',
-      '--color-primary-deep':      '#D4A8BC',
+      '--color-primary':           '#CDB8AB',
+      '--color-primary-light':     '#8E6F63',
+      '--color-primary-ultralight':'#4A3D38',
+      '--color-primary-deep':      '#E8D8CC',
 
-      '--color-accent':            '#FFE7E8',
-      '--color-accent-light':      '#FFF5F6',
+      '--color-accent':            '#F3E3D8',
+      '--color-accent-light':      '#FAF0E8',
 
-      '--text-primary':            '#8B736C',
-      '--text-secondary':          '#B09D97',
-      '--text-placeholder':        '#C8B8B2',
+      '--text-primary':            '#E8D8C8',
+      '--text-secondary':          '#B8A898',
+      '--text-placeholder':        '#7A6C60',
 
-      '--shadow-soft':             '0 2px 8px rgba(210,175,190,0.10)',
-      '--shadow-card':             '0 4px 16px rgba(210,175,190,0.12)',
-      '--shadow-float':            '0 8px 24px rgba(210,175,190,0.15)',
-      '--shadow-neu-out':          '4px 4px 10px rgba(210,175,190,0.10), -4px -4px 10px rgba(251,248,234,0.9)',
-      '--shadow-neu-in':           'inset 2px 2px 6px rgba(210,175,190,0.08), inset -2px -2px 6px rgba(251,248,234,0.8)',
+      '--shadow-soft':             '0 2px 8px rgba(10,8,5,0.30)',
+      '--shadow-card':             '0 4px 16px rgba(10,8,5,0.40)',
+      '--shadow-float':            '0 8px 24px rgba(10,8,5,0.50)',
+      '--shadow-neu-out':          '4px 4px 10px rgba(10,8,5,0.35), -4px -4px 10px rgba(53,45,42,0.5)',
+      '--shadow-neu-in':           'inset 2px 2px 6px rgba(10,8,5,0.30), inset -2px -2px 6px rgba(53,45,42,0.4)',
 
-      '--color-success':           '#8CB88A',
-      '--color-warning':           '#E0D8A0',
-      '--color-error':             '#E0A8A8',
-      '--color-info':              '#A8BCD8',
+      '--color-success':           '#7AAC78',
+      '--color-warning':           '#C8B878',
+      '--color-error':             '#C89090',
+      '--color-info':              '#90A8C8',
 
-      '--icon-stroke':             '#ECC7D6',
-      '--icon-tile-bg':            '#FBF0F4',
-      '--icon-tile-pattern':       '#EFE0E8',
-      '--icon-stitch':             '#ECC7D6',
-      '--icon-inner':              '#FFFEFB',
-      '--icon-shadow':             '0 3px 10px rgba(210,175,190,0.12)',
-      '--icon-shadow-near':        '0 1px 3px rgba(210,175,190,0.08)',
-      '--icon-shadow-inset-top':   'inset 0 1px 0 rgba(255,254,251,0.95)',
-      '--icon-shadow-inset-btm':   'inset 0 -1px 0 rgba(210,175,190,0.06)',
-      '--icon-deco':               '#ECC7D6',
+      // 图标（深底 + 奶棕线稿）
+      '--icon-stroke':             '#CDB8AB',
+      '--icon-tile-bg':            '#4A3D38',
+      '--icon-tile-pattern':       '#5A4D48',
+      '--icon-stitch':             '#CDB8AB',
+      '--icon-inner':              '#3D3530',
+      '--icon-shadow':             '0 3px 10px rgba(10,8,5,0.35)',
+      '--icon-shadow-near':        '0 1px 3px rgba(10,8,5,0.25)',
+      '--icon-shadow-inset-top':   'inset 0 1px 0 rgba(74,64,56,0.6)',
+      '--icon-shadow-inset-btm':   'inset 0 -1px 0 rgba(10,8,5,0.20)',
+      '--icon-deco':               '#CDB8AB',
 
-      '--deco-primary':            '#ECC7D6',
-      '--deco-secondary':          '#F5DEE7',
-      '--texture-dot':             'rgba(210,175,190,0.06)',
+      '--deco-primary':            '#CDB8AB',
+      '--deco-secondary':          '#8E6F63',
+      '--texture-dot':             'rgba(205,184,171,0.04)',
 
-      '--dock-bg':                 'rgba(251,248,234,0.88)',
-      '--capsule-bg':              'rgba(251,248,234,0.85)',
+      '--dock-bg':                 'rgba(43,35,33,0.92)',
+      '--capsule-bg':              'rgba(43,35,33,0.88)',
 
-      '--border-color':            'rgba(215,185,195,0.12)',
+      '--border-color':            'rgba(205,184,171,0.08)',
     }
   },
 
   // ==========================================
-  // 6. 莓莓云顶奶 — 更梦幻、更轻盈
-  // 蓝粉都要低饱和、像奶油糖纸，不要儿童玩具色
-  // 参考：blue=#D1E3FF  pink-bg=#FFF4F5  mist=#E2F3FF  frosting=#FAC7DA
+  // 5. 夜黑粉 — 暗粉感，不做死黑
+  // 参考：主色=#F0B7CC 辅助莓粉棕=#8C6475 深底=#1F1A1D 粉白强调=#F8E7EE
   // ==========================================
-  'berry-cloud': {
-    label: '莓莓云顶奶',
-    mode: 'light',
+  'night-black-pink': {
+    label: '夜黑粉',
+    mode: 'dark',
     colors: {
-      '--bg-base':                 '#FFF4F5',
-      '--bg-surface':              '#F9EDEE',
-      '--bg-hover':                '#F3E5E7',
-      '--bg-glass':                'rgba(255,244,245,0.88)',
-      '--bg-mask':                 'rgba(120,95,100,0.25)',
+      '--bg-base':                 '#1F1A1D',
+      '--bg-surface':              '#2A2428',
+      '--bg-hover':                '#352E33',
+      '--bg-glass':                'rgba(31,26,29,0.92)',
+      '--bg-mask':                 'rgba(8,6,7,0.40)',
 
-      '--color-primary':           '#FAC7DA',
-      '--color-primary-light':     '#FCDEE9',
-      '--color-primary-ultralight':'#FDE8F0',
-      '--color-primary-deep':      '#E8A8C0',
+      '--color-primary':           '#F0B7CC',
+      '--color-primary-light':     '#8C6475',
+      '--color-primary-ultralight':'#3D2A32',
+      '--color-primary-deep':      '#F8D0DE',
 
-      '--color-accent':            '#E2F3FF',
-      '--color-accent-light':      '#F0F8FF',
+      '--color-accent':            '#F8E7EE',
+      '--color-accent-light':      '#FCF4F7',
 
-      '--text-primary':            '#8B6B72',
-      '--text-secondary':          '#B0959A',
-      '--text-placeholder':        '#D0C0C4',
+      '--text-primary':            '#E8D0D8',
+      '--text-secondary':          '#B898A0',
+      '--text-placeholder':        '#7A6068',
 
-      '--shadow-soft':             '0 2px 8px rgba(220,175,192,0.10)',
-      '--shadow-card':             '0 4px 16px rgba(220,175,192,0.12)',
-      '--shadow-float':            '0 8px 24px rgba(220,175,192,0.15)',
-      '--shadow-neu-out':          '4px 4px 10px rgba(220,175,192,0.10), -4px -4px 10px rgba(255,244,245,0.9)',
-      '--shadow-neu-in':           'inset 2px 2px 6px rgba(220,175,192,0.08), inset -2px -2px 6px rgba(255,244,245,0.8)',
+      '--shadow-soft':             '0 2px 8px rgba(8,6,7,0.30)',
+      '--shadow-card':             '0 4px 16px rgba(8,6,7,0.40)',
+      '--shadow-float':            '0 8px 24px rgba(8,6,7,0.50)',
+      '--shadow-neu-out':          '4px 4px 10px rgba(8,6,7,0.35), -4px -4px 10px rgba(42,36,40,0.5)',
+      '--shadow-neu-in':           'inset 2px 2px 6px rgba(8,6,7,0.30), inset -2px -2px 6px rgba(42,36,40,0.4)',
 
-      '--color-success':           '#8CB88A',
-      '--color-warning':           '#E0D8A0',
-      '--color-error':             '#E0A8A8',
-      '--color-info':              '#A8BCD8',
+      '--color-success':           '#7AAC78',
+      '--color-warning':           '#C8B878',
+      '--color-error':             '#C89090',
+      '--color-info':              '#90A8C8',
 
-      '--icon-stroke':             '#FAC7DA',
-      '--icon-tile-bg':            '#FDE8F0',
-      '--icon-tile-pattern':       '#F2D8E4',
-      '--icon-stitch':             '#FAC7DA',
-      '--icon-inner':              '#FFFDFD',
-      '--icon-shadow':             '0 3px 10px rgba(220,175,192,0.12)',
-      '--icon-shadow-near':        '0 1px 3px rgba(220,175,192,0.08)',
-      '--icon-shadow-inset-top':   'inset 0 1px 0 rgba(255,253,253,0.95)',
-      '--icon-shadow-inset-btm':   'inset 0 -1px 0 rgba(220,175,192,0.06)',
-      '--icon-deco':               '#FAC7DA',
+      // 图标（深紫棕底 + 柔雾粉线稿）
+      '--icon-stroke':             '#F0B7CC',
+      '--icon-tile-bg':            '#3D2A32',
+      '--icon-tile-pattern':       '#4D3A42',
+      '--icon-stitch':             '#F0B7CC',
+      '--icon-inner':              '#352A30',
+      '--icon-shadow':             '0 3px 10px rgba(8,6,7,0.35)',
+      '--icon-shadow-near':        '0 1px 3px rgba(8,6,7,0.25)',
+      '--icon-shadow-inset-top':   'inset 0 1px 0 rgba(61,42,50,0.6)',
+      '--icon-shadow-inset-btm':   'inset 0 -1px 0 rgba(8,6,7,0.20)',
+      '--icon-deco':               '#F0B7CC',
 
-      '--deco-primary':            '#FAC7DA',
-      '--deco-secondary':          '#FCDEE9',
-      '--texture-dot':             'rgba(220,175,192,0.06)',
+      '--deco-primary':            '#F0B7CC',
+      '--deco-secondary':          '#8C6475',
+      '--texture-dot':             'rgba(240,183,204,0.04)',
 
-      '--dock-bg':                 'rgba(255,244,245,0.88)',
-      '--capsule-bg':              'rgba(255,244,245,0.85)',
+      '--dock-bg':                 'rgba(31,26,29,0.92)',
+      '--capsule-bg':              'rgba(31,26,29,0.88)',
 
-      '--border-color':            'rgba(225,185,195,0.12)',
+      '--border-color':            'rgba(240,183,204,0.08)',
+    }
+  },
+
+  // ==========================================
+  // 6. 夜咖色 — 深咖夜底，不做死黑
+  // 参考：主色=#B7927C 辅助深咖=#6E5146 深底=#241C19 奶咖强调=#EED8C8
+  // ==========================================
+  'night-coffee': {
+    label: '夜咖色',
+    mode: 'dark',
+    colors: {
+      '--bg-base':                 '#241C19',
+      '--bg-surface':              '#2E2521',
+      '--bg-hover':                '#38302A',
+      '--bg-glass':                'rgba(36,28,25,0.92)',
+      '--bg-mask':                 'rgba(8,6,4,0.40)',
+
+      '--color-primary':           '#B7927C',
+      '--color-primary-light':     '#6E5146',
+      '--color-primary-ultralight':'#3D2E28',
+      '--color-primary-deep':      '#D4B098',
+
+      '--color-accent':            '#EED8C8',
+      '--color-accent-light':      '#F5E8DE',
+
+      '--text-primary':            '#E8D8C8',
+      '--text-secondary':          '#B8A898',
+      '--text-placeholder':        '#7A6C58',
+
+      '--shadow-soft':             '0 2px 8px rgba(8,6,4,0.30)',
+      '--shadow-card':             '0 4px 16px rgba(8,6,4,0.40)',
+      '--shadow-float':            '0 8px 24px rgba(8,6,4,0.50)',
+      '--shadow-neu-out':          '4px 4px 10px rgba(8,6,4,0.35), -4px -4px 10px rgba(46,37,33,0.5)',
+      '--shadow-neu-in':           'inset 2px 2px 6px rgba(8,6,4,0.30), inset -2px -2px 6px rgba(46,37,33,0.4)',
+
+      '--color-success':           '#7AAC78',
+      '--color-warning':           '#C8B878',
+      '--color-error':             '#C89090',
+      '--color-info':              '#90A8C8',
+
+      // 图标（深咖底 + 焦糖咖线稿）
+      '--icon-stroke':             '#B7927C',
+      '--icon-tile-bg':            '#3D2E28',
+      '--icon-tile-pattern':       '#4D3E38',
+      '--icon-stitch':             '#B7927C',
+      '--icon-inner':              '#352A25',
+      '--icon-shadow':             '0 3px 10px rgba(8,6,4,0.35)',
+      '--icon-shadow-near':        '0 1px 3px rgba(8,6,4,0.25)',
+      '--icon-shadow-inset-top':   'inset 0 1px 0 rgba(61,46,40,0.6)',
+      '--icon-shadow-inset-btm':   'inset 0 -1px 0 rgba(8,6,4,0.20)',
+      '--icon-deco':               '#B7927C',
+
+      '--deco-primary':            '#B7927C',
+      '--deco-secondary':          '#6E5146',
+      '--texture-dot':             'rgba(183,146,124,0.04)',
+
+      '--dock-bg':                 'rgba(36,28,25,0.92)',
+      '--capsule-bg':              'rgba(36,28,25,0.88)',
+
+      '--border-color':            'rgba(183,146,124,0.08)',
     }
   }
 
