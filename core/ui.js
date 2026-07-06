@@ -404,7 +404,8 @@ export function iconHTML(name, size = 22, opts = {}) {
   const isObj = typeof entry === 'object';
   const inner = isObj ? entry.inner : `<path d="${entry}"></path>`;
   const richCls = isObj && entry.rich ? ' popo-icon-rich' : '';
-  const vb = isObj && entry.viewBox ? entry.viewBox : '0 0 24 24';
+  // rich 图标默认 viewBox：左右留 2 单位，上下留 1 单位（给猫耳尖端留描边空间），让主体占满画布
+  const vb = isObj && entry.viewBox ? entry.viewBox : (isObj && entry.rich ? '2 1 20 22' : '0 0 24 24');
   const extra = opts.fill ? `fill="${opts.fill}"` : '';
   return `<svg class="popo-icon-svg${richCls}" width="${size}" height="${size}" viewBox="${vb}" ${extra}>${inner}</svg>`;
 }

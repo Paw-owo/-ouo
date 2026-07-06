@@ -420,17 +420,17 @@ select, input[type="time"], input[type="date"], input[type="datetime-local"] { b
 }
 .widget-vinyl-controls button svg { width: 14px; height: 14px; }
 
-/* 图标网格 */
+/* 图标网格：自由位置容器，图标绝对定位 */
 .icon-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: clamp(16px, 4vw, 22px) clamp(10px, 2.5vw, 14px);
+  position: relative;
+  flex: 1;
+  min-height: 60vh;
   padding: 10px 0;
 }
 .desktop-icon {
   display: flex; flex-direction: column; align-items: center;
   gap: 6px; cursor: pointer;
-  position: relative;
+  position: absolute;
   user-select: none; -webkit-user-select: none;
   -webkit-touch-callout: none; /* 阻止 iOS 长按弹出系统菜单（拷贝/粘贴等） */
   touch-action: none; /* 让 pointermove 全部交给拖拽逻辑，否则触摸设备会被浏览器消费做滚动 */
@@ -453,8 +453,8 @@ select, input[type="time"], input[type="date"], input[type="datetime-local"] { b
   overflow: hidden;
 }
 .desktop-icon-img svg { width: 60%; height: 60%; }
-/* rich 图标（猫主题填充型）：占比放大到 80%，让软萌小猫主体饱满可辨 */
-.desktop-icon-img svg.popo-icon-rich { width: 80%; height: 80%; }
+/* rich 图标（猫主题填充型）：viewBox 裁掉边缘留白后，主体占满画布，宽度 100% 让小猫真正撑满底盘 */
+.desktop-icon-img svg.popo-icon-rich { width: 100%; height: 100%; }
 .desktop-icon:active .desktop-icon-img { transform: scale(var(--press-scale)); }
 .desktop-icon-label {
   font-size: var(--font-size-small);

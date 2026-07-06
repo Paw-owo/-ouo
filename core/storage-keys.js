@@ -74,6 +74,8 @@ export const KEYS = Object.freeze({
   appHiddenIcons: 'app_hidden_icons',
   // 图标跨页拖拽覆盖：{ appId: pageNumber }，记录用户把 app 拖到了第几页
   appIconPageOverrides: 'app_icon_page_overrides',
+  // 图标自由位置：{ appId: { x, y, page } }，x/y 是相对 icon-grid 的百分比 0-100
+  appIconPositions: 'app_icon_positions_v2',
 
   // 聊天相关
   chatCurrentCharacter: 'chat_current_character',
