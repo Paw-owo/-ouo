@@ -55,7 +55,17 @@ const ICON_PATHS = {
   // 刷新：拉取模型列表时用，转起来软萌
   refresh: 'M23 4v6h-6 M1 20v-6h6 M3.51 9a9 9 0 0 1 14.85-3.36L23 10 M1 14l4.64 4.36A9 9 0 0 0 20.49 15',
   // 下箭头：折叠卡用，收起时旋转 -90deg
-  'chevron-down': 'M6 9l6 6 6-6'
+  'chevron-down': 'M6 9l6 6 6-6',
+
+  // ═══ APP 专属图标（猫主题·软萌填充版）═══
+  // 仅用于桌面 APP 图标入口；不替代上方同名通用符号。
+  // 配色：主体 fill 用 --bg-card（在 accent-light 磨砂底盘上显眼），描边/点缀用 --accent。
+  // app-chat：猫爪气泡——圆角气泡 + 内嵌猫爪（5 肉垫）
+  'app-chat': { rich: true, inner: '<path d="M5 4h14a3 3 0 0 1 3 3v6a3 3 0 0 1-3 3h-4l-5 4v-4H5a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3z" style="fill:var(--bg-card);stroke:var(--accent);stroke-width:2;stroke-linejoin:round"/><circle cx="12" cy="13" r="2" style="fill:var(--accent)"/><circle cx="9.2" cy="10.6" r="1.1" style="fill:var(--accent)"/><circle cx="14.8" cy="10.6" r="1.1" style="fill:var(--accent)"/><circle cx="7.6" cy="13" r="0.95" style="fill:var(--accent)"/><circle cx="16.4" cy="13" r="0.95" style="fill:var(--accent)"/>' },
+  // app-memo：猫咪本子——圆角本子 + 顶部两猫耳 + 三条横线
+  'app-memo': { rich: true, inner: '<path d="M5 4.5h14a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6.5a2 2 0 0 1 2-2z" style="fill:var(--bg-card);stroke:var(--accent);stroke-width:2;stroke-linejoin:round"/><path d="M6.8 4.8 L8.3 2 L9.8 4.8z" style="fill:var(--accent);stroke:var(--accent);stroke-width:1.4;stroke-linejoin:round"/><path d="M14.2 4.8 L15.7 2 L17.2 4.8z" style="fill:var(--accent);stroke:var(--accent);stroke-width:1.4;stroke-linejoin:round"/><path d="M7 10h10 M7 13h10 M7 16h6" style="fill:none;stroke:var(--accent);stroke-width:1.6;stroke-linecap:round"/>' },
+  // app-weather：云朵小猫——云朵 + 半圆猫脸探出 + 两耳 + 五官
+  'app-weather': { rich: true, inner: '<path d="M5 17.5a3.5 3.5 0 0 1 .6-6.9 4 4 0 0 1 7.4-1 3.5 3.5 0 0 1 5.4 3 3 3 0 0 1-1 5.9z" style="fill:var(--bg-card);stroke:var(--accent);stroke-width:2;stroke-linejoin:round"/><path d="M6.8 11.5a5.2 5.2 0 0 0 10.4 0z" style="fill:var(--bg-card);stroke:var(--accent);stroke-width:2;stroke-linejoin:round"/><path d="M7 6.8 L8.4 3.6 L10.4 6.3z" style="fill:var(--accent);stroke:var(--accent);stroke-width:1.4;stroke-linejoin:round"/><path d="M13.6 6.3 L15.6 3.6 L17 6.8z" style="fill:var(--accent);stroke:var(--accent);stroke-width:1.4;stroke-linejoin:round"/><circle cx="9.6" cy="9.6" r="0.55" style="fill:var(--accent)"/><circle cx="14.4" cy="9.6" r="0.55" style="fill:var(--accent)"/><path d="M11.7 10.6 L12 11.1 L12.3 10.6z" style="fill:var(--accent)"/>' }
 };
 
 // 注入全局 UI 样式（基于 CSS 变量，主题适配）
@@ -88,6 +98,8 @@ function ensureUIStyle() {
     .popo-dialog-actions button.primary{background:var(--accent);color:var(--bubble-user-text)}
     .popo-dialog-actions button.danger{background:var(--danger);color:var(--bubble-user-text)}
     .popo-icon-svg{stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;fill:none;display:inline-block;vertical-align:middle}
+    /* rich 图标：多元素填充型（猫主题等），关掉全局描边宽度，让子元素 style 自行控制 fill/stroke */
+    .popo-icon-svg.popo-icon-rich{stroke-width:0}
     .popo-loading{position:fixed;inset:0;z-index:9500;display:flex;align-items:center;justify-content:center;background:var(--bg-overlay);backdrop-filter:blur(4px)}
     .popo-loading-dot{width:14px;height:14px;border-radius:50%;background:var(--accent);margin:0 5px;animation:popoPulse 1s ease-in-out infinite}
     .popo-loading-dot:nth-child(2){animation-delay:.2s}
@@ -332,10 +344,15 @@ export function showLoading(text = '小手机正在醒来') {
 // ════════════════════════════════════════
 
 export function iconHTML(name, size = 22, opts = {}) {
-  const path = ICON_PATHS[name];
-  if (!path) return '';
+  const entry = ICON_PATHS[name];
+  if (!entry) return '';
+  // 支持两种格式：旧的单 path 字符串；新的 { inner, rich, viewBox } 对象（多元素填充图标）
+  const isObj = typeof entry === 'object';
+  const inner = isObj ? entry.inner : `<path d="${entry}"></path>`;
+  const richCls = isObj && entry.rich ? ' popo-icon-rich' : '';
+  const vb = isObj && entry.viewBox ? entry.viewBox : '0 0 24 24';
   const extra = opts.fill ? `fill="${opts.fill}"` : '';
-  return `<svg class="popo-icon-svg" width="${size}" height="${size}" viewBox="0 0 24 24" ${extra}><path d="${path}"></path></svg>`;
+  return `<svg class="popo-icon-svg${richCls}" width="${size}" height="${size}" viewBox="${vb}" ${extra}>${inner}</svg>`;
 }
 
 export function createIcon(name, size = 22, opts = {}) {
