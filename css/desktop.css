@@ -25,6 +25,9 @@
   background: var(--bg-base);
   z-index: 1;
   transition: opacity var(--duration-normal) var(--ease-smooth);
+  /* 极淡点阵纹理 */
+  background-image: radial-gradient(circle, var(--texture-dot) 1.2px, transparent 1.2px);
+  background-size: 22px 22px;
 }
 
 #desktop.desktop-hidden {
@@ -592,7 +595,7 @@
   transform: scale(0.92);
 }
 
-/* Stitch布料质感图标底盘 */
+/* Stitch布料质感图标底盘 — 三层结构 */
 .app-icon-chassis {
   width: 60px;
   height: 60px;
@@ -604,42 +607,42 @@
     var(--icon-shadow-inset-btm),
     var(--icon-shadow),
     var(--icon-shadow-near);
-  /* 格纹纹理 */
+  /* 格纹纹理 — 间距12px，肉眼可见 */
   background-image:
     repeating-linear-gradient(
       0deg,
       transparent,
-      transparent 17px,
-      var(--icon-tile-pattern) 17px,
-      var(--icon-tile-pattern) 17.5px
+      transparent 12px,
+      var(--icon-tile-pattern) 12px,
+      var(--icon-tile-pattern) 12.5px
     ),
     repeating-linear-gradient(
       90deg,
       transparent,
-      transparent 17px,
-      var(--icon-tile-pattern) 17px,
-      var(--icon-tile-pattern) 17.5px
+      transparent 12px,
+      var(--icon-tile-pattern) 12px,
+      var(--icon-tile-pattern) 12.5px
     );
 }
 
-/* 缝线边框 */
+/* 缝线边框 — 可见的虚线 */
 .app-icon-chassis::before {
   content: '';
   position: absolute;
   inset: 5px;
-  border: 1px dashed var(--icon-stitch);
-  border-radius: var(--radius-md);
+  border: 1.5px dashed var(--icon-stitch);
+  border-radius: calc(var(--radius-lg) - 4px);
   pointer-events: none;
-  opacity: 0.2;
+  opacity: 0.45;
 }
 
-/* 奶白垫片 */
+/* 奶白垫片 — 更大更明显 */
 .app-icon-chassis::after {
   content: '';
   position: absolute;
-  inset: 14px;
+  inset: 11px;
   background: var(--icon-inner);
-  border-radius: var(--radius-sm);
+  border-radius: calc(var(--radius-lg) - 8px);
   pointer-events: none;
   box-shadow: var(--icon-shadow-inset-top);
 }
@@ -648,8 +651,8 @@
   position: absolute;
   inset: 0;
   margin: auto;
-  width: 70%;
-  height: 70%;
+  width: 72%;
+  height: 72%;
   z-index: 1;
   color: var(--icon-stroke);
 }
@@ -706,7 +709,7 @@
   backdrop-filter: var(--backdrop-blur);
   -webkit-backdrop-filter: var(--backdrop-blur);
   border: 1px solid var(--border-color);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08), 0 2px 8px rgba(0, 0, 0, 0.04);
+  box-shadow: var(--shadow-float);
   width: 100%;
   max-width: 420px;
 }
@@ -728,13 +731,56 @@
   transform: scale(0.92);
 }
 
+/* dock 图标 Stitch 三层结构 */
 .dock-item .dock-icon-chassis {
   width: 64px;
   height: 64px;
-  border-radius: 18px;
-  background: #ffffff;
+  border-radius: var(--radius-lg);
+  background: var(--icon-tile-bg);
   position: relative;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+  box-shadow:
+    var(--icon-shadow-inset-top),
+    var(--icon-shadow-inset-btm),
+    var(--icon-shadow),
+    var(--icon-shadow-near);
+  /* 格纹纹理 */
+  background-image:
+    repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 12px,
+      var(--icon-tile-pattern) 12px,
+      var(--icon-tile-pattern) 12.5px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      transparent,
+      transparent 12px,
+      var(--icon-tile-pattern) 12px,
+      var(--icon-tile-pattern) 12.5px
+    );
+}
+
+/* dock 缝线 */
+.dock-item .dock-icon-chassis::before {
+  content: '';
+  position: absolute;
+  inset: 5px;
+  border: 1.5px dashed var(--icon-stitch);
+  border-radius: calc(var(--radius-lg) - 4px);
+  pointer-events: none;
+  opacity: 0.45;
+}
+
+/* dock 奶白垫片 */
+.dock-item .dock-icon-chassis::after {
+  content: '';
+  position: absolute;
+  inset: 11px;
+  background: var(--icon-inner);
+  border-radius: calc(var(--radius-lg) - 8px);
+  pointer-events: none;
+  box-shadow: var(--icon-shadow-inset-top);
 }
 
 .dock-item .dock-icon-chassis svg {
@@ -744,8 +790,7 @@
   width: 72%;
   height: 72%;
   z-index: 1;
-  color: var(--color-primary);
-  stroke-width: 2.2;
+  color: var(--icon-stroke);
 }
 
 .dock-item .dock-indicator {

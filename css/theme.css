@@ -15,14 +15,14 @@
   --bg-mask: rgba(100, 80, 85, 0.25);
 
   /* 主色系 */
-  --color-primary: #FAC7DA;
-  --color-primary-light: #FCDEE9;
-  --color-primary-ultralight: #FDE8F0;
-  --color-primary-deep: #E8A8C0;
+  --color-primary: #F0B0C8;
+  --color-primary-light: #F8D0DE;
+  --color-primary-ultralight: #FCE8F0;
+  --color-primary-deep: #D890A8;
 
   /* 辅色 */
-  --color-accent: #E2F3FF;
-  --color-accent-light: #F0F8FF;
+  --color-accent: #D1E3FF;
+  --color-accent-light: #E4EEFF;
 
   /* 文字 */
   --text-primary: #6B5A60;
@@ -58,21 +58,21 @@
   --color-info: #A0B8D8;
 
   /* 图标 / Stitch布料质感 */
-  --icon-stroke: #C49DB0;
+  --icon-stroke: #F0B0C8;
   --icon-tile-bg: #D1E3FF;
-  --icon-tile-pattern: #C0D8F8;
-  --icon-stitch: #C49DB0;
-  --icon-inner: #FFFDFD;
-  --icon-shadow: 0 3px 10px rgba(190, 170, 200, 0.12);
-  --icon-shadow-near: 0 1px 3px rgba(190, 170, 200, 0.08);
-  --icon-shadow-inset-top: inset 0 1px 0 rgba(255, 253, 253, 0.95);
-  --icon-shadow-inset-btm: inset 0 -1px 0 rgba(190, 170, 200, 0.06);
-  --icon-deco: #FAC7DA;
+  --icon-tile-pattern: #C4D8F5;
+  --icon-stitch: #F0B0C8;
+  --icon-inner: #FFF8F9;
+  --icon-shadow: 0 3px 10px rgba(200, 170, 190, 0.14);
+  --icon-shadow-near: 0 1px 3px rgba(200, 170, 190, 0.10);
+  --icon-shadow-inset-top: inset 0 1px 0 rgba(255, 250, 251, 0.95);
+  --icon-shadow-inset-btm: inset 0 -1px 0 rgba(200, 170, 190, 0.08);
+  --icon-deco: #F0B0C8;
 
   /* 装饰 */
-  --deco-primary: #FAC7DA;
+  --deco-primary: #F0B0C8;
   --deco-secondary: #D1E3FF;
-  --texture-dot: rgba(210, 180, 195, 0.06);
+  --texture-dot: rgba(210, 180, 195, 0.08);
 
   /* 字体 */
   --font-family: 'HarmonyOS Sans SC', 'PingFang SC', 'Noto Sans SC', system-ui, sans-serif;
@@ -89,7 +89,7 @@
   --capsule-bg: rgba(255, 244, 245, 0.85);
 
   /* 边框 */
-  --border-color: rgba(220, 195, 200, 0.15);
+  --border-color: rgba(220, 195, 200, 0.18);
 
   /* 思维链 */
   --chain-bg: var(--bg-surface);

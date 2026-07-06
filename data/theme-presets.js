@@ -17,29 +17,30 @@ const THEME_PRESETS = {
 
   // ==========================================
   // 1. 莓莓云顶奶 — 默认主题
-  // 蓝粉奶油糖纸，最梦幻、最软、最讨喜
-  // 参考：蓝=#D1E3FF 粉白底=#FFF4F5 雾蓝=#E2F3FF 糖霜粉=#FAC7DA
+  // 粉白主导 + 浅蓝点缀，像奶油糖纸
+  // 参考：浅蓝=#D1E3FF 浅粉白=#FFF4F5 雾蓝=#E2F3FF 糖霜粉=#FAC7DA
+  // 图标：粉蓝拼布格纹底 + 粉色缝线 + 奶白垫片 + 粉色线稿
   // ==========================================
   'berry-cloud': {
     label: '莓莓云顶奶',
     mode: 'light',
     colors: {
-      // 背景
+      // 背景（浅粉白，最浅）
       '--bg-base':                 '#FFF4F5',
-      '--bg-surface':              '#F9EEF0',
-      '--bg-hover':                '#F3E6E9',
-      '--bg-glass':                'rgba(255,244,245,0.88)',
+      '--bg-surface':              '#FCEEF1',
+      '--bg-hover':                '#F7E4E9',
+      '--bg-glass':                'rgba(255,244,245,0.90)',
       '--bg-mask':                 'rgba(100,80,85,0.25)',
 
-      // 主色系（糖霜粉 = 重点、按钮、小装饰）
-      '--color-primary':           '#FAC7DA',
-      '--color-primary-light':     '#FCDEE9',
-      '--color-primary-ultralight':'#FDE8F0',
-      '--color-primary-deep':      '#E8A8C0',
+      // 主色系（糖霜粉 = 图标线稿、按钮、装饰）
+      '--color-primary':           '#F0B0C8',
+      '--color-primary-light':     '#F8D0DE',
+      '--color-primary-ultralight':'#FCE8F0',
+      '--color-primary-deep':      '#D890A8',
 
-      // 辅色（雾蓝 = 气氛、卡片、胶囊浅层）
-      '--color-accent':            '#E2F3FF',
-      '--color-accent-light':      '#F0F8FF',
+      // 辅色（浅蓝 = 图标底盘、气氛点缀）
+      '--color-accent':            '#D1E3FF',
+      '--color-accent-light':      '#E4EEFF',
 
       // 文字（柔粉棕，不纯黑）
       '--text-primary':            '#6B5A60',
@@ -59,29 +60,29 @@ const THEME_PRESETS = {
       '--color-error':             '#D8A0A8',
       '--color-info':              '#A0B8D8',
 
-      // 图标（蓝底 + 粉线稿，蓝粉都带出来）
-      '--icon-stroke':             '#C49DB0',
+      // 图标 Stitch（粉蓝拼布格纹底 + 粉色缝线 + 奶白垫片 + 粉色线稿）
+      '--icon-stroke':             '#F0B0C8',
       '--icon-tile-bg':            '#D1E3FF',
-      '--icon-tile-pattern':       '#C0D8F8',
-      '--icon-stitch':             '#C49DB0',
-      '--icon-inner':              '#FFFDFD',
-      '--icon-shadow':             '0 3px 10px rgba(190,170,200,0.12)',
-      '--icon-shadow-near':        '0 1px 3px rgba(190,170,200,0.08)',
-      '--icon-shadow-inset-top':   'inset 0 1px 0 rgba(255,253,253,0.95)',
-      '--icon-shadow-inset-btm':   'inset 0 -1px 0 rgba(190,170,200,0.06)',
-      '--icon-deco':               '#FAC7DA',
+      '--icon-tile-pattern':       '#C4D8F5',
+      '--icon-stitch':             '#F0B0C8',
+      '--icon-inner':              '#FFF8F9',
+      '--icon-shadow':             '0 3px 10px rgba(200,170,190,0.14)',
+      '--icon-shadow-near':        '0 1px 3px rgba(200,170,190,0.10)',
+      '--icon-shadow-inset-top':   'inset 0 1px 0 rgba(255,250,251,0.95)',
+      '--icon-shadow-inset-btm':   'inset 0 -1px 0 rgba(200,170,190,0.08)',
+      '--icon-deco':               '#F0B0C8',
 
       // 装饰
-      '--deco-primary':            '#FAC7DA',
+      '--deco-primary':            '#F0B0C8',
       '--deco-secondary':          '#D1E3FF',
-      '--texture-dot':             'rgba(210,180,195,0.06)',
+      '--texture-dot':             'rgba(210,180,195,0.08)',
 
       // dock / 状态胶囊
-      '--dock-bg':                 'rgba(255,244,245,0.88)',
-      '--capsule-bg':              'rgba(255,244,245,0.85)',
+      '--dock-bg':                 'rgba(255,244,245,0.90)',
+      '--capsule-bg':              'rgba(255,244,245,0.88)',
 
       // 边框
-      '--border-color':            'rgba(220,195,200,0.15)',
+      '--border-color':            'rgba(220,195,200,0.18)',
     }
   },
 
