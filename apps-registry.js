@@ -30,7 +30,7 @@ export const APPS = [
   {
     id: 'memo',
     name: '备忘录',
-    icon: 'memo',
+    icon: 'app-memo',
     iconColor: '#8BADD4',
     dock: false,
     page: 0,
@@ -66,7 +66,7 @@ export const APPS = [
   {
     id: 'weather',
     name: '天气',
-    icon: 'weather',
+    icon: 'app-weather',
     iconColor: '#7EC4E0',
     dock: false,
     page: 0,
@@ -75,7 +75,7 @@ export const APPS = [
   {
     id: 'chat',
     name: '聊天',
-    icon: 'chat',
+    icon: 'app-chat',
     iconColor: '#F5B0B8',
     dock: false,
     page: 0,

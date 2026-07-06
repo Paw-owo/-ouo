@@ -13,8 +13,7 @@ import { injectStyle } from './util.js';
 
 // 内联 SVG 图标库（stroke-width: 1.5，手绘风）
 const ICON_PATHS = {
-  // chat：猫爪气泡——圆角气泡 + 内嵌猫爪（5 肉垫）
-  chat: { rich: true, inner: '<path d="M5 4h14a3 3 0 0 1 3 3v6a3 3 0 0 1-3 3h-4l-5 4v-4H5a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3z" style="fill:var(--accent-light);stroke:var(--accent);stroke-width:2;stroke-linejoin:round"/><circle cx="12" cy="13" r="2" style="fill:var(--accent)"/><circle cx="9.2" cy="10.6" r="1.1" style="fill:var(--accent)"/><circle cx="14.8" cy="10.6" r="1.1" style="fill:var(--accent)"/><circle cx="7.6" cy="13" r="0.95" style="fill:var(--accent)"/><circle cx="16.4" cy="13" r="0.95" style="fill:var(--accent)"/>' },
+  chat: 'M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z',
   heart: 'M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z',
   settings: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z',
   close: 'M18 6L6 18 M6 6l12 12',
@@ -24,14 +23,12 @@ const ICON_PATHS = {
   plus: 'M12 5v14 M5 12h14',
   minus: 'M5 12h14',
   search: 'M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16z M21 21l-4.35-4.35',
-  // weather：云朵小猫——云朵 + 半圆猫脸探出 + 两耳 + 五官
-  weather: { rich: true, inner: '<path d="M5 17.5a3.5 3.5 0 0 1 .6-6.9 4 4 0 0 1 7.4-1 3.5 3.5 0 0 1 5.4 3 3 3 0 0 1-1 5.9z" style="fill:var(--accent-light);stroke:var(--accent);stroke-width:2;stroke-linejoin:round"/><path d="M6.8 11.5a5.2 5.2 0 0 0 10.4 0z" style="fill:var(--accent-light);stroke:var(--accent);stroke-width:2;stroke-linejoin:round"/><path d="M7 6.8 L8.4 3.6 L10.4 6.3z" style="fill:var(--accent);stroke:var(--accent);stroke-width:1.4;stroke-linejoin:round"/><path d="M13.6 6.3 L15.6 3.6 L17 6.8z" style="fill:var(--accent);stroke:var(--accent);stroke-width:1.4;stroke-linejoin:round"/><circle cx="9.6" cy="9.6" r="0.55" style="fill:var(--accent)"/><circle cx="14.4" cy="9.6" r="0.55" style="fill:var(--accent)"/><path d="M11.7 10.6 L12 11.1 L12.3 10.6z" style="fill:var(--accent)"/>' },
+  weather: 'M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z',
   calendar: 'M19 4H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z M16 2v4 M8 2v4 M3 10h18',
   music: 'M9 18V5l12-2v13 M9 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0z M21 16a3 3 0 1 1-6 0 3 3 0 0 1 6 0z',
   wallet: 'M21 12V7H5a2 2 0 0 1 0-4h14v4 M3 5v14a2 2 0 0 0 2 2h16v-5 M18 12a2 2 0 0 0 0 4h4v-4z',
   shop: 'M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z M3 6h18 M16 10a4 4 0 0 1-8 0',
-  // memo：猫咪本子——圆角本子 + 顶部两猫耳 + 三条横线
-  memo: { rich: true, inner: '<path d="M5 4.5h14a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6.5a2 2 0 0 1 2-2z" style="fill:var(--accent-light);stroke:var(--accent);stroke-width:2;stroke-linejoin:round"/><path d="M6.8 4.8 L8.3 2 L9.8 4.8z" style="fill:var(--accent);stroke:var(--accent);stroke-width:1.4;stroke-linejoin:round"/><path d="M14.2 4.8 L15.7 2 L17.2 4.8z" style="fill:var(--accent);stroke:var(--accent);stroke-width:1.4;stroke-linejoin:round"/><path d="M7 10h10 M7 13h10 M7 16h6" style="fill:none;stroke:var(--accent);stroke-width:1.6;stroke-linecap:round"/>' },
+  memo: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6 M16 13H8 M16 17H8 M10 9H8',
   star: 'M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z',
   camera: 'M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z M12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8z',
   dream: 'M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z',
@@ -58,7 +55,17 @@ const ICON_PATHS = {
   // 刷新：拉取模型列表时用，转起来软萌
   refresh: 'M23 4v6h-6 M1 20v-6h6 M3.51 9a9 9 0 0 1 14.85-3.36L23 10 M1 14l4.64 4.36A9 9 0 0 0 20.49 15',
   // 下箭头：折叠卡用，收起时旋转 -90deg
-  'chevron-down': 'M6 9l6 6 6-6'
+  'chevron-down': 'M6 9l6 6 6-6',
+
+  // ═══ APP 专属图标（猫主题·软萌填充版）═══
+  // 仅用于桌面 APP 图标入口；不替代上方同名通用符号。
+  // 配色：主体 fill 用 --bg-card（在 accent-light 磨砂底盘上显眼），描边/点缀用 --accent。
+  // app-chat：猫爪气泡——圆角气泡 + 内嵌猫爪（5 肉垫）
+  'app-chat': { rich: true, inner: '<path d="M5 4h14a3 3 0 0 1 3 3v6a3 3 0 0 1-3 3h-4l-5 4v-4H5a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3z" style="fill:var(--bg-card);stroke:var(--accent);stroke-width:2;stroke-linejoin:round"/><circle cx="12" cy="13" r="2" style="fill:var(--accent)"/><circle cx="9.2" cy="10.6" r="1.1" style="fill:var(--accent)"/><circle cx="14.8" cy="10.6" r="1.1" style="fill:var(--accent)"/><circle cx="7.6" cy="13" r="0.95" style="fill:var(--accent)"/><circle cx="16.4" cy="13" r="0.95" style="fill:var(--accent)"/>' },
+  // app-memo：猫咪本子——圆角本子 + 顶部两猫耳 + 三条横线
+  'app-memo': { rich: true, inner: '<path d="M5 4.5h14a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6.5a2 2 0 0 1 2-2z" style="fill:var(--bg-card);stroke:var(--accent);stroke-width:2;stroke-linejoin:round"/><path d="M6.8 4.8 L8.3 2 L9.8 4.8z" style="fill:var(--accent);stroke:var(--accent);stroke-width:1.4;stroke-linejoin:round"/><path d="M14.2 4.8 L15.7 2 L17.2 4.8z" style="fill:var(--accent);stroke:var(--accent);stroke-width:1.4;stroke-linejoin:round"/><path d="M7 10h10 M7 13h10 M7 16h6" style="fill:none;stroke:var(--accent);stroke-width:1.6;stroke-linecap:round"/>' },
+  // app-weather：云朵小猫——云朵 + 半圆猫脸探出 + 两耳 + 五官
+  'app-weather': { rich: true, inner: '<path d="M5 17.5a3.5 3.5 0 0 1 .6-6.9 4 4 0 0 1 7.4-1 3.5 3.5 0 0 1 5.4 3 3 3 0 0 1-1 5.9z" style="fill:var(--bg-card);stroke:var(--accent);stroke-width:2;stroke-linejoin:round"/><path d="M6.8 11.5a5.2 5.2 0 0 0 10.4 0z" style="fill:var(--bg-card);stroke:var(--accent);stroke-width:2;stroke-linejoin:round"/><path d="M7 6.8 L8.4 3.6 L10.4 6.3z" style="fill:var(--accent);stroke:var(--accent);stroke-width:1.4;stroke-linejoin:round"/><path d="M13.6 6.3 L15.6 3.6 L17 6.8z" style="fill:var(--accent);stroke:var(--accent);stroke-width:1.4;stroke-linejoin:round"/><circle cx="9.6" cy="9.6" r="0.55" style="fill:var(--accent)"/><circle cx="14.4" cy="9.6" r="0.55" style="fill:var(--accent)"/><path d="M11.7 10.6 L12 11.1 L12.3 10.6z" style="fill:var(--accent)"/>' }
 };
 
 // 注入全局 UI 样式（基于 CSS 变量，主题适配）
