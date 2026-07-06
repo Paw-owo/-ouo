@@ -13,6 +13,8 @@ const STORAGE_KEYS = Object.freeze({
   LOCKSCREEN_WALLPAPER: 'lockscreen_wallpaper',
   WALLPAPER_SYNC:     'wallpaper_sync',
   LOCKSCREEN_BLUR:    'lockscreen_blur',
+  APP_BG:             'app_bg',
+  APP_BG_OVERRIDES:   'app_bg_overrides',
 
   // === 桌面 ===
   DESKTOP_ICON_ORDER: 'desktop_icon_order',

@@ -21,6 +21,8 @@ const DEFAULT_SETTINGS = Object.freeze({
   lockscreenWallpaper: null,
   wallpaperSync: true,
   lockscreenBlur: 8,
+  appBg: null,
+  appBgOverrides: null,
 
   // 锁屏
   lockEnabled: false,

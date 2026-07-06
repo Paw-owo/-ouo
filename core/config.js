@@ -22,6 +22,8 @@ const KEY_TO_STORAGE = {
   lockscreenWallpaper:  STORAGE_KEYS.LOCKSCREEN_WALLPAPER,
   wallpaperSync:        STORAGE_KEYS.WALLPAPER_SYNC,
   lockscreenBlur:       STORAGE_KEYS.LOCKSCREEN_BLUR,
+  appBg:                STORAGE_KEYS.APP_BG,
+  appBgOverrides:       STORAGE_KEYS.APP_BG_OVERRIDES,
   lockEnabled:          STORAGE_KEYS.LOCK_ENABLED,
   lockPassword:         STORAGE_KEYS.LOCK_PASSWORD,
   lockAvatar:           STORAGE_KEYS.LOCK_AVATAR,

@@ -39,13 +39,13 @@ function verifyPassword(input) {
 
   const stored = get('lockPassword');
   if (!stored) {
-    _unlock();
+    unlock();
     return { success: true };
   }
 
   if (input === stored) {
     _failedAttempts = 0;
-    _unlock();
+    unlock();
     return { success: true };
   }
 
@@ -88,7 +88,7 @@ function setMessage(message) {
 }
 
 // 解锁
-function _unlock() {
+function unlock() {
   _locked = false;
   _clearAutoLock();
   events.emit('lock:unlocked', {});
@@ -105,7 +105,7 @@ function lock() {
 // 切换锁屏
 function toggleLock() {
   if (_locked) {
-    _unlock();
+    unlock();
   } else {
     lock();
   }
@@ -115,7 +115,7 @@ function toggleLock() {
 function setLockEnabled(enabled) {
   set('lockEnabled', enabled);
   if (!enabled && _locked) {
-    _unlock();
+    unlock();
   }
 }
 
@@ -175,7 +175,7 @@ export {
   setAvatar,
   setMessage,
   lock,
-  _unlock as unlock,
+  unlock,
   toggleLock,
   setLockEnabled,
   startAutoLock,
