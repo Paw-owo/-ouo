@@ -745,7 +745,7 @@ function wireHoldToSpeak(btn) {
     startY = e.clientY;
     cancelled = false;
     // 创建录音遮罩
-    overlay = createRecordingOverlay();
+    overlay = createRecordingOverlay(() => { cancelled = false; end({}); });
     document.body.appendChild(overlay.el);
     requestAnimationFrame(() => overlay.el.classList.add('show'));
     try {
@@ -808,7 +808,7 @@ function wireHoldToSpeak(btn) {
 }
 
 /** 录音遮罩：圆形指示器 + 计时 + 提示文字 */
-function createRecordingOverlay() {
+function createRecordingOverlay(onTimeout) {
   const el = document.createElement('div');
   el.className = 'chat-voice-overlay';
   el.innerHTML = `
@@ -836,13 +836,13 @@ function createRecordingOverlay() {
         const m = Math.floor(seconds / 60);
         const s = seconds % 60;
         timerEl.textContent = `${m}:${String(s).padStart(2, '0')}`;
-        // 最长 60 秒
+        // 最长 60 秒：直接调用 onTimeout 触发正常的结束流程（发送/取消由 end 内部判定）
+        // 之前用 dispatchEvent(pointerup) 派给 body，btn 上的 end 处理器不一定收到，
+        // 导致录音到 60 秒可能不发送。
         if (seconds >= 60 && timer) {
           clearInterval(timer);
           timer = null;
-          // 模拟松开：派发 pointerup 到当前持有指针的元素
-          // 这里简单做：直接 dispatch 到 body
-          document.body.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
+          if (typeof onTimeout === 'function') onTimeout();
         }
       }, 1000);
     },

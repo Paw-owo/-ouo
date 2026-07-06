@@ -10,6 +10,9 @@ import { KEYS } from './storage-keys.js';
 let currentApp = null;
 let currentContainer = null;
 let registry = null;
+// openApp 重入锁：进行中再点别的图标直接忽略，避免并发 mount 竞态
+// （两个 openApp 并发会导致先完成者的 unmount 永不执行，监听器/bus/定时器全泄漏）
+let _opening = false;
 
 async function getRegistry() {
   if (!registry) {
@@ -29,6 +32,17 @@ export function getCurrentApp() {
 
 export async function openApp(appId, params = {}) {
   if (!appId) return;
+  // 重入锁：正在打开/关闭另一个 APP 时，忽略新的打开请求，避免并发 mount 竞态
+  if (_opening) return;
+  _opening = true;
+  try {
+    await _openAppInner(appId, params);
+  } finally {
+    _opening = false;
+  }
+}
+
+async function _openAppInner(appId, params = {}) {
   const reg = await getRegistry();
   if (!reg || !reg.APPS) {
     showToast('注册表还没准备好，稍等一下下嘛');
@@ -40,17 +54,23 @@ export async function openApp(appId, params = {}) {
     return;
   }
 
-  // 先卸载当前
+  // 已开同一个 APP：直接忽略，避免重复 mount 导致事件绑定翻倍
+  if (currentApp && currentApp.id === appId) return;
+
+  // 先卸载当前（closeCurrent 自带 currentContainer 残留兜底）
   await closeCurrent();
 
   const container = document.getElementById('app-root') || createAppRoot();
   currentContainer = container;
 
+  let mod = null;
   try {
     const context = await buildContext(def, params);
-    const mod = await def.loader();
+    mod = await def.loader();
     if (typeof mod.mount !== 'function') {
       showToast('这个 App 有点害羞，还没准备好');
+      // 失败也清掉 currentContainer 引用，避免残留
+      currentContainer = null;
       return;
     }
     await mod.mount(container, context);
@@ -61,11 +81,27 @@ export async function openApp(appId, params = {}) {
   } catch (e) {
     console.warn('[router] 打开失败', appId, e);
     showToast('哎呀，打开出了点问题');
+    // 失败 cleanup：回滚已半开的容器，避免卡在中间态
+    // （不清 currentApp，因为它还是 null；但要清 currentContainer 和残留 DOM）
+    try { if (mod && typeof mod.unmount === 'function') await mod.unmount(); } catch (ue) {}
+    if (currentContainer) {
+      currentContainer.classList.remove('app-open');
+      currentContainer.innerHTML = '';
+    }
+    currentContainer = null;
   }
 }
 
 export async function closeCurrent() {
-  if (!currentApp) return;
+  // 兜底：即使 currentApp 为 null（上次 mount 抛错被回滚），也清掉 currentContainer 残留 DOM
+  if (!currentApp) {
+    if (currentContainer) {
+      currentContainer.classList.remove('app-open');
+      currentContainer.innerHTML = '';
+      currentContainer = null;
+    }
+    return;
+  }
   try {
     if (typeof currentApp.module.unmount === 'function') {
       await currentApp.module.unmount();

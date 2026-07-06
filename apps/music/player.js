@@ -153,6 +153,7 @@ export function ensureAudio() {
   if (state.audioEl) return;
   const a = new Audio();
   a.preload = 'auto';
+  a._songId = null; // 初始化，避免 refresh 时拿 undefined 找不到当前播放高亮
   a.volume = isMuted() ? 0 : getVolume();
   a.addEventListener('timeupdate', () => { if (!state.seeking) onTimeUpdate(); });
   a.addEventListener('durationchange', onTimeUpdate);
@@ -192,18 +193,10 @@ export async function playAt(idx) {
     showToast('这首歌的音频还没准备好嘛，重新加一下试试', 'error');
     return;
   }
-  // 切歌前释放上一首的 blob URL（如果之前是 createObjectURL 出来的）
-  // 注意：unmount 不释放当前正在用的 URL，只在切歌时释放旧的
-  const prevSongId = state.audioEl ? state.audioEl._songId : null;
-  if (prevSongId && prevSongId !== song.id) {
-    const prevUrl = sessionBlobs.get(prevSongId);
-    if (prevUrl) {
-      try { URL.revokeObjectURL(prevUrl); } catch (e) {}
-      // 注意：revoke 后要从 IDB 重新读出来再 createObjectURL 才能继续用
-      // 这里直接 delete 会让上一首下次播放时走 restoreSessionBlobs 流程；
-      // 但 restoreSessionBlobs 只在 mount 时跑，所以这里改成「保留 URL 不释放」更安全。
-    }
-  }
+  // 切歌时不再 revoke 上一首的 blob URL。
+  // 之前 revokeObjectURL 后 sessionBlobs Map 里仍保留死 URL，
+  // 下次切回上一首时 audioEl.src 拿到失效 URL 导致播放失败（toast「这首歌播不出来嘛」）。
+  // blob URL 在 unmount 时统一释放，切歌期间保留是安全的。
   state.currentIndex = idx;
   // 同步播放队列：从当前 viewSongs 快照一份 song id 顺序
   state.queue = viewSongs.map((s) => s.id);

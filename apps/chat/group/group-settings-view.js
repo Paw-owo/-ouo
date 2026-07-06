@@ -47,6 +47,11 @@ export async function openGroupSettings(groupId) {
   if (_currentOverlay) {
     closeGroupSettings();
   }
+  // 关掉可能开着的私聊设置 overlay，避免双层遮罩叠加锁死滚动
+  try {
+    const { closeChatSettings } = await import('../chat-settings-view.js');
+    closeChatSettings();
+  } catch (e) {}
   ensureSettingsStyle();
 
   const session = await findGroupSession(groupId);
