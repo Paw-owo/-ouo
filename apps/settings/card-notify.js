@@ -11,9 +11,7 @@ import bus from '../../core/events.js';
 import { APPS } from '../../apps-registry.js';
 
 injectStyle('popo-settings-notify-card', `
-  .notify-per-app{display:flex;flex-direction:column;gap:2px;margin-top:4px}
-  .notify-per-app .card-row{padding:6px 0;border-bottom:1px solid color-mix(in srgb,var(--text-hint) 12%,transparent)}
-  .notify-per-app .card-row:last-child{border-bottom:none}
+  .notify-per-app{display:flex;flex-direction:column;gap:6px;margin-top:4px}
   .notify-quiet-row{display:flex;align-items:center;gap:8px}
   .notify-quiet-row input[type=time]{padding:5px 8px;border-radius:var(--radius-md);background:var(--bg-secondary);color:var(--text-primary);border:1px solid color-mix(in srgb,var(--text-hint) 20%,transparent);font-size:var(--font-size-base)}
   .notify-quiet-sep{color:var(--text-hint);font-size:var(--font-size-small)}

@@ -21,8 +21,8 @@ const WIDGETS = [
 ];
 
 injectStyle('popo-settings-widget-bg-card', `
-  .wbg-app-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid color-mix(in srgb,var(--text-hint) 12%,transparent)}
-  .wbg-app-row:last-child{border-bottom:none}
+  .wbg-app-row{display:flex;align-items:center;gap:10px;padding:10px 14px;margin-bottom:6px;background:var(--bg-secondary);border-radius:var(--radius-lg);border:none}
+  .wbg-app-row:last-child{margin-bottom:0}
   .wbg-app-name{flex:1;font-size:var(--font-size-base);color:var(--text-primary);display:flex;align-items:center;gap:6px;min-width:0}
   .wbg-app-name span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .wbg-app-thumb{width:36px;height:36px;border-radius:var(--radius-sm);background-size:cover;background-position:center;background-color:var(--bg-secondary);border:1px solid color-mix(in srgb,var(--text-hint) 20%,transparent);flex-shrink:0}
