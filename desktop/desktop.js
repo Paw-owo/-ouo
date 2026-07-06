@@ -195,8 +195,9 @@ function _showDesktop() {
 }
 
 // 处理APP打开
-function _handleAppOpen(event) {
-  const { appId } = event;
+// events.js 把 emit 的 data 包在 { event, data, timestamp, id } 里，appId 在 data 上
+function _handleAppOpen(payload) {
+  const { appId } = payload?.data || payload || {};
   if (!appId) return;
 
   // 打开APP路由

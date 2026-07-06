@@ -30,17 +30,19 @@
     import { initBackgrounds } from './core/app-bg.js';
     import { initLock } from './core/lock.js';
     import { initUI } from './core/ui.js';
+    import { initAppHost } from './core/app-host.js';
     import './core/notifications.js';
     import './core/inbox.js';
     import { initDesktop } from './desktop/desktop.js';
     import { loadAllSpecs } from './js/ai/ai-spec.js';
 
-    // 启动顺序：主题 → 背景 → 锁屏 → UI → 桌面
+    // 启动顺序：主题 → 背景 → 锁屏 → UI → APP宿主 → 桌面
     (async function boot() {
       initTheme();
       initBackgrounds();
       initLock();
       initUI();
+      initAppHost();
 
       console.log('[Boot] 底座层启动完成');
 
