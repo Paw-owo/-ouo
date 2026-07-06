@@ -6,6 +6,33 @@
 //   - 写记忆时走事件中心通知
 //   - 记忆自动提取只做接口预留，不做假实现
 // ============================================
+//
+// 记忆存储结构（预留，后续不要推翻）：
+//   存储：IndexedDB → little_phone → memories store
+//   keyPath: 'id'
+//   索引: characterId / type / timestamp
+//
+//   单条记忆对象字段：
+//   {
+//     id:          string,   // 主键，唯一
+//     characterId: string,   // 角色ID，隔离用，不可为空
+//     type:        string,   // 记忆类型，见 MEMORY_TYPE
+//     content:     string,   // 记忆正文
+//     summary:     string,   // 摘要（用于上下文注入和列表展示）
+//     source:      string,   // 来源：'ai' | 'user' | 'system' | 'app'
+//     importance:  number,   // 0-10，越高越重要
+//     timestamp:   number,   // 创建时间
+//     updatedAt:   number,   // 最后更新时间
+//     pinned:      boolean,  // 是否置顶（不被压缩清除）
+//     version:     number    // 结构版本号，用于未来迁移
+//   }
+//
+// 角色隔离规则：
+//   1. 所有读写必须带 characterId
+//   2. 没传 characterId 时自动取当前活跃角色
+//   3. 没有活跃角色时拒绝操作
+//   4. characterId 一旦写入不可修改
+// ============================================
 
 import {
   getMemories,
@@ -27,27 +54,30 @@ export const MEMORY_TYPE = Object.freeze({
   EMOTION:    'emotion'      // 情绪：用户的情绪倾向
 });
 
+// 记忆结构版本号，未来字段变更时用于迁移
+const MEMORY_SCHEMA_VERSION = 1;
+
 // ========== 读取 ==========
 
 // 获取当前角色的全部记忆
-// 没有characterId时拒绝操作，防止串角色
+// 没有characterId时自动取当前活跃角色，无活跃角色则拒绝
 async function getAllMemories(characterId) {
-  _enforceCharacterId(characterId);
-  return getMemories(characterId);
+  const cid = _resolveCharacterId(characterId);
+  return getMemories(cid);
 }
 
 // 按类型获取记忆
 async function getMemoriesByType(characterId, type) {
-  _enforceCharacterId(characterId);
-  return getMemories(characterId, type);
+  const cid = _resolveCharacterId(characterId);
+  return getMemories(cid, type);
 }
 
 // 按相关性检索记忆（供ai-context.js调用）
 // 本版只做关键词匹配 + 时间排序，真正的语义检索留到后续接入embedding
 async function getRelevantMemories(characterId, query, limit = 10) {
-  _enforceCharacterId(characterId);
+  const cid = _resolveCharacterId(characterId);
 
-  const all = await getMemories(characterId);
+  const all = await getMemories(cid);
   if (!all || all.length === 0) return [];
 
   const keywords = _extractKeywords(query);
@@ -81,10 +111,10 @@ async function getRelevantMemories(characterId, query, limit = 10) {
 // ========== 写入 ==========
 
 // AI主动写一条记忆
-// 必须带characterId，content不能为空
+// 必须带characterId（或当前有活跃角色），content不能为空
 // 写完后通过事件中心通知
 async function addMemory(characterId, { type, content, summary, source = 'ai', importance = 0 }) {
-  _enforceCharacterId(characterId);
+  const cid = _resolveCharacterId(characterId);
 
   if (!content || !content.trim()) {
     console.warn('[AI-Memory] 拒绝写入空记忆');
@@ -93,7 +123,7 @@ async function addMemory(characterId, { type, content, summary, source = 'ai', i
 
   const memory = {
     id: _genId(),
-    characterId,
+    characterId: cid,
     type: type || MEMORY_TYPE.FACT,
     content: content.trim(),
     summary: summary || content.slice(0, 40),
@@ -101,7 +131,7 @@ async function addMemory(characterId, { type, content, summary, source = 'ai', i
     importance,
     timestamp: Date.now(),
     pinned: false,
-    version: 1
+    version: MEMORY_SCHEMA_VERSION
   };
 
   await saveMemory(memory);
@@ -112,9 +142,9 @@ async function addMemory(characterId, { type, content, summary, source = 'ai', i
 
 // 更新已有记忆
 async function updateMemory(characterId, memoryId, updates) {
-  _enforceCharacterId(characterId);
+  const cid = _resolveCharacterId(characterId);
 
-  const all = await getMemories(characterId);
+  const all = await getMemories(cid);
   const existing = all.find(m => m.id === memoryId);
   if (!existing) {
     console.warn(`[AI-Memory] 记忆 ${memoryId} 不存在`);
@@ -125,9 +155,9 @@ async function updateMemory(characterId, memoryId, updates) {
     ...existing,
     ...updates,
     id: existing.id,        // id不可改
-    characterId,            // characterId不可改
+    characterId: cid,       // characterId不可改
     updatedAt: Date.now(),
-    version: (existing.version || 1) + 1
+    version: (existing.version || MEMORY_SCHEMA_VERSION) + 1
   };
 
   await saveMemory(updated);
@@ -138,9 +168,9 @@ async function updateMemory(characterId, memoryId, updates) {
 
 // 删除记忆
 async function removeMemory(characterId, memoryId) {
-  _enforceCharacterId(characterId);
+  const cid = _resolveCharacterId(characterId);
 
-  const all = await getMemories(characterId);
+  const all = await getMemories(cid);
   const existing = all.find(m => m.id === memoryId);
   if (!existing) return false;
 
@@ -150,8 +180,8 @@ async function removeMemory(characterId, memoryId) {
 
 // 清空当前角色全部记忆
 async function clearAllMemories(characterId) {
-  _enforceCharacterId(characterId);
-  await clearMemories(characterId);
+  const cid = _resolveCharacterId(characterId);
+  await clearMemories(cid);
 }
 
 // ========== 预留接口（本轮不做真实实现） ==========
@@ -160,7 +190,7 @@ async function clearAllMemories(characterId) {
 // 本轮只做接口，不实现真实提取逻辑
 // 返回 null，后续接入embedding/LLM判断后补全
 async function extractFromConversation(characterId, messages) {
-  _enforceCharacterId(characterId);
+  const cid = _resolveCharacterId(characterId);
 
   // 检查是否开启了自动提取
   const autoExtract = get('memoryAutoExtract');
@@ -174,7 +204,7 @@ async function extractFromConversation(characterId, messages) {
 // 记忆压缩：把旧记忆合并摘要
 // 本轮只做接口预留
 async function compressMemories(characterId, options = {}) {
-  _enforceCharacterId(characterId);
+  const cid = _resolveCharacterId(characterId);
 
   const autoCompress = get('memoryAutoCompress');
   if (!autoCompress) return null;
@@ -185,13 +215,16 @@ async function compressMemories(characterId, options = {}) {
 
 // ========== 内部工具 ==========
 
-function _enforceCharacterId(characterId) {
-  if (!characterId) {
-    const current = getCurrentCharacter();
-    if (!current) {
-      throw new Error('[AI-Memory] 操作记忆必须指定角色（characterId），当前无活跃角色');
-    }
+// 解析角色ID：传入就用传入的，没传就取当前活跃角色，都没有就拒绝
+// 返回值保证非空，调用方直接用返回值
+function _resolveCharacterId(characterId) {
+  if (characterId) return characterId;
+
+  const current = getCurrentCharacter();
+  if (!current) {
+    throw new Error('[AI-Memory] 操作记忆必须指定角色（characterId），当前无活跃角色');
   }
+  return current;
 }
 
 function _extractKeywords(text) {
