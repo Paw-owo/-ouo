@@ -1,82 +1,17 @@
 // ============================================
 // router.js — APP路由
-// 管理APP页面切换，不负责UI渲染，只负责状态和事件
+// 管理当前打开的APP、导航、返回
+// 不负责UI渲染，只负责状态和事件
 // ============================================
 
-import { APPS_REGISTRY, getAppById } from '../data/apps-registry.js';
 import events from './events.js';
+import { getAppById } from '../data/apps-registry.js';
 
-// 当前打开的APP
+// 路由状态
 let _currentApp = null;
-// 路由历史栈
 let _history = [];
-const MAX_HISTORY = 20;
-// 桌面是否是当前活动页面
-let _isDesktop = true;
-
-// 打开APP
-function openApp(appId, params = {}) {
-  const app = getAppById(appId);
-  if (!app) {
-    console.warn(`[Router] APP "${appId}" 不存在`);
-    return false;
-  }
-
-  const previous = _currentApp;
-
-  _currentApp = {
-    id: appId,
-    name: app.name,
-    entry: app.entry,
-    params,
-    openedAt: Date.now()
-  };
-
-  _isDesktop = false;
-
-  _history.push({ appId, params, timestamp: Date.now() });
-  if (_history.length > MAX_HISTORY) {
-    _history = _history.slice(-MAX_HISTORY);
-  }
-
-  events.emit('router:changed', {
-    action: 'open',
-    current: appId,
-    previous: previous ? previous.id : null,
-    params
-  });
-
-  return true;
-}
-
-// 关闭当前APP，回到桌面
-function closeApp() {
-  if (_isDesktop) return;
-
-  const closed = _currentApp;
-  _currentApp = null;
-  _isDesktop = true;
-
-  events.emit('router:changed', {
-    action: 'close',
-    current: null,
-    previous: closed ? closed.id : null
-  });
-}
-
-// 切换到另一个APP
-function switchApp(appId, params = {}) {
-  const previous = _currentApp ? _currentApp.id : null;
-  const success = openApp(appId, params);
-  if (success) {
-    events.emit('router:switched', {
-      from: previous,
-      to: appId,
-      params
-    });
-  }
-  return success;
-}
+let _maxHistory = 50;
+let _isTransitioning = false;
 
 // 获取当前APP信息
 function getCurrentApp() {
@@ -88,43 +23,154 @@ function getCurrentAppId() {
   return _currentApp ? _currentApp.id : null;
 }
 
-// 是否在桌面
-function isDesktop() {
-  return _isDesktop;
-}
-
 // 获取路由历史
 function getHistory() {
   return [..._history];
 }
 
-// 获取所有可用APP
-function getAvailableApps() {
-  return APPS_REGISTRY;
+// 是否可以返回
+function canGoBack() {
+  return _history.length > 0;
 }
 
-// 获取Dock上的APP
-function getDockApps() {
-  return APPS_REGISTRY.filter(app => app.desktop && app.desktop.dock);
+// 是否正在切换
+function isTransitioning() {
+  return _isTransitioning;
 }
 
-// 获取桌面上的APP
-function getDesktopApps() {
-  return APPS_REGISTRY.filter(app => app.desktop && app.desktop.show);
+// 打开APP
+function openApp(appId, options = {}) {
+  const { params = {}, replace = false } = options;
+
+  const appDef = getAppById(appId);
+  if (!appDef) {
+    console.warn(`[Router] APP "${appId}" 不存在`);
+    return false;
+  }
+
+  if (_isTransitioning) return false;
+
+  _isTransitioning = true;
+
+  const previousApp = _currentApp;
+
+  // 记录历史
+  if (_currentApp && !replace) {
+    _history.push({
+      appId: _currentApp.id,
+      params: _currentApp.params || {}
+    });
+    if (_history.length > _maxHistory) {
+      _history = _history.slice(-_maxHistory);
+    }
+  }
+
+  _currentApp = {
+    id: appId,
+    definition: appDef,
+    params,
+    openedAt: Date.now()
+  };
+
+  events.emit('route:changed', {
+    action: 'open',
+    appId,
+    previousAppId: previousApp ? previousApp.id : null,
+    params,
+    replace
+  });
+
+  events.emit('app:opened', {
+    appId,
+    definition: appDef,
+    params
+  });
+
+  // 延迟重置过渡状态，防止快速切换
+  setTimeout(() => {
+    _isTransitioning = false;
+  }, 300);
+
+  return true;
 }
 
-// 返回上一页（历史栈）
+// 关闭当前APP（返回桌面）
+function closeApp() {
+  if (!_currentApp) return false;
+  if (_isTransitioning) return false;
+
+  _isTransitioning = true;
+
+  const closingApp = _currentApp;
+
+  _currentApp = null;
+
+  events.emit('route:changed', {
+    action: 'close',
+    appId: closingApp.id,
+    previousAppId: closingApp.id
+  });
+
+  events.emit('app:closed', {
+    appId: closingApp.id
+  });
+
+  setTimeout(() => {
+    _isTransitioning = false;
+  }, 300);
+
+  return true;
+}
+
+// 返回上一个APP或桌面
 function goBack() {
-  if (_history.length <= 1) {
-    closeApp();
-    return;
+  if (!canGoBack()) {
+    return closeApp();
   }
 
-  _history.pop();
-  const prev = _history[_history.length - 1];
-  if (prev) {
-    openApp(prev.appId, prev.params);
+  if (_isTransitioning) return false;
+
+  _isTransitioning = true;
+
+  const previous = _history.pop();
+  const previousApp = _currentApp ? _currentApp.id : null;
+
+  // 打开上一个APP
+  const appDef = getAppById(previous.appId);
+  if (!appDef) {
+    _isTransitioning = false;
+    return closeApp();
   }
+
+  _currentApp = {
+    id: previous.appId,
+    definition: appDef,
+    params: previous.params || {},
+    openedAt: Date.now()
+  };
+
+  events.emit('route:changed', {
+    action: 'back',
+    appId: previous.appId,
+    previousAppId: previousApp
+  });
+
+  events.emit('app:opened', {
+    appId: previous.appId,
+    definition: appDef,
+    params: previous.params
+  });
+
+  setTimeout(() => {
+    _isTransitioning = false;
+  }, 300);
+
+  return true;
+}
+
+// 切换到APP（替换当前）
+function switchTo(appId, params = {}) {
+  return openApp(appId, { params, replace: true });
 }
 
 // 清空历史
@@ -132,17 +178,23 @@ function clearHistory() {
   _history = [];
 }
 
+// 重置路由状态
+function reset() {
+  _currentApp = null;
+  _history = [];
+  _isTransitioning = false;
+}
+
 export {
-  openApp,
-  closeApp,
-  switchApp,
   getCurrentApp,
   getCurrentAppId,
-  isDesktop,
   getHistory,
-  getAvailableApps,
-  getDockApps,
-  getDesktopApps,
+  canGoBack,
+  isTransitioning,
+  openApp,
+  closeApp,
   goBack,
-  clearHistory
+  switchTo,
+  clearHistory,
+  reset
 };

@@ -1,149 +1,276 @@
 // ============================================
 // app-bg.js — 背景系统
-// 统一管理：主题背景、桌面壁纸、锁屏壁纸、APP单独背景
-// 所有背景读写通过此文件，不直接操作DOM或localStorage
+// 统一管理：桌面壁纸、锁屏壁纸、APP单独背景
+// 背景来源：主题默认渐变 / 用户自定义URL / 纯色
 // ============================================
 
 import { get, set } from './config.js';
-import { STORAGE_KEYS } from './storage-keys.js';
 import events from './events.js';
+import { getCurrentPreset } from './theme.js';
+import { STORAGE_KEYS } from './storage-keys.js';
 
-// 内置默认背景
-const DEFAULT_BG = {
-  desktop: 'var(--bg-desktop)',
-  lockscreen: 'var(--bg-lockscreen)',
-  app: 'var(--bg-app)'
+// 背景类型
+const BG_TYPE = Object.freeze({
+  THEME_DEFAULT: 'theme_default',
+  CUSTOM_URL:    'custom_url',
+  CUSTOM_COLOR:  'custom_color',
+  CUSTOM_GRADIENT: 'custom_gradient'
+});
+
+// 背景作用域
+const BG_SCOPE = Object.freeze({
+  DESKTOP:    'desktop',
+  LOCKSCREEN: 'lockscreen',
+  APP:        'app'
+});
+
+// 当前激活的背景状态
+let _currentBackgrounds = {
+  [BG_SCOPE.DESKTOP]:    { type: BG_TYPE.THEME_DEFAULT, value: null },
+  [BG_SCOPE.LOCKSCREEN]: { type: BG_TYPE.THEME_DEFAULT, value: null },
+  [BG_SCOPE.APP]:        { type: BG_TYPE.THEME_DEFAULT, value: null }
 };
 
-// 当前激活的背景
-let _currentBg = {
-  desktop: null,
-  lockscreen: null,
-  app: null
-};
+// APP级背景覆盖（按appId）
+let _appBgOverrides = new Map();
 
-// 初始化背景系统
-function initBg() {
-  const sync = get('wallpaperSync');
-  const desktopWallpaper = get('wallpaper');
-  const lockscreenWallpaper = get('lockscreenWallpaper');
+// 从主题预设获取默认背景色
+function _getThemeDefaultBg() {
+  const preset = getCurrentPreset();
+  if (preset && preset.colors) {
+    return preset.colors['--bg-primary'] || preset.colors['--bg-deep'] || '#f5f0e8';
+  }
+  return '#f5f0e8';
+}
 
-  if (sync && desktopWallpaper) {
-    setDesktopBg(desktopWallpaper);
-    setLockscreenBg(desktopWallpaper);
+// 计算CSS背景值
+function _computeBgValue(type, value) {
+  switch (type) {
+    case BG_TYPE.THEME_DEFAULT:
+      return _getThemeDefaultBg();
+    case BG_TYPE.CUSTOM_URL:
+      return `url("${value}") center / cover no-repeat`;
+    case BG_TYPE.CUSTOM_COLOR:
+      return value;
+    case BG_TYPE.CUSTOM_GRADIENT:
+      return value;
+    default:
+      return _getThemeDefaultBg();
+  }
+}
+
+// 获取指定作用域的背景信息
+function getBackground(scope) {
+  return { ..._currentBackgrounds[scope] };
+}
+
+// 获取CSS可直接使用的背景值
+function getBackgroundCSS(scope) {
+  const bg = _currentBackgrounds[scope];
+  return _computeBgValue(bg.type, bg.value);
+}
+
+// 获取当前打开的APP的背景（带APP级覆盖检查）
+function getAppBackground(appId) {
+  if (appId && _appBgOverrides.has(appId)) {
+    return _appBgOverrides.get(appId);
+  }
+  return getBackground(BG_SCOPE.APP);
+}
+
+function getAppBackgroundCSS(appId) {
+  const bg = getAppBackground(appId);
+  return _computeBgValue(bg.type, bg.value);
+}
+
+// 设置背景
+function setBackground(scope, type, value, options = {}) {
+  const { appId, persist = true } = options;
+
+  const bg = { type, value: value || null };
+
+  if (appId) {
+    _appBgOverrides.set(appId, bg);
+    // APP级背景不持久化（会话级），除非指定
+    if (persist) {
+      _saveAppBg(appId, bg);
+    }
   } else {
-    if (desktopWallpaper) setDesktopBg(desktopWallpaper);
-    if (lockscreenWallpaper) setLockscreenBg(lockscreenWallpaper);
+    _currentBackgrounds[scope] = bg;
+    if (persist) {
+      _saveBg(scope, bg);
+    }
   }
 
-  events.emit('bg:initialized', { current: { ..._currentBg } });
-}
+  _applyBgToDOM(scope, appId);
 
-// 设置桌面壁纸
-function setDesktopBg(source) {
-  _currentBg.desktop = _normalizeBgSource(source);
-  set('wallpaper', source);
-  _applyBgToDOM('desktop', _currentBg.desktop);
-  events.emit('bg:changed', { target: 'desktop', source: _currentBg.desktop });
-}
-
-// 设置锁屏壁纸
-function setLockscreenBg(source) {
-  _currentBg.lockscreen = _normalizeBgSource(source);
-  set('lockscreenWallpaper', source);
-  _applyBgToDOM('lockscreen', _currentBg.lockscreen);
-  events.emit('bg:changed', { target: 'lockscreen', source: _currentBg.lockscreen });
-}
-
-// 设置APP单独背景
-function setAppBg(appId, source) {
-  if (!_currentBg.app) _currentBg.app = {};
-  _currentBg.app[appId] = _normalizeBgSource(source);
-  events.emit('bg:changed', { target: 'app', appId, source: _currentBg.app[appId] });
-}
-
-// 移除APP单独背景
-function removeAppBg(appId) {
-  if (_currentBg.app) {
-    delete _currentBg.app[appId];
-  }
-  events.emit('bg:changed', { target: 'app', appId, source: null });
-}
-
-// 获取当前背景
-function getBg(target = 'desktop') {
-  if (target === 'app') {
-    return _currentBg.app || {};
-  }
-  return _currentBg[target] || null;
-}
-
-// 获取实际渲染用的CSS背景值
-function getBgStyle(target = 'desktop', appId = null) {
-  let source = null;
-
-  if (target === 'app' && appId && _currentBg.app && _currentBg.app[appId]) {
-    source = _currentBg.app[appId];
-  } else if (target === 'lockscreen') {
-    source = _currentBg.lockscreen;
-  } else {
-    source = _currentBg.desktop;
-  }
-
-  return _bgSourceToCSS(source);
-}
-
-// 清除所有背景，回到主题默认
-function clearAllBg() {
-  _currentBg = { desktop: null, lockscreen: null, app: null };
-  ['desktop', 'lockscreen'].forEach(target => {
-    _applyBgToDOM(target, null);
+  events.emit('bg:changed', {
+    scope,
+    appId: appId || null,
+    type,
+    value
   });
-  events.emit('bg:cleared', {});
 }
 
-// 内部：规范化背景来源
-function _normalizeBgSource(source) {
-  if (!source) return null;
-  if (source === 'theme') return 'theme';
-  if (source.startsWith('http') || source.startsWith('/') || source.startsWith('data:')) {
-    return source;
+// 重置为默认
+function resetBackground(scope, appId) {
+  if (appId) {
+    _appBgOverrides.delete(appId);
+    _removeAppBg(appId);
+  } else {
+    _currentBackgrounds[scope] = { type: BG_TYPE.THEME_DEFAULT, value: null };
+    _removeBg(scope);
   }
-  if (source.startsWith('#')) return source;
-  if (source.startsWith('linear-gradient') || source.startsWith('radial-gradient')) {
-    return source;
+
+  _applyBgToDOM(scope, appId);
+
+  events.emit('bg:changed', {
+    scope,
+    appId: appId || null,
+    type: BG_TYPE.THEME_DEFAULT,
+    value: null
+  });
+}
+
+// 将背景应用到DOM
+function _applyBgToDOM(scope, appId) {
+  let cssValue;
+  if (appId) {
+    cssValue = getAppBackgroundCSS(appId);
+  } else {
+    cssValue = getBackgroundCSS(scope);
   }
-  return source;
-}
 
-// 内部：将背景来源转为CSS background值
-function _bgSourceToCSS(source) {
-  if (!source) return 'var(--bg-desktop)';
-  if (source === 'theme') return 'var(--bg-desktop)';
-  if (source.startsWith('linear-gradient') || source.startsWith('radial-gradient')) {
-    return source;
+  const root = document.documentElement;
+
+  switch (scope) {
+    case BG_SCOPE.DESKTOP:
+      root.style.setProperty('--bg-desktop', cssValue);
+      break;
+    case BG_SCOPE.LOCKSCREEN:
+      root.style.setProperty('--bg-lockscreen', cssValue);
+      break;
+    case BG_SCOPE.APP:
+      if (appId) {
+        root.style.setProperty(`--bg-app-${appId}`, cssValue);
+      } else {
+        root.style.setProperty('--bg-app', cssValue);
+      }
+      break;
   }
-  if (source.startsWith('#')) return source;
-  return `url("${source}") center/cover no-repeat`;
 }
 
-// 内部：将背景应用到DOM元素
-function _applyBgToDOM(target, source) {
-  const selector = target === 'lockscreen' ? '#lockscreen' : '#desktop';
-  const el = document.querySelector(selector);
-  if (!el) return;
+// 持久化：写入localStorage
+function _saveBg(scope, bg) {
+  const key = scope === BG_SCOPE.DESKTOP
+    ? STORAGE_KEYS.WALLPAPER
+    : scope === BG_SCOPE.LOCKSCREEN
+      ? STORAGE_KEYS.LOCKSCREEN_WALLPAPER
+      : 'app_bg';
 
-  const cssValue = _bgSourceToCSS(source);
-  el.style.background = cssValue;
+  try {
+    localStorage.setItem(key, JSON.stringify(bg));
+  } catch (e) {
+    // localStorage 满了就跳过
+  }
 }
+
+function _removeBg(scope) {
+  const key = scope === BG_SCOPE.DESKTOP
+    ? STORAGE_KEYS.WALLPAPER
+    : scope === BG_SCOPE.LOCKSCREEN
+      ? STORAGE_KEYS.LOCKSCREEN_WALLPAPER
+      : 'app_bg';
+  localStorage.removeItem(key);
+}
+
+function _saveAppBg(appId, bg) {
+  try {
+    const map = JSON.parse(localStorage.getItem('app_bg_overrides') || '{}');
+    map[appId] = bg;
+    localStorage.setItem('app_bg_overrides', JSON.stringify(map));
+  } catch (e) { /* skip */ }
+}
+
+function _removeAppBg(appId) {
+  try {
+    const map = JSON.parse(localStorage.getItem('app_bg_overrides') || '{}');
+    delete map[appId];
+    localStorage.setItem('app_bg_overrides', JSON.stringify(map));
+  } catch (e) { /* skip */ }
+}
+
+// 初始化：从存储恢复
+function initBackgrounds() {
+  // 桌面
+  try {
+    const wallpaper = localStorage.getItem(STORAGE_KEYS.WALLPAPER);
+    if (wallpaper) {
+      _currentBackgrounds[BG_SCOPE.DESKTOP] = JSON.parse(wallpaper);
+    }
+  } catch (e) { /* use default */ }
+
+  // 锁屏
+  try {
+    const lsWallpaper = localStorage.getItem(STORAGE_KEYS.LOCKSCREEN_WALLPAPER);
+    if (lsWallpaper) {
+      _currentBackgrounds[BG_SCOPE.LOCKSCREEN] = JSON.parse(lsWallpaper);
+    }
+  } catch (e) { /* use default */ }
+
+  // 锁屏壁纸同步桌面
+  const sync = get('wallpaperSync');
+  if (sync) {
+    _currentBackgrounds[BG_SCOPE.LOCKSCREEN] = { ..._currentBackgrounds[BG_SCOPE.DESKTOP] };
+  }
+
+  // APP背景
+  try {
+    const appBg = localStorage.getItem('app_bg');
+    if (appBg) {
+      _currentBackgrounds[BG_SCOPE.APP] = JSON.parse(appBg);
+    }
+  } catch (e) { /* use default */ }
+
+  // APP级覆盖
+  try {
+    const overrides = localStorage.getItem('app_bg_overrides');
+    if (overrides) {
+      const map = JSON.parse(overrides);
+      for (const [appId, bg] of Object.entries(map)) {
+        _appBgOverrides.set(appId, bg);
+      }
+    }
+  } catch (e) { /* skip */ }
+
+  // 应用所有背景到DOM
+  _applyBgToDOM(BG_SCOPE.DESKTOP);
+  _applyBgToDOM(BG_SCOPE.LOCKSCREEN);
+  _applyBgToDOM(BG_SCOPE.APP);
+}
+
+// 监听主题变化，自动更新默认背景
+events.on('theme:changed', () => {
+  for (const scope of Object.values(BG_SCOPE)) {
+    if (_currentBackgrounds[scope].type === BG_TYPE.THEME_DEFAULT) {
+      _applyBgToDOM(scope);
+    }
+  }
+  for (const [appId, bg] of _appBgOverrides) {
+    if (bg.type === BG_TYPE.THEME_DEFAULT) {
+      _applyBgToDOM(BG_SCOPE.APP, appId);
+    }
+  }
+});
 
 export {
-  initBg,
-  setDesktopBg,
-  setLockscreenBg,
-  setAppBg,
-  removeAppBg,
-  getBg,
-  getBgStyle,
-  clearAllBg
+  BG_TYPE,
+  BG_SCOPE,
+  initBackgrounds,
+  getBackground,
+  getBackgroundCSS,
+  getAppBackground,
+  getAppBackgroundCSS,
+  setBackground,
+  resetBackground
 };

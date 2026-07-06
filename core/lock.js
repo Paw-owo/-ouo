@@ -1,166 +1,184 @@
 // ============================================
 // lock.js — 锁屏状态管理
-// 管理锁屏的启用/禁用、锁定/解锁状态、密码验证
+// 管理锁屏状态、密码验证、自动锁屏倒计时
 // 不负责UI渲染，只负责状态和事件
 // ============================================
 
 import { get, set } from './config.js';
-import { STORAGE_KEYS } from './storage-keys.js';
 import events from './events.js';
+import { STORAGE_KEYS } from './storage-keys.js';
 
-let _locked = false;
-let _lockEnabled = false;
-let _unlockAttempts = 0;
-const MAX_ATTEMPTS = 5;
-let _lockoutUntil = null;
+// 锁屏状态
+let _locked = true;
+let _autoLockTimer = null;
+let _autoLockDelay = 0;
+let _failedAttempts = 0;
+let _lockUntil = 0;
 
-// 初始化锁屏
-function initLock() {
-  _lockEnabled = get('lockEnabled') || false;
-
-  if (_lockEnabled) {
-    _locked = true;
-  }
-
-  events.emit('lock:initialized', {
-    enabled: _lockEnabled,
-    locked: _locked
-  });
-}
-
-// 启用锁屏
-function enableLock(password) {
-  if (!password || password.length < 4) {
-    return { success: false, reason: '密码至少4位' };
-  }
-
-  set('lockEnabled', true);
-  set('lockPassword', password);
-  _lockEnabled = true;
-  _locked = true;
-
-  events.emit('lock:enabled', {});
-  events.emit('lock:locked', { reason: 'enabled' });
-
-  return { success: true };
-}
-
-// 禁用锁屏
-function disableLock() {
-  set('lockEnabled', false);
-  set('lockPassword', null);
-  _lockEnabled = false;
-  _locked = false;
-  _unlockAttempts = 0;
-  _lockoutUntil = null;
-
-  events.emit('lock:disabled', {});
-  events.emit('lock:unlocked', { reason: 'disabled' });
-
-  return { success: true };
-}
-
-// 锁定屏幕
-function lock() {
-  if (!_lockEnabled) return;
-  if (_locked) return;
-
-  _locked = true;
-  events.emit('lock:locked', { reason: 'manual' });
-}
-
-// 解锁屏幕
-function unlock(password) {
-  if (!_lockEnabled) return { success: true };
-  if (!_locked) return { success: true };
-
-  // 检查是否被锁定
-  if (_lockoutUntil && Date.now() < _lockoutUntil) {
-    const remaining = Math.ceil((_lockoutUntil - Date.now()) / 1000);
-    return { success: false, reason: 'lockout', remaining };
-  }
-
-  const storedPassword = get('lockPassword');
-
-  if (!storedPassword) {
-    // 没设密码，直接解锁
-    _locked = false;
-    _unlockAttempts = 0;
-    events.emit('lock:unlocked', { reason: 'no_password' });
-    return { success: true };
-  }
-
-  if (password === storedPassword) {
-    _locked = false;
-    _unlockAttempts = 0;
-    _lockoutUntil = null;
-    events.emit('lock:unlocked', { reason: 'password' });
-    return { success: true };
-  }
-
-  _unlockAttempts++;
-
-  if (_unlockAttempts >= MAX_ATTEMPTS) {
-    _lockoutUntil = Date.now() + 60000;
-    events.emit('lock:lockout', { duration: 60 });
-    return { success: false, reason: 'lockout', remaining: 60 };
-  }
-
-  events.emit('lock:failed', { attempts: _unlockAttempts, remaining: MAX_ATTEMPTS - _unlockAttempts });
-  return { success: false, reason: 'wrong_password', attempts: _unlockAttempts, remaining: MAX_ATTEMPTS - _unlockAttempts };
-}
-
-// 是否锁屏中
+// 获取锁屏状态
 function isLocked() {
   return _locked;
 }
 
-// 是否启用锁屏
-function isLockEnabled() {
-  return _lockEnabled;
-}
-
-// 获取锁屏配置
+// 获取锁屏设置
 function getLockConfig() {
   return {
-    enabled: _lockEnabled,
-    locked: _locked,
+    enabled: get('lockEnabled'),
+    hasPassword: !!get('lockPassword'),
     avatar: get('lockAvatar') || null,
-    message: get('lockMessage') || '',
-    blur: get('lockscreenBlur') || false,
-    showNotifications: get('lockShowNotifications') || false
+    message: get('lockMessage') || null,
+    showNotifications: get('lockShowNotifications')
   };
 }
 
-// 更新锁屏消息
-function setLockMessage(message) {
-  set('lockMessage', message);
-  events.emit('lock:config_changed', { key: 'message', value: message });
+// 验证密码
+function verifyPassword(input) {
+  if (_lockUntil > Date.now()) {
+    return { success: false, reason: 'locked_out', remainingMs: _lockUntil - Date.now() };
+  }
+
+  const stored = get('lockPassword');
+  if (!stored) {
+    _unlock();
+    return { success: true };
+  }
+
+  if (input === stored) {
+    _failedAttempts = 0;
+    _unlock();
+    return { success: true };
+  }
+
+  _failedAttempts++;
+
+  // 5次失败后锁定30秒
+  if (_failedAttempts >= 5) {
+    _lockUntil = Date.now() + 30000;
+    events.emit('lock:locked_out', {
+      failedAttempts: _failedAttempts,
+      lockUntil: _lockUntil
+    });
+    return { success: false, reason: 'locked_out', remainingMs: 30000 };
+  }
+
+  events.emit('lock:auth_failed', {
+    failedAttempts: _failedAttempts,
+    remaining: 5 - _failedAttempts
+  });
+
+  return { success: false, reason: 'wrong_password', remaining: 5 - _failedAttempts };
 }
 
-// 更新锁屏头像
-function setLockAvatar(avatar) {
-  set('lockAvatar', avatar);
-  events.emit('lock:config_changed', { key: 'avatar', value: avatar });
+// 设置密码
+function setPassword(password) {
+  set('lockPassword', password || '');
+  events.emit('lock:password_changed', {
+    hasPassword: !!password
+  });
 }
 
-// 剩余锁定时间（秒）
-function getLockoutRemaining() {
-  if (!_lockoutUntil) return 0;
-  const remaining = Math.ceil((_lockoutUntil - Date.now()) / 1000);
-  return Math.max(0, remaining);
+// 设置锁屏头像
+function setAvatar(avatarUrl) {
+  set('lockAvatar', avatarUrl || '');
+}
+
+// 设置锁屏消息
+function setMessage(message) {
+  set('lockMessage', message || '');
+}
+
+// 解锁
+function _unlock() {
+  _locked = false;
+  _clearAutoLock();
+  events.emit('lock:unlocked', {});
+}
+
+// 锁定
+function lock() {
+  if (_locked) return;
+  _locked = true;
+  _clearAutoLock();
+  events.emit('lock:locked', {});
+}
+
+// 切换锁屏
+function toggleLock() {
+  if (_locked) {
+    _unlock();
+  } else {
+    lock();
+  }
+}
+
+// 启用/禁用锁屏
+function setLockEnabled(enabled) {
+  set('lockEnabled', enabled);
+  if (!enabled && _locked) {
+    _unlock();
+  }
+}
+
+// 自动锁屏倒计时
+function startAutoLock(delayMs) {
+  _clearAutoLock();
+  _autoLockDelay = delayMs;
+
+  _autoLockTimer = setTimeout(() => {
+    if (!_locked) {
+      lock();
+    }
+  }, delayMs);
+}
+
+function resetAutoLock() {
+  if (_autoLockDelay > 0 && !_locked) {
+    startAutoLock(_autoLockDelay);
+  }
+}
+
+function _clearAutoLock() {
+  if (_autoLockTimer) {
+    clearTimeout(_autoLockTimer);
+    _autoLockTimer = null;
+  }
+}
+
+// 初始化锁屏
+function initLock() {
+  const lockEnabled = get('lockEnabled');
+  const hasPassword = !!get('lockPassword');
+
+  if (!lockEnabled) {
+    _locked = false;
+  } else if (hasPassword) {
+    _locked = true;
+  } else {
+    _locked = false;
+  }
+
+  // 监听用户活动，重置自动锁屏
+  if (typeof document !== 'undefined') {
+    ['mousedown', 'keydown', 'touchstart', 'scroll'].forEach(eventName => {
+      document.addEventListener(eventName, () => {
+        if (!_locked) resetAutoLock();
+      }, { passive: true });
+    });
+  }
 }
 
 export {
-  initLock,
-  enableLock,
-  disableLock,
-  lock,
-  unlock,
   isLocked,
-  isLockEnabled,
   getLockConfig,
-  setLockMessage,
-  setLockAvatar,
-  getLockoutRemaining
+  verifyPassword,
+  setPassword,
+  setAvatar,
+  setMessage,
+  lock,
+  unlock: _unlock,
+  toggleLock,
+  setLockEnabled,
+  startAutoLock,
+  resetAutoLock,
+  initLock
 };
