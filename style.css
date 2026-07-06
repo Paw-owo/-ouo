@@ -90,18 +90,19 @@ img { display: block; max-width: 100%; }
 .lock-screen::after {
   content: ''; position: absolute; inset: 0;
   background:
-    radial-gradient(ellipse at 50% 0%, color-mix(in srgb, var(--accent) 14%, transparent) 0%, transparent 55%),
-    radial-gradient(ellipse at 50% 100%, color-mix(in srgb, var(--accent) 9%, transparent) 0%, transparent 50%),
-    color-mix(in srgb, var(--bg-primary) 94%, transparent);
+    radial-gradient(ellipse at 50% 0%, color-mix(in srgb, var(--accent) 26%, transparent) 0%, transparent 60%),
+    radial-gradient(ellipse at 50% 100%, color-mix(in srgb, var(--accent-light) 32%, transparent) 0%, transparent 55%),
+    radial-gradient(ellipse at 18% 50%, color-mix(in srgb, var(--accent) 12%, transparent) 0%, transparent 50%),
+    color-mix(in srgb, var(--bg-primary) 78%, transparent);
   pointer-events: none;
   transition: opacity 320ms var(--motion-spring);
   opacity: 1;
 }
 .lock-screen.has-wallpaper::after {
   background:
-    radial-gradient(ellipse at 50% 0%, color-mix(in srgb, var(--accent) 20%, transparent) 0%, transparent 50%),
-    radial-gradient(ellipse at 50% 100%, color-mix(in srgb, var(--bg-primary) 40%, transparent) 0%, transparent 55%),
-    color-mix(in srgb, var(--bg-primary) 62%, transparent);
+    radial-gradient(ellipse at 50% 0%, color-mix(in srgb, var(--accent) 28%, transparent) 0%, transparent 55%),
+    radial-gradient(ellipse at 50% 100%, color-mix(in srgb, var(--accent-light) 24%, transparent) 0%, transparent 50%),
+    color-mix(in srgb, var(--bg-primary) 68%, transparent);
   opacity: var(--lock-bg-mask, 0);
 }
 .lock-screen.unlocked { transform: translateY(-100%); opacity: 0; pointer-events: none; }
@@ -169,13 +170,13 @@ img { display: block; max-width: 100%; }
   max-width: 76px;
   justify-self: center;
   border-radius: 50%;
-  background: color-mix(in srgb, var(--bg-card) 76%, transparent);
+  background: color-mix(in srgb, var(--bg-card) 92%, transparent);
   backdrop-filter: blur(var(--glass-blur));
   -webkit-backdrop-filter: blur(var(--glass-blur));
-  border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);
-  color: var(--text-primary); font-size: var(--font-size-large); font-weight: 500;
+  border: 1.5px solid color-mix(in srgb, var(--accent) 32%, transparent);
+  color: var(--text-primary); font-size: var(--font-size-large); font-weight: 600;
   display: flex; align-items: center; justify-content: center;
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-soft), 0 1px 2px color-mix(in srgb, var(--accent) 18%, transparent);
   transition: var(--motion);
   user-select: none; -webkit-user-select: none;
 }
@@ -210,11 +211,14 @@ img { display: block; max-width: 100%; }
   box-shadow: 0 0 10px color-mix(in srgb, var(--text-on-wallpaper) 48%, transparent);
 }
 .lock-screen.has-wallpaper .lock-key {
-  background: color-mix(in srgb, var(--text-on-wallpaper) 18%, transparent);
-  border-color: color-mix(in srgb, var(--text-on-wallpaper) 24%, transparent);
+  background: color-mix(in srgb, var(--text-on-wallpaper) 32%, transparent);
+  border-color: color-mix(in srgb, var(--text-on-wallpaper) 38%, transparent);
+  box-shadow:
+    0 2px 8px color-mix(in srgb, var(--text-primary) 22%, transparent),
+    0 1px 2px color-mix(in srgb, var(--text-primary) 14%, transparent);
 }
 .lock-screen.has-wallpaper .lock-key:active {
-  background: color-mix(in srgb, var(--text-on-wallpaper) 30%, transparent);
+  background: color-mix(in srgb, var(--text-on-wallpaper) 48%, transparent);
 }
 
 /* ════════════════════════════════════════ */
