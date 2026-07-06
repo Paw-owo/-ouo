@@ -35,7 +35,6 @@ const pagesEl = $('desktop-pages');
 const dockEl = $('dock');
 const pageDotsEl = $('page-dots');
 const statusCapsuleEl = $('status-capsule');
-const statusSignalEl = $('status-signal');
 const statusBatteryEl = $('status-battery');
 
 // ════════════════════════════════════════
@@ -240,8 +239,8 @@ function getIconPos(app) {
 function setIconPos(appId, x, y, page) {
   const all = getIconPositions();
   all[appId] = {
-    x: Math.max(0, Math.min(92, x)),
-    y: Math.max(0, Math.min(96, y)),
+    x: Math.max(0, Math.min(88, x)),
+    y: Math.max(0, Math.min(92, y)),
     page: Number(page) || 0
   };
   saveIconPositions(all);
@@ -253,9 +252,9 @@ function defaultIconPos(indexInPage) {
   const col = indexInPage % cols;
   // 4列均分，每列中心约 12.5/37.5/62.5/87.5%
   const x = col * 25 + 12.5;
-  // 行间距按图标高度比例，每行约 18%
-  const y = row * 18 + 4;
-  return { x: Math.min(92, x), y: Math.min(96, y) };
+  // 行间距按 78px 图标高度比例，每行约 22%，从 2% 开始
+  const y = row * 22 + 2;
+  return { x: Math.min(88, x), y: Math.min(92, y) };
 }
 
 // ════════════════════════════════════════
@@ -355,7 +354,6 @@ function renderStatusBar() {
     }
   });
   updateStatusTime();
-  renderStatusSignal();
   renderStatusBattery();
 }
 
@@ -378,15 +376,6 @@ function updateStatusTime() {
   if (!el) return;
   const now = new Date();
   el.textContent = now.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false });
-}
-
-// 状态栏信号：4格装饰（第4格半透明由 CSS 处理，表示信号良好但不满）
-function renderStatusSignal() {
-  if (!statusSignalEl) return;
-  const wrap = document.createElement('span');
-  wrap.className = 'status-bar-signal';
-  for (let i = 0; i < 4; i++) wrap.appendChild(document.createElement('span'));
-  statusSignalEl.appendChild(wrap);
 }
 
 // 状态栏电池：优先 Battery API 真实电量，不支持时兜底 80%
@@ -821,8 +810,8 @@ function placeIconAtPointer(iconEl, grid, pointerX, pointerY) {
   const xPct = (pointerX - gridRect.left - halfW) / gridRect.width * 100;
   const yPct = (pointerY - gridRect.top - halfH) / gridRect.height * 100;
   setIconPos(appId, xPct, yPct, page);
-  iconEl.style.left = Math.max(0, Math.min(92, xPct)) + '%';
-  iconEl.style.top = Math.max(0, Math.min(96, yPct)) + '%';
+  iconEl.style.left = Math.max(0, Math.min(88, xPct)) + '%';
+  iconEl.style.top = Math.max(0, Math.min(92, yPct)) + '%';
 }
 
 // 同 grid 内交换两个图标位置

@@ -105,7 +105,7 @@ const DEFAULTS = Object.freeze({
   desktop: {
     scaleMin: 0.62,
     scaleMax: 1.28,
-    iconSize: 68,
+    iconSize: 78,
     widgetScaleBase: 1,
     dockBase: 84,
     statusBarBase: 44

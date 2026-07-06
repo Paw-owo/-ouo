@@ -275,7 +275,7 @@ const SHARED_VARS = {
   '--z-sheet': '200',
   '--z-lock': '9999',
   '--z-boot': '10000',
-  '--icon-size': '68px',
+  '--icon-size': '78px',
   '--dock-base': '84px',
   '--status-bar-base': '44px',
   '--widget-scale': '1'

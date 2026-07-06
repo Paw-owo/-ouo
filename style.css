@@ -276,17 +276,7 @@ select, input[type="time"], input[type="date"], input[type="datetime-local"] { b
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.3px;
 }
-/* 状态栏真实感：信号 / 电池 */
-.status-bar-signal {
-  display: inline-flex; align-items: flex-end; gap: 2px; height: 12px;
-}
-.status-bar-signal span {
-  width: 3px; border-radius: 1px; background: var(--text-primary);
-}
-.status-bar-signal span:nth-child(1) { height: 4px; }
-.status-bar-signal span:nth-child(2) { height: 7px; }
-.status-bar-signal span:nth-child(3) { height: 10px; }
-.status-bar-signal span:nth-child(4) { height: 12px; opacity: 0.35; }
+/* 状态栏真实感：电池 */
 .status-bar-battery {
   display: inline-flex; align-items: center; gap: 3px; color: var(--text-primary);
 }
@@ -420,11 +410,10 @@ select, input[type="time"], input[type="date"], input[type="datetime-local"] { b
 }
 .widget-vinyl-controls button svg { width: 14px; height: 14px; }
 
-/* 图标网格：自由位置容器，图标绝对定位 */
+/* 图标网格：自由位置容器，图标绝对定位。flex:1 填满 desktop-page 剩余空间，不设 min-height 避免触发滚动导致百分比定位错乱 */
 .icon-grid {
   position: relative;
-  flex: 1;
-  min-height: 60vh;
+  flex: 1 1 auto;
   padding: 10px 0;
 }
 .desktop-icon {
