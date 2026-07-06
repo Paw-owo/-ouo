@@ -8,7 +8,7 @@ import { APPS_REGISTRY, getDefaultDesktopApps } from '../data/apps-registry.js';
 import { get } from '../core/config.js';
 import events from '../core/events.js';
 
-let _gridEl = null;
+let _trackEl = null; // 页面轨道容器，用于跨页查找图标
 let _appIcons = new Map(); // appId → SVG图标定义
 
 // 默认APP图标（按appId，线条风SVG）
@@ -111,7 +111,7 @@ export function registerAppIcon(appId, svgString) {
 }
 
 // 获取要显示的APP列表（从注册表 + 用户布局）
-function _getDisplayApps() {
+export function getDisplayApps() {
   const registryApps = getDefaultDesktopApps();
   const userOrder = get('desktopIconOrder');
 
@@ -161,43 +161,31 @@ function _createAppItem(app, index) {
   return item;
 }
 
-// 渲染图标网格
-export function renderAppGrid(container) {
-  if (_gridEl && _gridEl.parentNode) {
-    _gridEl.parentNode.removeChild(_gridEl);
-  }
-
-  _gridEl = document.createElement('div');
-  _gridEl.className = 'app-grid-area';
-
+// 渲染单页图标网格到指定容器
+// container: 该页的 app-grid-area 元素
+// apps: 该页要渲染的APP列表切片
+// startIndex: 在总列表中的起始序号（用于动画延迟）
+export function renderAppGridPage(container, apps, startIndex = 0) {
   const grid = document.createElement('div');
   grid.className = 'app-grid';
 
-  const apps = _getDisplayApps();
-  apps.forEach((app, index) => {
-    grid.appendChild(_createAppItem(app, index));
+  apps.forEach((app, i) => {
+    grid.appendChild(_createAppItem(app, startIndex + i));
   });
 
-  _gridEl.appendChild(grid);
+  container.appendChild(grid);
+}
 
-  // 页面指示器
-  const indicator = document.createElement('div');
-  indicator.className = 'page-indicator';
-  const pageCount = Math.ceil(apps.length / 16);
-  for (let i = 0; i < Math.min(pageCount, 5); i++) {
-    const dot = document.createElement('div');
-    dot.className = `page-dot${i === 0 ? ' active' : ''}`;
-    indicator.appendChild(dot);
-  }
-  _gridEl.appendChild(indicator);
-
-  container.appendChild(_gridEl);
+// 记录页面轨道容器引用（供 updateAppBadge 跨页查找）
+export function setAppGridTrack(trackEl) {
+  _trackEl = trackEl;
 }
 
 // 更新角标（给 inbox/notifications 留接口）
 export function updateAppBadge(appId, count) {
-  if (!_gridEl) return;
-  const item = _gridEl.querySelector(`[data-app-id="${appId}"]`);
+  const root = _trackEl || document.querySelector('.desktop-pages-track');
+  if (!root) return;
+  const item = root.querySelector(`[data-app-id="${appId}"]`);
   if (!item) return;
 
   const chassis = item.querySelector('.app-icon-chassis');
@@ -217,8 +205,5 @@ export function updateAppBadge(appId, count) {
 
 // 销毁
 export function destroyAppGrid() {
-  if (_gridEl && _gridEl.parentNode) {
-    _gridEl.parentNode.removeChild(_gridEl);
-    _gridEl = null;
-  }
+  _trackEl = null;
 }
