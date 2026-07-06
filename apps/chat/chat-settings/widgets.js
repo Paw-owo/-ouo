@@ -3,11 +3,11 @@
 // 红线：图标只准 SVG 线稿，禁止任何 emoji 字符；文案软萌友好。
 // 依赖：core/storage.js, core/storage-keys.js, core/ui.js, core/util.js, core/events.js
 
-import { KEYS } from '../../core/storage-keys.js';
-import { getData, setData } from '../../core/storage.js';
-import { createIcon, registerIcon, showToast } from '../../core/ui.js';
-import { injectStyle, clamp, isUsableImage, cssUrl } from '../../core/util.js';
-import bus from '../../core/events.js';
+import { KEYS } from '../../../core/storage-keys.js';
+import { getData, setData } from '../../../core/storage.js';
+import { createIcon, registerIcon, showToast } from '../../../core/ui.js';
+import { injectStyle, clamp, isUsableImage, cssUrl } from '../../../core/util.js';
+import bus from '../../../core/events.js';
 import { escapeHTML, escapeAttr } from '../shared-utils.js';
 
 // 注册本模块用到的额外图标（幂等，重复注册无副作用）

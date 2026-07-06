@@ -120,6 +120,11 @@ export function unmount() {
     try { bus.emit('music:paused'); } catch (e) {}
     state.audioEl = null;
   }
+  // 释放本会话创建的所有 blob URL，避免反复进出 music APP 累积泄漏
+  if (state.sessionBlobs && state.sessionBlobs.size) {
+    state.sessionBlobs.forEach((url) => { try { URL.revokeObjectURL(url); } catch (e) {} });
+    state.sessionBlobs.clear();
+  }
   setPlaylistsChangeListener(null);
   setPlayerCallbacks({});
   state.containerEl = null;

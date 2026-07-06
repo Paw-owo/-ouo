@@ -3,15 +3,15 @@
 // 编排：群资料 → 群成员入口 → AI 模型 → AI 调试 → 偏好 → 背景 → 记录 → 危险。
 // 全中文注释；不省 token；功能不阉割。
 
-import { STORES, KEYS } from '../../core/storage-keys.js';
-import { getDB, setDB, getAllDB } from '../../core/storage.js';
-import { showToast, showConfirm, createIcon, registerIcon, createCollapsibleCard } from '../../core/ui.js';
-import { isUsableImage, cssUrl, injectStyle } from '../../core/util.js';
+import { STORES, KEYS } from '../../../core/storage-keys.js';
+import { getDB, setDB, getAllDB } from '../../../core/storage.js';
+import { showToast, showConfirm, createIcon, registerIcon, createCollapsibleCard } from '../../../core/ui.js';
+import { isUsableImage, cssUrl, injectStyle } from '../../../core/util.js';
 import { escapeHTML, escapeAttr } from '../shared-utils.js';
 import { getState } from '../index.js';
 import { findGroupSession, openGroupMembersSheet, editGroupAnnouncement } from './group-members.js';
 import { refreshGroupHeader } from './group-detail-view.js';
-import bus from '../../core/events.js';
+import bus from '../../../core/events.js';
 
 // 复用 chat-settings 共用控件 + 分组
 import {
@@ -47,6 +47,11 @@ export async function openGroupSettings(groupId) {
   if (_currentOverlay) {
     closeGroupSettings();
   }
+  // 关掉可能开着的私聊设置 overlay，避免双层遮罩叠加锁死滚动
+  try {
+    const { closeChatSettings } = await import('../chat-settings-view.js');
+    closeChatSettings();
+  } catch (e) {}
   ensureSettingsStyle();
 
   const session = await findGroupSession(groupId);

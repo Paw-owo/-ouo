@@ -374,7 +374,23 @@ function saveHiddenIcons(arr) { setData(KEYS.appHiddenIcons, [...new Set(arr)]);
 async function renderDock() {
   const reg = await getRegistry();
   dockEl.innerHTML = '';
-  getDockOrder(reg).forEach((appId) => {
+  let order = getDockOrder(reg);
+  const maxDock = getConfig('ui.dockMax', 4);
+  // 超员保护：若 dock 数量超过上限（老用户叠加旧 override / registry 扩容），
+  // 把尾部多出的 app 退回桌面网格，避免 dock 挤爆。
+  if (order.length > maxDock) {
+    const overflow = order.slice(maxDock);
+    const overrides = getDockOverrides();
+    overflow.forEach((id) => { overrides[id] = false; });
+    saveDockOverrides(overrides);
+    order = order.slice(0, maxDock);
+    // 退回桌面的 app 默认放 page 0
+    const pageOv = getIconPageOverrides();
+    overflow.forEach((id) => { if (pageOv[id] === undefined) pageOv[id] = 0; });
+    saveIconPageOverrides(pageOv);
+    try { renderIconGrids(); } catch (e) {}
+  }
+  order.forEach((appId) => {
     const app = reg.APPS.find((a) => a.id === appId && isDockApp(a));
     if (app) dockEl.appendChild(createDockIcon(app));
   });
@@ -1124,6 +1140,15 @@ function bindEvents() {
     if (!editing) return;
     if (e.target.closest('.desktop-icon, .widget, .dock, .status-bar, .page-dots, .editing-banner')) return;
     exitEditingMode();
+  });
+
+  // 阻止浏览器原生右键菜单 / 长按菜单（复制/粘贴/分享等）。
+  // 不阻止的话，长按图标进编辑模式时浏览器会先弹原生菜单，干扰拖拽体验。
+  // 桌面是触控/长按交互场景，不需要原生右键菜单。
+  desktopEl.addEventListener('contextmenu', (e) => {
+    if (e.target.closest('.desktop-icon, .widget, .dock-icon, .editing-banner, .status-bar, .page-dots')) {
+      e.preventDefault();
+    }
   });
 
   // 窗口尺寸变化重排

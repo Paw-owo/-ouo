@@ -4,7 +4,7 @@
 // 红线：图标只准 SVG 线稿，禁止任何 emoji 字符。
 // 依赖：core/ui.js, ./widgets.js
 
-import { createCollapsibleCard, showToast } from '../../core/ui.js';
+import { createCollapsibleCard, showToast } from '../../../core/ui.js';
 import {
   makeToggle, makeSegmented, makeSlider, makeHintBar, makeBadge,
   makeSection, makeSectionTitle, makeButton,

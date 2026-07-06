@@ -7,16 +7,16 @@
 // 状态由 index.js 持有（state.view='group'）。
 // 全中文注释；不省 token；功能不阉割。
 
-import { KEYS, STORES } from '../../core/storage-keys.js';
-import { getData, getDB, setDB, getAllDB } from '../../core/storage.js';
-import { showToast, showBottomSheet, createIcon, registerIcon } from '../../core/ui.js';
-import { formatTime, formatRelative, clamp, throttle, isUsableImage, cssUrl, injectStyle } from '../../core/util.js';
+import { KEYS, STORES } from '../../../core/storage-keys.js';
+import { getData, getDB, setDB, getAllDB } from '../../../core/storage.js';
+import { showToast, showBottomSheet, createIcon, registerIcon } from '../../../core/ui.js';
+import { formatTime, formatRelative, clamp, throttle, isUsableImage, cssUrl, injectStyle } from '../../../core/util.js';
 import { getState, backToSessionList } from '../index.js';
 import { renderMarkdown } from '../markdown.js';
 import { enhanceCodeBlocks } from '../code-block.js';
 import { escapeHTML, escapeAttr, attachLongPress } from '../shared-utils.js';
 import { applySessionWallpaper } from '../wallpaper.js';
-import { stopAllTTS } from '../../core/tts.js';
+import { stopAllTTS } from '../../../core/tts.js';
 import {
   sendGroupMessage, sendGroupImageMessage, sendGroupRichMessage,
   retrySendGroupMessage, cancelGroupStreaming

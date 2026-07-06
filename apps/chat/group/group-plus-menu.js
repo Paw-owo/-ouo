@@ -3,7 +3,7 @@
 // 复用 plus-content.js 的发送能力（群聊版 sendGroupRichMessage）。
 // 全中文注释；不省 token；功能不阉割。
 
-import { showBottomSheet, createIcon, registerIcon } from '../../core/ui.js';
+import { showBottomSheet, createIcon, registerIcon } from '../../../core/ui.js';
 import { escapeHTML, escapeAttr } from '../shared-utils.js';
 import { sendGroupImageMessage, sendGroupRichMessage } from './group-sending.js';
 import { getState } from '../index.js';

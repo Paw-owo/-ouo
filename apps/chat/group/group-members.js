@@ -3,15 +3,15 @@
 // 成员信息存在 session.participants 里，改动后写回 STORES.chatSessions。
 // 全中文注释；不省 token；功能不阉割。
 
-import { STORES } from '../../core/storage-keys.js';
-import { getDB, setDB, getAllDB } from '../../core/storage.js';
-import { showToast, showConfirm, showBottomSheet, createIcon, registerIcon } from '../../core/ui.js';
-import { isUsableImage, cssUrl, injectStyle } from '../../core/util.js';
+import { STORES } from '../../../core/storage-keys.js';
+import { getDB, setDB, getAllDB } from '../../../core/storage.js';
+import { showToast, showConfirm, showBottomSheet, createIcon, registerIcon } from '../../../core/ui.js';
+import { isUsableImage, cssUrl, injectStyle } from '../../../core/util.js';
 import { escapeHTML, escapeAttr } from '../shared-utils.js';
 import { getState } from '../index.js';
 import { pickCharacters } from './create-group.js';
 import { refreshGroupHeader } from './group-detail-view.js';
-import bus from '../../core/events.js';
+import bus from '../../../core/events.js';
 
 registerIcon('users', 'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2 M9 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M23 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75');
 registerIcon('plus', 'M12 5v14 M5 12h14');

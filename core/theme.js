@@ -275,7 +275,7 @@ const SHARED_VARS = {
   '--z-sheet': '200',
   '--z-lock': '9999',
   '--z-boot': '10000',
-  '--icon-size': '60px',
+  '--icon-size': '68px',
   '--dock-base': '84px',
   '--status-bar-base': '44px',
   '--widget-scale': '1'
@@ -416,7 +416,7 @@ export function applyFontFamily(fontFamily, blobUrl) {
 export function applyDesktopScale(iconScale, widgetScale, dockScale) {
   const root = document.documentElement;
   if (iconScale !== undefined) {
-    const size = 60 * iconScale;
+    const size = 68 * iconScale;
     root.style.setProperty('--icon-size', `${size}px`);
   }
   if (widgetScale !== undefined) root.style.setProperty('--widget-scale', String(widgetScale));

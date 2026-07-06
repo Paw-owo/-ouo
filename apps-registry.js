@@ -10,7 +10,7 @@ export const APPS = [
   {
     id: 'settings',
     name: '设置',
-    icon: 'settings',
+    icon: 'app-settings',
     iconColor: '#7AA2D6',
     dock: true,
     page: 0,
@@ -21,7 +21,7 @@ export const APPS = [
   {
     id: 'calculator',
     name: '计算器',
-    icon: 'edit',
+    icon: 'app-calculator',
     iconColor: '#E8A04A',
     dock: false,
     page: 0,
@@ -32,14 +32,14 @@ export const APPS = [
     name: '备忘录',
     icon: 'app-memo',
     iconColor: '#8BADD4',
-    dock: false,
+    dock: true,
     page: 0,
     loader: () => import('./apps/memo/index.js')
   },
   {
     id: 'countdown',
     name: '倒计时',
-    icon: 'calendar',
+    icon: 'app-countdown',
     iconColor: '#F5A98A',
     dock: false,
     page: 0,
@@ -48,7 +48,7 @@ export const APPS = [
   {
     id: 'anniversary',
     name: '纪念日',
-    icon: 'heart',
+    icon: 'app-anniversary',
     iconColor: '#E8A0B8',
     dock: false,
     page: 0,
@@ -57,7 +57,7 @@ export const APPS = [
   {
     id: 'mood',
     name: '心情',
-    icon: 'smile',
+    icon: 'app-mood',
     iconColor: '#C4A8D4',
     dock: false,
     page: 0,
@@ -77,7 +77,7 @@ export const APPS = [
     name: '聊天',
     icon: 'app-chat',
     iconColor: '#F5B0B8',
-    dock: false,
+    dock: true,
     page: 0,
     loader: () => import('./apps/chat/index.js')
   },
@@ -86,7 +86,7 @@ export const APPS = [
   {
     id: 'pomodoro',
     name: '番茄钟',
-    icon: 'bell',
+    icon: 'app-pomodoro',
     iconColor: '#E89898',
     dock: false,
     page: 1,
@@ -95,7 +95,7 @@ export const APPS = [
   {
     id: 'flashcard',
     name: '记忆卡',
-    icon: 'next',
+    icon: 'app-flashcard',
     iconColor: '#A8C49A',
     dock: false,
     page: 1,
@@ -104,7 +104,7 @@ export const APPS = [
   {
     id: 'alarm',
     name: '闹钟',
-    icon: 'sun',
+    icon: 'app-alarm',
     iconColor: '#D4B078',
     dock: false,
     page: 1,
@@ -113,7 +113,7 @@ export const APPS = [
   {
     id: 'astro',
     name: '星座',
-    icon: 'moon',
+    icon: 'app-astro',
     iconColor: '#8B9AD4',
     dock: false,
     page: 1,
@@ -122,7 +122,7 @@ export const APPS = [
   {
     id: 'health',
     name: '健康',
-    icon: 'star',
+    icon: 'app-health',
     iconColor: '#7ABE9E',
     dock: false,
     page: 1,
@@ -131,7 +131,7 @@ export const APPS = [
   {
     id: 'characters',
     name: '角色',
-    icon: 'dice',
+    icon: 'app-characters',
     iconColor: '#D4A4C4',
     dock: false,
     page: 1,
@@ -140,7 +140,7 @@ export const APPS = [
   {
     id: 'worldbook',
     name: '世界书',
-    icon: 'search',
+    icon: 'app-worldbook',
     iconColor: '#B89878',
     dock: false,
     page: 1,
@@ -149,7 +149,7 @@ export const APPS = [
   {
     id: 'moments',
     name: '朋友圈',
-    icon: 'camera',
+    icon: 'app-moments',
     iconColor: '#F5A0C8',
     dock: false,
     page: 1,
@@ -158,7 +158,7 @@ export const APPS = [
   {
     id: 'dream',
     name: '梦境',
-    icon: 'dream',
+    icon: 'app-dream',
     iconColor: '#9A8BD4',
     dock: false,
     page: 1,
@@ -167,7 +167,7 @@ export const APPS = [
   {
     id: 'avatar',
     name: '头像',
-    icon: 'home',
+    icon: 'app-avatar',
     iconColor: '#F5C498',
     dock: false,
     page: 1,
@@ -176,7 +176,7 @@ export const APPS = [
   {
     id: 'wallet',
     name: '钱包',
-    icon: 'wallet',
+    icon: 'app-wallet',
     iconColor: '#E8B04A',
     dock: false,
     page: 1,
@@ -185,7 +185,7 @@ export const APPS = [
   {
     id: 'shop',
     name: '商店',
-    icon: 'shop',
+    icon: 'app-shop',
     iconColor: '#F088A0',
     dock: false,
     page: 1,
@@ -194,7 +194,7 @@ export const APPS = [
   {
     id: 'games',
     name: '游戏',
-    icon: 'games',
+    icon: 'app-games',
     iconColor: '#88C4D4',
     dock: false,
     page: 1,
@@ -203,7 +203,7 @@ export const APPS = [
   {
     id: 'music',
     name: '音乐',
-    icon: 'music',
+    icon: 'app-music',
     iconColor: '#D49AC4',
     dock: false,
     page: 1,
@@ -212,7 +212,7 @@ export const APPS = [
   {
     id: 'collections',
     name: '收藏',
-    icon: 'gift',
+    icon: 'app-collections',
     iconColor: '#A8D4B0',
     dock: false,
     page: 1,
@@ -221,7 +221,7 @@ export const APPS = [
   {
     id: 'grudge',
     name: '记仇本',
-    icon: 'lock',
+    icon: 'app-grudge',
     iconColor: '#C48888',
     dock: false,
     page: 1,
@@ -230,7 +230,7 @@ export const APPS = [
   {
     id: 'memory-viewer',
     name: '记忆',
-    icon: 'back',
+    icon: 'app-memory-viewer',
     iconColor: '#88A8D4',
     dock: false,
     page: 1,
@@ -239,7 +239,7 @@ export const APPS = [
   {
     id: 'inbox',
     name: '消息中心',
-    icon: 'phone',
+    icon: 'app-inbox',
     iconColor: '#7AA2D6',
     dock: true,
     page: 0,

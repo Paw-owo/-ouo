@@ -421,7 +421,8 @@ img { display: block; max-width: 100%; }
   display: flex; flex-direction: column; align-items: center;
   gap: 6px; cursor: pointer;
   position: relative;
-  user-select: none;
+  user-select: none; -webkit-user-select: none;
+  -webkit-touch-callout: none; /* 阻止 iOS 长按弹出系统菜单（拷贝/粘贴等） */
 }
 .desktop-icon-img {
   width: var(--icon-size); height: var(--icon-size);
@@ -441,6 +442,8 @@ img { display: block; max-width: 100%; }
   overflow: hidden;
 }
 .desktop-icon-img svg { width: 56%; height: 56%; }
+/* rich 图标（猫主题填充型）：占比放大到 72%，填充型图标细节更多需要更大画布 */
+.desktop-icon-img svg.popo-icon-rich { width: 72%; height: 72%; }
 .desktop-icon:active .desktop-icon-img { transform: scale(var(--press-scale)); }
 .desktop-icon-label {
   font-size: var(--font-size-small);

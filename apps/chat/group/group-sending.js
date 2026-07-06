@@ -8,15 +8,15 @@
 //       core/ai-client.js, core/memory.js, core/util.js, ./group-detail-view.js
 // 全中文注释；不省 token；功能不阉割。
 
-import { STORES, KEYS } from '../../core/storage-keys.js';
-import { getDB, setDB, getAllDB, generateId, getNow, compressImage } from '../../core/storage.js';
-import { showToast, createIcon, registerIcon } from '../../core/ui.js';
-import bus from '../../core/events.js';
-import { pickImageFile } from '../../core/util.js';
-import { streamChat, buildMessages, isAIConfigured, parseThinkingTags } from '../../core/ai-client.js';
-import { buildGroupMemoryPrompt, recordInteraction } from '../../core/memory.js';
-import { archiveOldGroupMemories } from '../../js/ai/ai-memory.js';
-import { getRecentEventsPrompt } from '../../core/inbox.js';
+import { STORES, KEYS } from '../../../core/storage-keys.js';
+import { getDB, setDB, getAllDB, generateId, getNow, compressImage } from '../../../core/storage.js';
+import { showToast, createIcon, registerIcon } from '../../../core/ui.js';
+import bus from '../../../core/events.js';
+import { pickImageFile } from '../../../core/util.js';
+import { streamChat, buildMessages, isAIConfigured, parseThinkingTags } from '../../../core/ai-client.js';
+import { buildGroupMemoryPrompt, recordInteraction } from '../../../core/memory.js';
+import { archiveOldGroupMemories } from '../../../js/ai/ai-memory.js';
+import { getRecentEventsPrompt } from '../../../core/inbox.js';
 import { getState } from '../index.js';
 import { recalcChatUnread } from '../sending.js';
 import {

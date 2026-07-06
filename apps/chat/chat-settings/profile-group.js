@@ -4,9 +4,9 @@
 // 红线：图标只准 SVG 线稿，禁止任何 emoji 字符。
 // 依赖：core/storage.js, core/storage-keys.js, core/ui.js, ./widgets.js
 
-import { STORES } from '../../core/storage-keys.js';
-import { getDB, setDB } from '../../core/storage.js';
-import { showToast, createCollapsibleCard } from '../../core/ui.js';
+import { STORES } from '../../../core/storage-keys.js';
+import { getDB, setDB } from '../../../core/storage.js';
+import { showToast, createCollapsibleCard } from '../../../core/ui.js';
 import {
   makeField, makeInput, makeTextarea, makeButton, makeAvatarPicker,
   makeHintBar, makeBadge, makeSection, makeSectionTitle

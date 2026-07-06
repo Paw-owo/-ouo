@@ -3,11 +3,11 @@
 // 红线：图标只准 SVG 线稿，禁止任何 emoji 字符；所有操作都要二次确认。
 // 依赖：core/storage.js, core/storage-keys.js, core/ui.js, ./widgets.js, ../../core/memory.js
 
-import { STORES, KEYS } from '../../core/storage-keys.js';
-import { getDB, setDB, getAllDB, deleteDB } from '../../core/storage.js';
-import { createCollapsibleCard, showToast, showConfirm } from '../../core/ui.js';
-import { removeData } from '../../core/storage.js';
-import bus from '../../core/events.js';
+import { STORES, KEYS } from '../../../core/storage-keys.js';
+import { getDB, setDB, getAllDB, deleteDB } from '../../../core/storage.js';
+import { createCollapsibleCard, showToast, showConfirm } from '../../../core/ui.js';
+import { removeData } from '../../../core/storage.js';
+import bus from '../../../core/events.js';
 import {
   makeButton, makeHintBar, makeBadge, makeSection, makeSectionTitle
 } from './widgets.js';

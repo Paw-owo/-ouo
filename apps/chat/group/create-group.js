@@ -5,10 +5,10 @@
 // 依赖：core/storage.js, core/storage-keys.js, core/ui.js, core/util.js, ./group-detail-view.js
 // 全中文注释；不省 token；功能不阉割。
 
-import { STORES, KEYS } from '../../core/storage-keys.js';
-import { getDB, setDB, getAllDB, generateId, getNow, compressImage } from '../../core/storage.js';
-import { showToast, showConfirm, showBottomSheet, createIcon, registerIcon } from '../../core/ui.js';
-import { pickImageFile, isUsableImage, cssUrl, injectStyle } from '../../core/util.js';
+import { STORES, KEYS } from '../../../core/storage-keys.js';
+import { getDB, setDB, getAllDB, generateId, getNow, compressImage } from '../../../core/storage.js';
+import { showToast, showConfirm, showBottomSheet, createIcon, registerIcon } from '../../../core/ui.js';
+import { pickImageFile, isUsableImage, cssUrl, injectStyle } from '../../../core/util.js';
 import { escapeHTML, escapeAttr } from '../shared-utils.js';
 import { enterChat } from '../index.js';
 
