@@ -175,7 +175,7 @@ export {
   setAvatar,
   setMessage,
   lock,
-  unlock: _unlock,
+  _unlock as unlock,
   toggleLock,
   setLockEnabled,
   startAutoLock,

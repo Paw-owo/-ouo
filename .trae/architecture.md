@@ -164,6 +164,53 @@ apps/<app-id>/
 
 **边界：** 这条规则是"APP内部结构规范"，不影响已经确认的 core / desktop / data / js/ai 分层。
 
+### 7.1 APP内部文件命名规则
+
+每个APP内部文件必须遵循 `app-id` 前缀命名，一眼看出归属：
+
+```
+apps/<app-id>/
+├── index.js                      # APP入口
+├── ui/
+│   ├── <app-id>-page.js          # APP主页面
+│   ├── <app-id>-header.js        # 头部区域（如有）
+│   ├── <app-id>-list.js          # 列表区（如有）
+│   ├── <app-id>-detail.js        # 详情区（如有）
+│   ├── <app-id>-composer.js      # 输入区/操作区（如有）
+│   └── ...
+├── settings/
+│   ├── <app-id>-settings-page.js
+│   ├── <app-id>-settings-store.js
+│   └── ...
+├── css/
+│   ├── <app-id>.css
+│   ├── <app-id>-settings.css
+│   └── ...
+├── data/
+│   ├── <app-id>-store.js         # 本APP数据访问/状态封装
+│   ├── <app-id>-schema.js        # 本APP数据结构/校验（如有）
+│   └── ...
+├── events/
+│   ├── <app-id>-events.js        # 本APP事件名、派发封装
+│   └── ...
+└── ai-spec/
+    ├── <app-id>-ai-spec.js       # 本APP AI说明书/能力边界/可读数据说明
+    └── ...
+```
+
+### 7.2 APP内部职责边界
+
+1. `index.js` 只负责装配，不堆业务细节
+2. `ui/` 只管界面结构、渲染、交互绑定，不直接保存数据，不直接互调别的APP
+3. `settings/` 只管这个APP自己的设置，不碰全局设置
+4. `css/` 只放这个APP自己的样式，不把别的APP样式混进来
+5. `data/` 只管这个APP自己的数据读写与状态封装；跨APP共享数据仍走 core / data 层统一来源
+6. `events/` 只负责本APP事件定义与派发封装，真正广播走事件中心
+7. `ai-spec/` 只描述这个APP的AI规则、可读数据、可触发事件，不写全局请求逻辑
+8. 公用能力（弹窗、toast、sheet、通用选择器、路由、通知、主题、存储）不准下沉到APP文件夹里，统一留在 core
+9. 不要出现 `utils.js`、`helpers.js`、`misc.js` 这种垃圾桶文件名；名字必须一眼看出职责
+10. 一个文件只做一件事，文件变大就继续拆，不要因为已经有文件夹了就硬塞
+
 ## 硬性约束
 
 1. 桌面是系统壳层，不是普通APP

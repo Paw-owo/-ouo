@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#f5f0e8">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <title>小手机</title>
+
+  <!-- CSS层：先加载变量槽位，再加载基础样式 -->
+  <link rel="stylesheet" href="css/theme.css">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/animations.css">
+  <link rel="stylesheet" href="css/app-surfaces.css">
+</head>
+<body>
+  <!-- 手机外壳 -->
+  <div id="phone-frame">
+    <!-- 桌面容器（Phase 2 填充） -->
+    <div id="desktop"></div>
+    <!-- APP页面容器（由 ui.js 管理） -->
+    <div id="app-container" class="app-container"></div>
+    <!-- 锁屏容器（Phase 2 填充） -->
+    <div id="lockscreen"></div>
+  </div>
+
+  <!-- 底座层启动脚本 -->
+  <script type="module">
+    import { initTheme } from './core/theme.js';
+    import { initBackgrounds } from './core/app-bg.js';
+    import { initLock } from './core/lock.js';
+    import { initUI } from './core/ui.js';
+    import './core/notifications.js';
+    import './core/inbox.js';
+
+    // 启动顺序：主题 → 背景 → 锁屏 → UI
+    (function boot() {
+      initTheme();
+      initBackgrounds();
+      initLock();
+      initUI();
+
+      console.log('[Boot] 底座层启动完成');
+    })();
+  </script>
+</body>
+</html>
