@@ -359,6 +359,21 @@
   overflow: hidden;
 }
 
+/* 左侧主题色强调条 */
+.widget-card::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 14px;
+  bottom: 14px;
+  width: 3px;
+  border-radius: 0 var(--radius-full) var(--radius-full) 0;
+  background: var(--color-primary);
+  opacity: 0.35;
+  transition: background var(--duration-normal) var(--ease-smooth),
+              opacity var(--duration-normal) var(--ease-smooth);
+}
+
 .widget-card:active {
   transform: scale(0.98);
 }
@@ -411,7 +426,19 @@
 .widget-weather .weather-icon {
   width: 40px;
   height: 40px;
+  border-radius: var(--radius-full);
+  background: var(--color-accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
   color: var(--color-primary);
+  transition: background var(--duration-normal) var(--ease-smooth),
+              color var(--duration-normal) var(--ease-smooth);
+}
+
+.widget-weather .weather-icon svg {
+  width: 24px;
+  height: 24px;
 }
 
 .widget-weather .weather-info {
@@ -440,10 +467,22 @@
 }
 
 .widget-tip .tip-icon {
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-full);
+  background: var(--color-primary-ultralight);
+  display: flex;
+  align-items: center;
+  justify-content: center;
   color: var(--color-primary);
   flex-shrink: 0;
+  transition: background var(--duration-normal) var(--ease-smooth),
+              color var(--duration-normal) var(--ease-smooth);
+}
+
+.widget-tip .tip-icon svg {
+  width: 18px;
+  height: 18px;
 }
 
 .widget-tip .tip-text {
@@ -464,14 +503,15 @@
   width: 56px;
   height: 56px;
   border-radius: var(--radius-full);
-  background: var(--bg-surface);
-  border: 3px solid var(--color-primary-light);
+  background: var(--color-accent-light);
+  border: 3px solid var(--color-primary);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
   position: relative;
-  transition: transform 3s linear infinite;
+  transition: background var(--duration-normal) var(--ease-smooth),
+              border-color var(--duration-normal) var(--ease-smooth);
 }
 
 .widget-vinyl .vinyl-disc.playing {
@@ -658,8 +698,8 @@
 .dock-bar {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 8px 16px;
+  gap: 8px;
+  padding: 8px 20px;
   border-radius: var(--radius-xl);
   background: var(--dock-bg);
   backdrop-filter: var(--backdrop-blur);

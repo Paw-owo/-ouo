@@ -23,7 +23,7 @@ const APPS_REGISTRY = Object.freeze([
     category: 'system',
     events: ['settings.changed', 'theme.changed', 'api.changed'],
     aiSpec: null,
-    desktop: { show: true, dock: false }
+    desktop: { show: true, dock: true }
   },
   {
     id: 'moments',
@@ -33,7 +33,7 @@ const APPS_REGISTRY = Object.freeze([
     category: 'social',
     events: ['moment.posted', 'moment.liked', 'moment.commented'],
     aiSpec: 'apps/moments/ai-spec.js',
-    desktop: { show: true, dock: false }
+    desktop: { show: true, dock: true }
   },
   {
     id: 'wallet',
@@ -123,7 +123,7 @@ const APPS_REGISTRY = Object.freeze([
     category: 'entertainment',
     events: ['music.played', 'music.liked'],
     aiSpec: 'apps/music/ai-spec.js',
-    desktop: { show: true, dock: false }
+    desktop: { show: true, dock: true }
   },
   {
     id: 'game',
