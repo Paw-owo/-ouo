@@ -424,7 +424,7 @@ function renderPersonalizeCard() {
     </div>
     <div class="card-row">
       <span class="card-row-label">动效强度</span>
-      <select id="pers-motion" style="padding:6px 10px;border-radius:var(--radius-sm);background:var(--bg-secondary);color:var(--text-primary)">
+      <select id="pers-motion" style="padding:6px 10px;border-radius:var(--radius-md);background:var(--bg-secondary);color:var(--text-primary)">
         <option value="full" ${motionLevel === 'full' ? 'selected' : ''}>完整（默认）</option>
         <option value="reduced" ${motionLevel === 'reduced' ? 'selected' : ''}>减弱（更安静）</option>
         <option value="none" ${motionLevel === 'none' ? 'selected' : ''}>关闭（最省电）</option>
@@ -742,7 +742,7 @@ function renderWidgetMgmtCard() {
     row.className = 'card-row';
     row.innerHTML = `<span class="card-row-label">${w.name}</span>
       <input type="checkbox" data-act="show" ${hidden ? '' : 'checked'} style="margin-right:8px">
-      <select data-act="page" style="padding:4px 8px;border-radius:var(--radius-sm);background:var(--bg-secondary);color:var(--text-primary)">
+      <select data-act="page" style="padding:4px 8px;border-radius:var(--radius-md);background:var(--bg-secondary);color:var(--text-primary)">
         <option value="0" ${page === 0 ? 'selected' : ''}>第 1 页</option>
         <option value="1" ${page === 1 ? 'selected' : ''}>第 2 页</option>
       </select>`;

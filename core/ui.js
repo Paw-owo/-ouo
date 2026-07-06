@@ -120,7 +120,7 @@ function ensureUIStyle() {
   if (uiStyleInjected) return;
   injectStyle('popo-ui-style', `
     .popo-toast-stack{position:fixed;top:calc(env(safe-area-inset-top,0px) + 12px);left:50%;transform:translateX(-50%);z-index:9999;display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:none;width:max-content;max-width:90vw}
-    .popo-toast{background:color-mix(in srgb,var(--bg-card) 92%,transparent);backdrop-filter:blur(var(--glass-blur));-webkit-backdrop-filter:blur(var(--glass-blur));color:var(--text-primary);padding:10px 18px;border-radius:var(--radius-md);box-shadow:var(--shadow-md);font-size:var(--font-size-small);line-height:1.4;pointer-events:auto;border:1px solid color-mix(in srgb,var(--accent-light) 60%,transparent);animation:popoToastIn var(--motion) var(--motion-spring);max-width:80vw;text-align:center}
+    .popo-toast{background:color-mix(in srgb,var(--bg-card) 92%,transparent);backdrop-filter:blur(var(--glass-blur));-webkit-backdrop-filter:blur(var(--glass-blur));color:var(--text-primary);padding:10px 18px;border-radius:var(--radius-full);box-shadow:var(--shadow-md);font-size:var(--font-size-small);line-height:1.4;pointer-events:auto;border:1px solid color-mix(in srgb,var(--accent-light) 60%,transparent);animation:popoToastIn var(--motion) var(--motion-spring);max-width:80vw;text-align:center}
     .popo-toast.leaving{animation:popoToastOut 160ms ease forwards}
     .popo-toast.error{background:color-mix(in srgb,var(--danger) 92%,transparent);color:var(--bubble-user-text);border-color:var(--danger)}
     .popo-toast.success{background:color-mix(in srgb,var(--accent) 92%,transparent);color:var(--bubble-user-text);border-color:var(--accent)}
@@ -139,7 +139,7 @@ function ensureUIStyle() {
     .popo-dialog-title{font-size:var(--font-size-title);font-weight:600;color:var(--text-primary);margin-bottom:8px;text-align:center}
     .popo-dialog-body{font-size:var(--font-size-base);color:var(--text-secondary);text-align:center;margin-bottom:18px;line-height:1.5}
     .popo-dialog-actions{display:flex;gap:10px}
-    .popo-dialog-actions button{flex:1;padding:11px 14px;border-radius:var(--radius-sm);font-size:var(--font-size-base);font-weight:500;background:color-mix(in srgb,var(--bg-secondary) 80%,transparent);color:var(--text-primary);transition:var(--motion)}
+    .popo-dialog-actions button{flex:1;padding:11px 14px;border-radius:var(--radius-full);font-size:var(--font-size-base);font-weight:500;background:color-mix(in srgb,var(--bg-secondary) 80%,transparent);color:var(--text-primary);transition:var(--motion)}
     .popo-dialog-actions button:active{transform:scale(var(--press-scale))}
     .popo-dialog-actions button.primary{background:var(--accent);color:var(--bubble-user-text)}
     .popo-dialog-actions button.danger{background:var(--danger);color:var(--bubble-user-text)}
