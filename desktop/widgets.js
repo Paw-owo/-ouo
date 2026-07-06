@@ -96,19 +96,28 @@ function _getDateStr() {
 // 创建时间组件（内容层，不包 widget-card 外壳）
 function _renderTimeWidget() {
   return `
-    <div class="time-display">${_getTimeStr()}</div>
-    <div class="date-display">${_getDateStr()}</div>
+    <div class="widget-header">
+      <span class="widget-deco-dot"></span>
+      <span class="widget-deco-text">今天也醒啦</span>
+    </div>
+    <div class="widget-body">
+      <div class="time-display">${_getTimeStr()}</div>
+      <div class="date-display">${_getDateStr()}</div>
+    </div>
   `;
 }
 
 // 创建天气组件（内容层，不包 widget-card 外壳）
 function _renderWeatherWidget() {
   return `
-    <div class="weather-icon">${_getWeatherIcon(WEATHER_MOCK.icon)}</div>
-    <div class="weather-info">
-      <div class="weather-temp">${WEATHER_MOCK.temp}</div>
-      <div class="weather-desc">${WEATHER_MOCK.desc}</div>
+    <div class="weather-top">
+      <div class="weather-icon">${_getWeatherIcon(WEATHER_MOCK.icon)}</div>
+      <div class="weather-info">
+        <div class="weather-temp">${WEATHER_MOCK.temp}</div>
+        <div class="weather-desc">${WEATHER_MOCK.desc}</div>
+      </div>
     </div>
+    <div class="weather-note">好天气模式</div>
   `;
 }
 
@@ -117,7 +126,10 @@ function _renderTipWidget() {
   const tip = TIPS[Math.floor(Math.random() * TIPS.length)];
   return `
     <div class="tip-icon">${_getTipIcon()}</div>
-    <div class="tip-text">${tip}</div>
+    <div class="tip-content">
+      <div class="tip-title">今日提示</div>
+      <div class="tip-text">${tip}</div>
+    </div>
   `;
 }
 
