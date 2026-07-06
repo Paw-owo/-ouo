@@ -32,9 +32,31 @@ async function loadAppSpec(appId) {
   const appDef = APPS_REGISTRY.find(a => a.id === appId);
   if (!appDef || !appDef.aiSpec) return null;
 
+  const specUrl = `/${appDef.aiSpec}`;
+
+  // 先探测一次：避免直接动态 import 一个不存在的文件，触发浏览器 MIME type 错误
+  // 静态服务器对不存在的路径会返回 HTML 404 页（content-type: text/html）
+  // 浏览器拒绝把 HTML 当 JS 模块加载，会抛 'text/html' is not a valid JavaScript MIME type
+  // 这个错误在 try/catch 之外由浏览器底层抛出，无法被 import() 的 catch 抑制
   try {
-    // aiSpec 字段是相对根目录的路径，如 'apps/chat/ai-spec.js'
-    const module = await import(/* @vite-ignore */ `/${appDef.aiSpec}`);
+    const probe = await fetch(specUrl, { method: 'GET' });
+    if (!probe.ok) {
+      _failedSpecs.add(appId);
+      return null;
+    }
+    const ctype = probe.headers.get('content-type') || '';
+    if (!ctype.includes('javascript') && !ctype.includes('ecmascript')) {
+      _failedSpecs.add(appId);
+      return null;
+    }
+  } catch (err) {
+    _failedSpecs.add(appId);
+    return null;
+  }
+
+  // 探测通过，再正式动态 import
+  try {
+    const module = await import(/* @vite-ignore */ specUrl);
     const spec = module.default || module;
 
     _specCache.set(appId, spec);
