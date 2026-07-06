@@ -4,13 +4,13 @@
 // 红线：图标只准 SVG 线稿，禁止任何 emoji 字符。
 // 依赖：core/storage.js, core/ui.js, ./widgets.js, ../../js/ai/ai-client.js
 
-import { createCollapsibleCard, showToast } from '../../core/ui.js';
+import { createCollapsibleCard, showToast } from '../../../core/ui.js';
 import {
   makeField, makeInput, makeToggle, makeButton, makeAsyncButton,
   makeModelList, makeHintBar, makeBadge, makeSection, makeSectionTitle,
   saveChatPrefs, getChatPrefs, fetchModelList
 } from './widgets.js';
-import { getAIConfig } from '../../js/ai/ai-client.js';
+import { getAIConfig } from '../../../js/ai/ai-client.js';
 
 /**
  * 构建「AI 模型」分组。

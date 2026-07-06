@@ -3,15 +3,15 @@
 // 编排：群资料 → 群成员入口 → AI 模型 → AI 调试 → 偏好 → 背景 → 记录 → 危险。
 // 全中文注释；不省 token；功能不阉割。
 
-import { STORES, KEYS } from '../../core/storage-keys.js';
-import { getDB, setDB, getAllDB } from '../../core/storage.js';
-import { showToast, showConfirm, createIcon, registerIcon, createCollapsibleCard } from '../../core/ui.js';
-import { isUsableImage, cssUrl, injectStyle } from '../../core/util.js';
+import { STORES, KEYS } from '../../../core/storage-keys.js';
+import { getDB, setDB, getAllDB } from '../../../core/storage.js';
+import { showToast, showConfirm, createIcon, registerIcon, createCollapsibleCard } from '../../../core/ui.js';
+import { isUsableImage, cssUrl, injectStyle } from '../../../core/util.js';
 import { escapeHTML, escapeAttr } from '../shared-utils.js';
 import { getState } from '../index.js';
 import { findGroupSession, openGroupMembersSheet, editGroupAnnouncement } from './group-members.js';
 import { refreshGroupHeader } from './group-detail-view.js';
-import bus from '../../core/events.js';
+import bus from '../../../core/events.js';
 
 // 复用 chat-settings 共用控件 + 分组
 import {

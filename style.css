@@ -441,6 +441,8 @@ img { display: block; max-width: 100%; }
   overflow: hidden;
 }
 .desktop-icon-img svg { width: 56%; height: 56%; }
+/* rich 图标（猫主题填充型）：占比放大到 72%，填充型图标细节更多需要更大画布 */
+.desktop-icon-img svg.popo-icon-rich { width: 72%; height: 72%; }
 .desktop-icon:active .desktop-icon-img { transform: scale(var(--press-scale)); }
 .desktop-icon-label {
   font-size: var(--font-size-small);
