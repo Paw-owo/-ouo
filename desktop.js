@@ -1617,7 +1617,10 @@ async function applyLockBackground() {
   // 锁屏壁纸透明度（0-100，100 = 完全显示）。遮罩层不透明度 = (100 - 透明度) / 100
   const userOpacity = Number(getData(KEYS.appLockWallpaperOpacity, 100));
   const maskOpacity = Math.max(0, Math.min(1, (100 - userOpacity) / 100));
-  lockScreenEl.style.setProperty('--lock-bg-mask', String(maskOpacity));
+  // 主题兑底最小遮罩 0.22：保证壁纸存在时主题氛围（accent 渐变 + bg-primary 兜底）始终透出来，
+  // 避免用户透明度=100 时壁纸完全盖掉主题色；切主题时遮罩层也会立即反映新主题色。
+  const themeMask = Math.max(maskOpacity, 0.22);
+  lockScreenEl.style.setProperty('--lock-bg-mask', String(themeMask));
   // 壁纸实际可见时才启用反白模式；被遮罩完全盖住时跟随主题色
   const hasWallpaper = isUsableImage(url) && maskOpacity < 0.55;
   lockScreenEl.classList.toggle('has-wallpaper', hasWallpaper);

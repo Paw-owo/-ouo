@@ -84,8 +84,12 @@ export async function closeCurrent() {
 }
 
 export async function goHome() {
+  // 注意：不要再 bus.emit('router:home')。
+  // router:home 是“请求回桌面”事件（由各 App 的返回按钮 emit），
+  // desktop.js 订阅它后调用 goHome 来执行关闭。如果 goHome 自己再 emit 一次，
+  // 会触发 desktop 的监听器再次调用 goHome → closeCurrent(已空) → 再 emit…
+  // 形成无限微任务链，事件循环被饿死，页面表现为“点返回后整页卡死”。
   await closeCurrent();
-  bus.emit('router:home', {});
 }
 
 function createAppRoot() {

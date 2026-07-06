@@ -1079,6 +1079,15 @@ export function unmount() {
   flushDraft();
   // 收起增强模块的临时状态（表情面板 / 语音模式 / 搜索高亮 / document 监听）
   try { cleanupExtras(); } catch (e) {}
+  // 清掉可能挂载在 body 上的全屏 overlay（聊天设置 / 群聊设置 / 代码预览）。
+  // 这些 overlay 不在 chat 的容器内，unmount 不会自动带走它们；
+  // 不清的话会留下遮罩 + body.overflow='hidden'，导致桌面被锁死、点不动。
+  // closeX 都是幂等的（没开着就直接 return），模块没加载过时动态 import 也会立即 resolve（缓存命中）。
+  try {
+    import('./chat-settings-view.js').then((m) => m.closeChatSettings?.()).catch(() => {});
+    import('./group/group-settings-view.js').then((m) => m.closeGroupSettings?.()).catch(() => {});
+    import('./code-block.js').then((m) => m.closePreviewOverlay?.()).catch(() => {});
+  } catch (e) {}
 
   // 解绑 bus
   state.busListeners.forEach(([name, fn]) => bus.off(name, fn));
