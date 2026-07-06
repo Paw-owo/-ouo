@@ -6,27 +6,28 @@
 /workspace/
 ├── index.html
 ├── css/
-│   ├── theme.css              # 4套主题CSS变量（粉/蓝/奶棕/黑粉）
+│   ├── theme.css              # CSS变量槽位 + 主题切换机制 + 通用类；不存具体色值
 │   ├── base.css               # 字体、重置、通用布局
 │   ├── animations.css         # 公用动画
-│   └── app-surfaces.css       # 公用组件样式
+│   └── app-surfaces.css       # APP页面容器/表面层/背景适配（跨APP公共外观，不放组件行为）
 ├── core/
 │   ├── storage.js             # 存储统一入口
-│   ├── storage-keys.js        # 所有存储键常量
-│   ├── storage-manager.js     # IndexedDB/locelStorage 读写封装
-│   ├── events.js              # 事件中心（pub/sub）
+│   ├── storage-keys.js        # 所有存储键常量，唯一来源
+│   ├── storage-manager.js     # IndexedDB/localStorage 读写封装，角色隔离自动注入
+│   ├── events.js              # 事件中心（pub/sub），不包含通知判断逻辑
+│   ├── notifications.js       # 通知判断层：总开关/分APP开关/免打扰/去重合并/分发
 │   ├── router.js              # APP路由
-│   ├── theme.js               # 主题切换
+│   ├── theme.js               # 主题切换（从 theme-presets.js 取色值，应用到 theme.css 变量槽位）
 │   ├── app-bg.js              # 背景系统（桌面/锁屏/APP单独背景）
 │   ├── lock.js                # 锁屏状态管理
-│   ├── ui.js                  # 公用UI组件
-│   ├── config.js              # 设置统一出口（默认值+用户覆盖值）
-│   └── inbox.js               # 消息汇聚层
+│   ├── ui.js                  # 公用UI组件的行为与结构
+│   ├── config.js              # 设置统一出口（默认值+用户覆盖值合并）
+│   └── inbox.js               # 消息/事件汇聚数据层，用户可见事件入口 + AI可读事件入口
 ├── js/
 │   └── ai/
 │       ├── ai-client.js       # API请求、流式、轮换、模型选择
-│       ├── ai-context.js      # 拼装上下文（记忆+角色+事件+对话）
-│       ├── ai-events.js       # 监听事件中心，标记AI可感知事件
+│       ├── ai-context.js      # 拼装上下文（记忆+角色+inbox事件+当前对话），事件走inbox入口
+│       ├── ai-events.js       # 监听事件中心，筛选/映射为AI可感知事件；不另建事件存储
 │       ├── ai-memory.js       # 记忆CRUD+压缩，角色隔离
 │       ├── ai-fallback.js     # 全挂/超时/报错降级
 │       └── ai-spec.js         # 各APP注册AI行为指令
@@ -39,12 +40,12 @@
 │   ├── dock.js                # Dock栏
 │   └── desktop.js             # 桌面主控
 ├── data/
-│   ├── apps-registry.js       # APP静态注册信息
-│   ├── theme-presets.js       # 4套主题色值
+│   ├── apps-registry.js       # APP静态注册信息（id/name/icon/entry/category/events/aiSpec/默认桌面Dock标记）
+│   ├── theme-presets.js       # 6套主题色值，唯一来源
 │   ├── default-settings.js    # 全局设置默认值
 │   └── schemas.js             # 数据校验规则
 ├── apps/
-│   ├── chat/
+│   ├── chat/                  # 消息中心UI层，底层数据走 inbox
 │   ├── settings/
 │   └── ...
 └── assets/
@@ -57,28 +58,33 @@
 ```
 APP事件
   → core/events.js（事件中心，唯一入口）
-    → 通知判断层（总开关→分APP开关→免打扰→去重合并→分发）
-      → 横幅 / 桌面提示 / 通知中心（三者读同一份通知记录）
-    → core/inbox.js（消息汇聚层：通知中心+用户可见事件+AI可读事件）
-      → AI上下文读取（走inbox，不另建事件来源）
+    → core/notifications.js（通知判断层）
+      → 总开关判断
+      → 分APP开关判断
+      → 免打扰判断
+      → 去重/合并
+      → 分发：横幅 / 桌面提示 / 通知中心（三者读同一份通知记录）
+    → core/inbox.js（消息汇聚层：通知中心 + 用户可见事件 + AI可读事件）
+      → AI上下文读取（走 inbox，不另建事件来源）
       → 记忆系统判断是否写入长期记忆
 ```
 
 铁律：
 - APP之间禁止直接互调
 - APP不能直接调通知API
-- AI读取事件必须走inbox，不能自己另开一条路
+- AI读取事件必须走 inbox，不能自己另开一条路
+- `ai-events.js` 只做筛选/映射，不另建事件存储
 
 ## 2. 数据唯一来源
 
 | 数据 | 唯一来源 | 说明 |
 |------|---------|------|
 | APP注册信息 | `data/apps-registry.js` | 静态：id、name、icon、entry、category、events、aiSpec、默认桌面/Dock |
-| 用户态布局 | 存储层 | 渲染=注册表默认值+用户覆盖值，不写回注册表 |
+| 用户态布局 | 存储层 | 渲染 = 注册表默认值 + 用户覆盖值，不写回注册表 |
 | 背景系统 | `core/app-bg.js` | 统一管：主题背景、桌面壁纸、锁屏壁纸、APP单独背景 |
-| 主题色值 | `data/theme-presets.js` + `core/theme.js` | 全局CSS变量 |
-| 设置 | `data/default-settings.js` → `core/config.js` → 统一出口 | 界面层禁止直接读localStorage |
-| 通知记录 | 通知判断层写入，单表 | 横幅/桌面提示/通知中心/AI都读这一份 |
+| 主题色值 | `data/theme-presets.js` → `core/theme.js` → `css/theme.css`变量槽位 | `theme.css`只放变量槽位和切换机制，不存具体色值 |
+| 设置 | `data/default-settings.js` → `core/config.js` → 统一出口 | 界面层禁止直接读 localStorage |
+| 通知记录 | `core/notifications.js` 写入，单表 | 横幅/桌面提示/通知中心/AI都读这一份 |
 | 聊天消息 | 存储层 | 按角色+会话隔离 |
 | 角色记忆 | 存储层 | 按角色ID隔离 |
 | 角色资料/状态 | 存储层 | 按角色ID隔离 |
@@ -88,15 +94,17 @@ APP事件
 ```
 js/ai/
 ├── ai-client.js     → 请求发送、流式、轮换、模型选择
-├── ai-context.js    → 拼装上下文：记忆+角色资料+角色状态+inbox事件+当前对话
+├── ai-context.js    → 拼装上下文：记忆 + 角色资料 + 角色状态 + inbox事件 + 当前对话
+│                     事件读取走 inbox 入口，禁止绕过
 ├── ai-memory.js     → 记忆CRUD+压缩，角色隔离
-├── ai-events.js     → 监听事件中心，标记AI可感知事件
+├── ai-events.js     → 监听事件中心，筛选/映射为AI可感知事件；不另建存储，不替代 inbox
 ├── ai-fallback.js   → 全挂/超时/报错降级
 └── ai-spec.js       → 每个APP注册自己的AI行为指令
 ```
 
-- `ai-context.js`读取事件走inbox入口
-- 不在chat里堆AI逻辑，聊天APP只负责界面和交互
+- 不在 chat 里堆 AI 逻辑，聊天APP只负责界面和交互
+- `ai-context.js` 读取事件走 `core/inbox.js` 入口
+- `ai-events.js` 只做筛选映射，不建独立事件存储
 
 ## 4. 存储分层
 
@@ -108,23 +116,37 @@ js/ai/
 - 聊天记录、记忆、大体量通知记录、图片/媒体索引
 
 **结构化小数据：**
-- 由`core/storage-manager.js`统一决定最佳落点
+- 由 `core/storage-manager.js` 统一决定最佳落点
 - 上层只通过统一接口读写
 
 **角色隔离：**
-- 所有角色相关数据带`characterId`字段
+- 所有角色相关数据（聊天、记忆、资料、状态）带 `characterId` 字段
 - 存储层自动注入当前角色ID过滤
-- 切换角色=切换作用域，A/B角色数据物理不互通
+- 切换角色 = 切换作用域，A/B角色数据物理不互通
+
+## 5. 主题系统
+
+- 6套主题：3日间 + 3夜间
+- 日间：奶黄（默认）、粉色、蓝色
+- 夜间：对应三套夜间主题
+- 方案：`theme.css` 只放CSS变量槽位 + 切换机制 + 通用类；`data/theme-presets.js` 存具体色值；`core/theme.js` 负责把色值写入变量槽位
+- 避免色值两处存储
+
+## 6. chat 与 inbox 关系
+
+- `apps/chat/` = 消息中心的 UI 层（界面、交互、渲染）
+- `core/inbox.js` = 消息/事件汇聚的数据层（存储、查询、事件入口）
+- chat 展示的数据来自 inbox，chat 不自己另建消息数据源
 
 ## 硬性约束
 
 1. 桌面是系统壳层，不是普通APP
-2. 事件驱动：APP→事件中心→消息/通知/AI
+2. 事件驱动：APP → 事件中心 → 通知判断 → inbox → AI
 3. 一份数据一个来源，不散写多份
 4. 不写死APP列表、顺序、主题、壁纸、角色名、默认称呼
 5. 每个APP预留AI说明书入口，不堆进chat
 6. 角色记忆隔离，存储设计带角色ID
 7. 所有颜色CSS变量，禁止硬编码色值
 8. 图标线条风SVG，禁止emoji、实心黑图标
-9. 文件1000行上限，超过拆文件
+9. 文件800行上限，超过拆文件
 10. 禁止占位、TODO、假逻辑、假按钮
