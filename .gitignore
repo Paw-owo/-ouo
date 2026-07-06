@@ -1,18 +1,66 @@
-# This .gitignore is appropriate for repositories deployed to GitHub Pages and using
-# a Gemfile as specified at https://github.com/github/pages-gem#conventional
+# ===== OS =====
+.DS_Store
+._*
+Thumbs.db
+Desktop.ini
 
-# Basic Jekyll gitignores (synchronize to Jekyll.gitignore)
-_site/
-.sass-cache/
-.jekyll-cache/
-.jekyll-metadata
+# ===== IDE/Editor =====
+.vscode/
+.idea/
+.project
+.classpath
+.settings/
+*.sublime-*
 
-# Additional Ruby/bundler ignore for when you run: bundle install
-/vendor
+# ===== Node.js/Frontend =====
+node_modules/
+.pnpm-store/
+.next/
+.nuxt/
+.vite/
+.cache/
+.eslintcache
+*.tsbuildinfo
 
-# Specific ignore for GitHub Pages
-# GitHub Pages will always use its own deployed version of pages-gem
-# This means GitHub Pages will NOT use your Gemfile.lock and therefore it is
-# counterproductive to check this file into the repository.
-# Details at https://github.com/github/pages-gem/issues/768
-Gemfile.lock
+# ===== Python =====
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ipynb_checkpoints/
+*.egg-info/
+
+# ===== Rust =====
+target/
+
+# ===== Java/JVM =====
+.gradle/
+*.class
+*.jar
+*.war
+*.ear
+
+# ===== Ruby =====
+.bundle/
+
+# ===== Logs/Temp =====
+*.log
+logs/
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+
+# ===== Test Coverage =====
+coverage/
+.nyc_output/
+htmlcov/
+.coverage
+*.lcov
+
+# ===== Internal =====
+/.work/
