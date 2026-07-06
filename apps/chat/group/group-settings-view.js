@@ -183,11 +183,23 @@ export async function openGroupSettings(groupId) {
 }
 
 export function closeGroupSettings() {
-  if (_currentOverlay) {
-    _currentOverlay.remove();
-    _currentOverlay = null;
-    document.body.style.overflow = '';
-  }
+  if (!_currentOverlay) return;
+  const ov = _currentOverlay;
+  _currentOverlay = null;
+  try {
+    if (ov._popHandler) {
+      window.removeEventListener('popstate', ov._popHandler);
+      // 若是我们 push 的 state 仍在栈顶（页内按钮关闭，而非物理返回键触发），
+      // 主动 history.back() 弹掉它，否则会留下幻影历史条目，下次物理返回键空跳一次。
+      try {
+        if (history.state && history.state.chatGroupSettings) {
+          history.back();
+        }
+      } catch (e) {}
+    }
+  } catch (e) {}
+  try { if (ov.parentNode) ov.parentNode.removeChild(ov); } catch (e) {}
+  try { document.body.style.overflow = ''; } catch (e) {}
 }
 
 // ════════════════════════════════════════
