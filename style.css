@@ -244,8 +244,16 @@ img { display: block; max-width: 100%; }
   display: flex; align-items: center; justify-content: space-between;
   gap: 8px;
 }
+/* 左右真实状态位：固定宽度保证胶囊条严格居中 */
+.status-bar-real {
+  flex: 0 0 52px; height: 32px;
+  display: flex; align-items: center;
+  color: var(--text-primary);
+}
+.status-bar-real-left { justify-content: flex-start; }
+.status-bar-real-right { justify-content: flex-end; }
 .status-bar-capsule {
-  flex: 1; height: 32px; border-radius: var(--radius-full);
+  flex: 0 1 auto; height: 32px; border-radius: var(--radius-full);
   background: color-mix(in srgb, var(--bg-card) 78%, transparent);
   backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur));
   display: flex; align-items: center; gap: 10px;

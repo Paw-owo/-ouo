@@ -35,6 +35,8 @@ const pagesEl = $('desktop-pages');
 const dockEl = $('dock');
 const pageDotsEl = $('page-dots');
 const statusCapsuleEl = $('status-capsule');
+const statusSignalEl = $('status-signal');
+const statusBatteryEl = $('status-battery');
 
 // ════════════════════════════════════════
 // 状态
@@ -249,16 +251,25 @@ async function boot() {
     subscribeBus();
     initInbox();
     setupPwaInstallPrompt();
-  } catch (e) {
-    console.error('[boot]', e);
-    showToast('哎呀，启动出了点问题', 'error');
-  } finally {
-    // 等 renderAll 真正完成后再隐藏 boot 屏，避免慢设备白屏
+    // 全部成功后才隐藏 boot 屏，避免半成品桌面
     requestAnimationFrame(() => {
       bootEl.classList.add('hide');
       setTimeout(() => bootEl.remove(), 280);
     });
+  } catch (e) {
+    console.error('[boot]', e);
+    showBootError();
   }
+}
+
+// boot 失败兜底：保留启动屏，改文案为可点击重试
+function showBootError() {
+  const title = bootEl.querySelector('.boot-title');
+  const sub = bootEl.querySelector('.boot-sub');
+  if (title) title.textContent = '小手机没醒过来...';
+  if (sub) sub.textContent = '点一下重新叫醒它';
+  bootEl.style.cursor = 'pointer';
+  bootEl.addEventListener('click', () => location.reload(), { once: true });
 }
 
 function applyDesktopScaleFromConfig() {
@@ -310,6 +321,8 @@ function renderStatusBar() {
     }
   });
   updateStatusTime();
+  renderStatusSignal();
+  renderStatusBattery();
 }
 
 // 状态栏图标点击：跳转对应 App 或给提示
@@ -331,6 +344,48 @@ function updateStatusTime() {
   if (!el) return;
   const now = new Date();
   el.textContent = now.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false });
+}
+
+// 状态栏信号：4格装饰（第4格半透明由 CSS 处理，表示信号良好但不满）
+function renderStatusSignal() {
+  if (!statusSignalEl) return;
+  const wrap = document.createElement('span');
+  wrap.className = 'status-bar-signal';
+  for (let i = 0; i < 4; i++) wrap.appendChild(document.createElement('span'));
+  statusSignalEl.appendChild(wrap);
+}
+
+// 状态栏电池：优先 Battery API 真实电量，不支持时兜底 80%
+async function renderStatusBattery() {
+  if (!statusBatteryEl) return;
+  const draw = (level) => {
+    statusBatteryEl.innerHTML = '';
+    const wrap = document.createElement('span');
+    wrap.className = 'status-bar-battery';
+    const body = document.createElement('span');
+    body.className = 'status-bar-battery-body';
+    const lvl = document.createElement('span');
+    lvl.className = 'status-bar-battery-level';
+    const pct = Math.max(0, Math.min(100, Math.round(level * 100)));
+    lvl.style.width = pct + '%';
+    body.appendChild(lvl);
+    const percent = document.createElement('span');
+    percent.className = 'status-bar-battery-percent';
+    percent.textContent = pct + '%';
+    wrap.append(body, percent);
+    statusBatteryEl.appendChild(wrap);
+  };
+  // 先渲染兜底，避免 Battery API 返回前电池位空白
+  draw(0.8);
+  try {
+    if (navigator.getBattery) {
+      const battery = await navigator.getBattery();
+      const update = () => draw(battery.level);
+      update();
+      battery.addEventListener('levelchange', update);
+      battery.addEventListener('chargingchange', update);
+    }
+  } catch (e) { /* 保持兜底 */ }
 }
 
 async function getRegistry() {
