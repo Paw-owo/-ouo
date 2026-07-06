@@ -224,40 +224,6 @@ function getAppPage(app) {
 }
 
 // ════════════════════════════════════════
-// 图标自由位置：每个 app 存 { x, y, page }，x/y 是相对 icon-grid 的百分比 0-100
-// 老用户首次升级时按原 grid 4列布局计算初始坐标，迁移后自由摆放
-// ════════════════════════════════════════
-function getIconPositions() {
-  const v = getData(KEYS.appIconPositions, null);
-  return (v && typeof v === 'object' && !Array.isArray(v)) ? v : {};
-}
-function saveIconPositions(map) { setData(KEYS.appIconPositions, map || {}); }
-function getIconPos(app) {
-  const all = getIconPositions();
-  return all[app.id] || null;
-}
-function setIconPos(appId, x, y, page) {
-  const all = getIconPositions();
-  all[appId] = {
-    x: Math.max(0, Math.min(88, x)),
-    y: Math.max(0, Math.min(92, y)),
-    page: Number(page) || 0
-  };
-  saveIconPositions(all);
-}
-// 计算默认位置：4列网格，按顺序排，返回百分比坐标
-function defaultIconPos(indexInPage) {
-  const cols = 4;
-  const row = Math.floor(indexInPage / cols);
-  const col = indexInPage % cols;
-  // 4列均分，每列中心约 12.5/37.5/62.5/87.5%
-  const x = col * 25 + 12.5;
-  // 行间距按 78px 图标高度比例，每行约 22%，从 2% 开始
-  const y = row * 22 + 2;
-  return { x: Math.min(88, x), y: Math.min(92, y) };
-}
-
-// ════════════════════════════════════════
 // 启动
 // ════════════════════════════════════════
 async function boot() {
@@ -603,15 +569,9 @@ async function renderIconGrids() {
     } else {
       ordered = byPage[page];
     }
-    // 自由位置渲染：有坐标用坐标，没坐标按默认网格位置迁移
-    ordered.forEach((app, idx) => {
-      const el = createDesktopIcon(app);
-      const pos = getIconPos(app);
-      const xy = pos || defaultIconPos(idx);
-      if (!pos) setIconPos(app.id, xy.x, xy.y, page); // 首次迁移存档
-      el.style.left = xy.x + '%';
-      el.style.top = xy.y + '%';
-      grid.appendChild(el);
+    // grid 渲染：按保存顺序依次填入网格格子
+    ordered.forEach((app) => {
+      grid.appendChild(createDesktopIcon(app));
     });
   });
 }
@@ -746,72 +706,62 @@ function handleIconPointerDown(event, element) {
   window.addEventListener('pointercancel', onUp, { passive: true });
 }
 
-// 落点预览：自由位置模式下，只高亮 Dock 区域（提示可放入），桌面不再高亮交换目标
+// 落点预览：高亮目标图标（交换/重排）
 function updateIconDropPreview(x, y, dragEl, originGrid, isDockIcon) {
   clearDropPreview();
   const overEl = document.elementFromPoint(x, y);
   if (!overEl) return;
-  // Dock 区域高亮：提示可以放入 Dock
-  const overDock = overEl.closest('.dock');
-  if (overDock) overDock.classList.add('drop-target-dock');
+  const sel = isDockIcon ? '.dock-icon[data-app-id]' : '.desktop-icon[data-app-id]';
+  const target = overEl.closest(sel);
+  if (target && target !== dragEl) {
+    target.classList.add('drop-target');
+    return;
+  }
+  if (!isDockIcon) {
+    const grid = overEl.closest('[data-icon-grid]');
+    if (grid && grid !== originGrid) {
+      showDropPlaceholderInGrid(grid);
+    }
+  }
 }
 
-// 落点处理：自由位置摆放
+// 落点处理：交换 / 跨页移动 / Dock↔桌面互移
 function handleIconDrop(x, y, dragEl, originGrid, isDockIcon) {
   const overEl = document.elementFromPoint(x, y);
   if (!overEl) return;
+  const target = overEl.closest('.dock-icon[data-app-id], .desktop-icon[data-app-id]');
+
+  if (target && target !== dragEl) {
+    // 落在另一个图标上：交换
+    if (target.parentElement === originGrid) {
+      swapIconsInGrid(originGrid, dragEl, target);
+      if (isDockIcon) saveDockOrder(originGrid); else saveIconOrder(originGrid);
+      showToast('位置换好啦', 'success');
+    } else if (!isDockIcon && target.classList.contains('desktop-icon')) {
+      const targetGrid = target.parentElement;
+      swapIconsCrossGrid(dragEl, target);
+      saveIconOrder(originGrid);
+      saveIconOrder(targetGrid);
+      showToast('换好啦', 'success');
+    } else if (isDockIcon && target.classList.contains('desktop-icon')) {
+      moveToDesktop(dragEl, target.parentElement);
+    } else if (!isDockIcon && target.classList.contains('dock-icon')) {
+      moveToDock(dragEl);
+    }
+    return;
+  }
+
+  // 落在空白区域
   const overDock = overEl.closest('.dock');
   const overGrid = overEl.closest('[data-icon-grid]');
-
-  if (isDockIcon) {
-    // Dock 图标拖拽
-    if (overGrid) {
-      // Dock → 桌面：移到桌面，落点为松手位置
-      const newIcon = moveToDesktop(dragEl, overGrid);
-      if (newIcon) placeIconAtPointer(newIcon, overGrid, x, y);
-    } else if (overDock) {
-      // Dock 内重排：落在另一个 Dock 图标上交换
-      const target = overEl.closest('.dock-icon[data-app-id]');
-      if (target && target !== dragEl) {
-        swapIconsInGrid(originGrid, dragEl, target);
-        saveDockOrder(originGrid);
-      }
-    }
-    return;
-  }
-
-  // 桌面图标拖拽
-  if (overDock) {
-    // 桌面 → Dock
+  if (isDockIcon && overGrid && overGrid !== originGrid) {
+    moveToDesktop(dragEl, overGrid);
+  } else if (!isDockIcon && overDock) {
     moveToDock(dragEl);
-    return;
+  } else if (!isDockIcon && overGrid && overGrid !== originGrid) {
+    moveIconToPage(dragEl, overGrid);
+    showToast('移到第 ' + (Number(overGrid.dataset.iconGrid) + 1) + ' 页啦', 'success');
   }
-  if (overGrid) {
-    // 桌面 → 桌面（同页或跨页）：自由落位到松手位置
-    if (overGrid !== originGrid) {
-      // 跨页：先移到目标页
-      moveIconToPage(dragEl, overGrid);
-    }
-    placeIconAtPointer(dragEl, overGrid, x, y);
-    showToast('放好啦', 'success', 1200);
-  }
-}
-
-// 自由落位：算松手位置相对 grid 的百分比，存 xy，更新 DOM
-function placeIconAtPointer(iconEl, grid, pointerX, pointerY) {
-  const gridRect = grid.getBoundingClientRect();
-  if (!gridRect.width || !gridRect.height) return;
-  const page = Number(grid.dataset.iconGrid) || 0;
-  const appId = iconEl.dataset.appId;
-  // 图标中心对齐手指：百分比位置 = (手指相对grid左上 - 半个图标宽) / grid尺寸
-  const iconSize = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--icon-size')) || 68;
-  const halfW = iconSize / 2;
-  const halfH = iconSize / 2;
-  const xPct = (pointerX - gridRect.left - halfW) / gridRect.width * 100;
-  const yPct = (pointerY - gridRect.top - halfH) / gridRect.height * 100;
-  setIconPos(appId, xPct, yPct, page);
-  iconEl.style.left = Math.max(0, Math.min(88, xPct)) + '%';
-  iconEl.style.top = Math.max(0, Math.min(92, yPct)) + '%';
 }
 
 // 同 grid 内交换两个图标位置
@@ -862,6 +812,7 @@ function moveIconToPage(iconEl, targetGrid) {
   // 保存两页的顺序
   if (originGrid) saveIconOrder(originGrid);
   saveIconOrder(targetGrid);
+  showToast('移到第 ' + (targetPage + 1) + ' 页啦', 'success');
 }
 
 function moveToDesktop(dockEl, grid) {
@@ -877,23 +828,16 @@ function moveToDesktop(dockEl, grid) {
   // 从 dock 顺序移除
   const dockOrder = getDockOrder().filter((id) => id !== appId);
   saveDockOrderArr(dockOrder);
-  // 加入桌面网格，返回新图标元素（供调用方设置自由位置）
+  // 加入桌面网格（插入到末尾）
   const reg = getRegistrySync();
   const app = reg?.APPS.find((a) => a.id === appId);
-  let newIcon = null;
   if (app) {
-    newIcon = createDesktopIcon(app);
-    // 先给默认位置避免堆在左上角，调用方会用 placeIconAtPointer 覆盖
-    const existingCount = grid.querySelectorAll('.desktop-icon').length;
-    const def = defaultIconPos(existingCount);
-    newIcon.style.left = def.x + '%';
-    newIcon.style.top = def.y + '%';
+    const newIcon = createDesktopIcon(app);
     grid.appendChild(newIcon);
     saveIconOrder(grid);
   }
   dockEl.remove();
   showToast('移到桌面啦', 'success');
-  return newIcon;
 }
 
 function moveToDock(desktopIconEl) {
@@ -919,14 +863,7 @@ function moveToDock(desktopIconEl) {
       pageOverrides[kickedId] = targetPage;
       saveIconPageOverrides(pageOverrides);
       const newDesktopIcon = createDesktopIcon(kickedApp);
-      if (originGrid) {
-        // 被挤出的图标给默认位置，避免堆在左上角
-        const existingCount = originGrid.querySelectorAll('.desktop-icon').length;
-        const def = defaultIconPos(existingCount);
-        newDesktopIcon.style.left = def.x + '%';
-        newDesktopIcon.style.top = def.y + '%';
-        originGrid.appendChild(newDesktopIcon);
-      }
+      if (originGrid) originGrid.appendChild(newDesktopIcon);
       const kickedDockEl = dockEl.querySelector(`.dock-icon[data-app-id="${kickedId}"]`);
       if (kickedDockEl) kickedDockEl.remove();
       dockOrder = dockOrder.filter((id) => id !== kickedId);
@@ -1212,7 +1149,6 @@ function ensureDropPlaceholder() {
 }
 function clearDropPreview() {
   document.querySelectorAll('.drop-target').forEach((n) => n.classList.remove('drop-target'));
-  document.querySelectorAll('.drop-target-dock').forEach((n) => n.classList.remove('drop-target-dock'));
   if (dropPlaceholderEl && dropPlaceholderEl.parentElement) {
     dropPlaceholderEl.parentElement.removeChild(dropPlaceholderEl);
   }

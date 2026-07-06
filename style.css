@@ -410,19 +410,20 @@ select, input[type="time"], input[type="date"], input[type="datetime-local"] { b
 }
 .widget-vinyl-controls button svg { width: 14px; height: 14px; }
 
-/* 图标网格：自由位置容器，图标绝对定位。flex:1 填满 desktop-page 剩余空间，不设 min-height 避免触发滚动导致百分比定位错乱 */
+/* 图标网格：4列 grid 布局，稳定不乱位。自由拖拽用网格空位实现，不用 absolute */
 .icon-grid {
-  position: relative;
-  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: clamp(16px, 4vw, 22px) clamp(10px, 2.5vw, 14px);
   padding: 10px 0;
 }
 .desktop-icon {
   display: flex; flex-direction: column; align-items: center;
   gap: 6px; cursor: pointer;
-  position: absolute;
+  position: relative;
   user-select: none; -webkit-user-select: none;
-  -webkit-touch-callout: none; /* 阻止 iOS 长按弹出系统菜单（拷贝/粘贴等） */
-  touch-action: none; /* 让 pointermove 全部交给拖拽逻辑，否则触摸设备会被浏览器消费做滚动 */
+  -webkit-touch-callout: none;
+  touch-action: none;
 }
 .desktop-icon-img {
   width: var(--icon-size); height: var(--icon-size);
