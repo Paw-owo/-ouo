@@ -50,13 +50,15 @@ function _renderDesktop() {
   // 清空桌面
   desktop.innerHTML = '';
 
+  // 渲染顶部状态栏（先于内容区插入，保持在桌面顶部）
+  renderStatusBar(desktop);
+
   // 桌面内容区
   _desktopContentEl = document.createElement('div');
   _desktopContentEl.className = 'desktop-content';
   desktop.appendChild(_desktopContentEl);
 
   // 渲染各模块
-  renderStatusBar(desktop);
   renderWidgets(_desktopContentEl);
   renderAppGrid(_desktopContentEl);
   renderDock(_desktopContentEl);
