@@ -7,7 +7,7 @@
 import { initDB, ensureDefaultSettings, getData, setData, getDB } from './core/storage.js';
 import { STORES, KEYS } from './core/storage-keys.js';
 import { loadTheme, applyFontFamily, applyDesktopScale, restoreCustomColors, applyPersonalization, clearPersonalizeCache } from './core/theme.js';
-import { createIcon, showToast, showConfirm, showBottomSheet } from './core/ui.js';
+import { createIcon, registerIcon, showToast, showConfirm, showBottomSheet } from './core/ui.js';
 import { clamp, debounce, throttle, cssUrl, isUsableImage, injectStyle } from './core/util.js';
 import { get as getConfig } from './core/config.js';
 import bus from './core/events.js';
@@ -17,6 +17,256 @@ import { initInbox } from './core/inbox.js';
 import { DEFAULT_LOCK_PASSWORD, LOCK_MAX_FAILS, LOCK_LOCKOUT_MS, hashPassword, parseLockStored, formatLockStored } from './core/lock.js';
 // 注意：不静态 import apps/countdown，避免桌面壳与 App 强耦合。
 // 倒计时 widget 用动态 import 懒加载 getUpcomingCountdown（与 registry loader 同模式）。
+
+// ════════════════════════════════════════
+// 桌面小猫化图标注册
+// 软萌小猫主题：每个 APP 单独设计，圆润厚实，颜色走 currentColor（跟随主题 accent）
+// viewBox 24x24；线条 stroke=currentColor stroke-width=2；局部柔和填充 currentColor + opacity
+// 禁止纯黑/实心块；用不同形状区分 APP，不用不同颜色区分
+// ════════════════════════════════════════
+const CAT_ICONS = {
+  // 设置：圆角底座 + 小方块组件 + 猫爪豆豆
+  'cat-settings': `<g stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="3" y="14" width="18" height="6" rx="3"/>
+    <rect x="4.5" y="4" width="7" height="6" rx="2"/>
+    <circle cx="17" cy="6" r="1.6" fill="currentColor" opacity="0.28" stroke="none"/>
+    <circle cx="20" cy="6" r="1.6" fill="currentColor" opacity="0.28" stroke="none"/>
+    <circle cx="15" cy="10" r="1.7"/>
+    <circle cx="18" cy="10" r="1.7"/>
+    <circle cx="21" cy="10" r="1.7"/>
+    <circle cx="18" cy="7" r="2"/>
+  </g>`,
+  // 计算器：圆角方块 + 猫耳 + 按键点阵
+  'cat-calculator': `<g stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M7 5 Q6 2 8 2.5 Q9 2 9 5"/>
+    <path d="M17 5 Q18 2 16 2.5 Q15 2 15 5"/>
+    <rect x="4" y="5" width="16" height="15" rx="3.5"/>
+    <line x1="7" y1="9.5" x2="17" y2="9.5"/>
+    <circle cx="8" cy="13.5" r="0.9" fill="currentColor" stroke="none"/>
+    <circle cx="12" cy="13.5" r="0.9" fill="currentColor" stroke="none"/>
+    <circle cx="16" cy="13.5" r="0.9" fill="currentColor" stroke="none"/>
+    <circle cx="8" cy="16.8" r="0.9" fill="currentColor" stroke="none"/>
+    <circle cx="12" cy="16.8" r="0.9" fill="currentColor" stroke="none"/>
+    <circle cx="16" cy="16.8" r="0.9" fill="currentColor" stroke="none"/>
+  </g>`,
+  // 备忘录：圆角便签 + 猫耳 + 横线
+  'cat-memo': `<g stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M7 4 Q6 1.5 8 2 Q9 1.5 9 4"/>
+    <path d="M17 4 Q18 1.5 16 2 Q15 1.5 15 4"/>
+    <rect x="4" y="4" width="16" height="17" rx="3"/>
+    <line x1="8" y1="10" x2="16" y2="10"/>
+    <line x1="8" y1="13.5" x2="16" y2="13.5"/>
+    <line x1="8" y1="17" x2="13" y2="17"/>
+  </g>`,
+  // 倒计时：圆角日历 + 装订扣 + 猫爪
+  'cat-countdown': `<g stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="3.5" y="5" width="17" height="15" rx="3"/>
+    <line x1="3.5" y1="9.5" x2="20.5" y2="9.5"/>
+    <line x1="8" y1="3" x2="8" y2="6.5"/>
+    <line x1="16" y1="3" x2="16" y2="6.5"/>
+    <circle cx="10" cy="14" r="1.3"/>
+    <circle cx="14" cy="14" r="1.3"/>
+    <circle cx="9" cy="17.2" r="1.1"/>
+    <circle cx="12" cy="17.2" r="1.1"/>
+    <circle cx="15" cy="17.2" r="1.1"/>
+    <circle cx="12" cy="14.8" r="1.6" fill="currentColor" opacity="0.25" stroke="none"/>
+  </g>`,
+  // 纪念日：厚爱心 + 挖空小爱心
+  'cat-anniversary': `<g stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 20.5 C4 15 3 9.5 6 6.5 C8.5 4 11.5 5 12 7.5 C12.5 5 15.5 4 18 6.5 C21 9.5 20 15 12 20.5 Z"/>
+    <path d="M12 16 C9 14 8.5 11.5 9.8 10.5 C11 9.5 12 10.5 12 11.8 C12 10.5 13 9.5 14.2 10.5 C15.5 11.5 15 14 12 16 Z" fill="currentColor" opacity="0.3" stroke="none"/>
+  </g>`,
+  // 心情：猫脸 + 表情
+  'cat-mood': `<g stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M6 7 Q4.5 2 8 3 Q9.5 2 9 5"/>
+    <path d="M18 7 Q19.5 2 16 3 Q14.5 2 15 5"/>
+    <circle cx="12" cy="13" r="7.5"/>
+    <circle cx="9.5" cy="12" r="0.9" fill="currentColor" stroke="none"/>
+    <circle cx="14.5" cy="12" r="0.9" fill="currentColor" stroke="none"/>
+    <path d="M9.5 15.5 Q12 17.5 14.5 15.5"/>
+    <circle cx="7" cy="15" r="0.8" fill="currentColor" opacity="0.3" stroke="none"/>
+    <circle cx="17" cy="15" r="0.8" fill="currentColor" opacity="0.3" stroke="none"/>
+  </g>`,
+  // 天气：云 + 太阳 + 猫耳
+  'cat-weather': `<g stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M7 7 Q5.5 2 9 3 Q10 2 9.5 5"/>
+    <path d="M17 7 Q18.5 2 15 3 Q14 2 14.5 5"/>
+    <circle cx="16" cy="9" r="2.2" fill="currentColor" opacity="0.25" stroke="none"/>
+    <path d="M7 18 Q3 18 3 14.5 Q3 11 7 11 Q8 8 12 8 Q16 8 17 11 Q21 11 21 14.5 Q21 18 17 18 Z"/>
+  </g>`,
+  // 聊天：圆气泡 + 猫爪印 + 小脚
+  'cat-chat': `<g stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M3 11.5 Q3 4 12 4 Q21 4 21 11.5 Q21 19 12 19 Q10 19 8 18.5 L4 21 L5.5 17.5 Q3 15.5 3 11.5 Z"/>
+    <circle cx="9" cy="10" r="1.2" fill="currentColor" opacity="0.3" stroke="none"/>
+    <circle cx="12" cy="9" r="1.2" fill="currentColor" opacity="0.3" stroke="none"/>
+    <circle cx="15" cy="10" r="1.2" fill="currentColor" opacity="0.3" stroke="none"/>
+    <circle cx="12" cy="13" r="2" fill="currentColor" opacity="0.3" stroke="none"/>
+  </g>`,
+  // 番茄钟：番茄 + 猫耳 + 时钟指针
+  'cat-pomodoro': `<g stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M8 4 Q7 1.5 9 2 Q10 1.5 10 4"/>
+    <path d="M16 4 Q17 1.5 15 2 Q14 1.5 14 4"/>
+    <path d="M12 4 Q11 2 12.5 2.5 Q13 2 13.5 3.5"/>
+    <circle cx="12" cy="13" r="7.5"/>
+    <path d="M12 9 L12 13 L15 14.5"/>
+  </g>`,
+  // 记忆卡：卡片 + 猫爪
+  'cat-flashcard': `<g stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="3" y="4" width="18" height="16" rx="3"/>
+    <line x1="3" y1="9" x2="21" y2="9"/>
+    <circle cx="8" cy="14" r="1.3"/>
+    <circle cx="11.5" cy="14" r="1.3"/>
+    <circle cx="15" cy="14" r="1.3"/>
+    <circle cx="18" cy="14" r="1.3"/>
+    <circle cx="11.5" cy="17.5" r="1.5" fill="currentColor" opacity="0.3" stroke="none"/>
+  </g>`,
+  // 闹钟：圆角闹钟 + 猫耳
+  'cat-alarm': `<g stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M7 5 Q5.5 2 8 3 Q9 2 8.5 4.5"/>
+    <path d="M17 5 Q18.5 2 16 3 Q15 2 15.5 4.5"/>
+    <circle cx="12" cy="13" r="7"/>
+    <path d="M12 9 L12 13 L15 14.5"/>
+    <path d="M6 18 Q4 20 5 21.5"/>
+    <path d="M18 18 Q20 20 19 21.5"/>
+  </g>`,
+  // 星座：月亮 + 星星 + 猫爪
+  'cat-astro': `<g stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M19 13.5 A7.5 7.5 0 1 1 10.5 5 C9 7 8.5 11 11 14 C13 16 17 15 19 13.5 Z"/>
+    <path d="M5 11 L5.5 12.5 L7 13 L5.5 13.5 L5 15 L4.5 13.5 L3 13 L4.5 12.5 Z" fill="currentColor" opacity="0.3" stroke="none"/>
+    <circle cx="15" cy="9" r="0.8" fill="currentColor" stroke="none"/>
+    <circle cx="17" cy="11" r="0.8" fill="currentColor" stroke="none"/>
+  </g>`,
+  // 健康：心形 + 猫爪印
+  'cat-health': `<g stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 20.5 C4 15 3 9.5 6 6.5 C8.5 4 11.5 5 12 7.5 C12.5 5 15.5 4 18 6.5 C21 9.5 20 15 12 20.5 Z"/>
+    <circle cx="9.5" cy="10" r="1" fill="currentColor" opacity="0.35" stroke="none"/>
+    <circle cx="14.5" cy="10" r="1" fill="currentColor" opacity="0.35" stroke="none"/>
+    <circle cx="12" cy="13.5" r="1.5" fill="currentColor" opacity="0.35" stroke="none"/>
+  </g>`,
+  // 角色：毛绒小猫脸
+  'cat-characters': `<g stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M5 8 Q3.5 2.5 8 4 Q10 3 10 6"/>
+    <path d="M19 8 Q20.5 2.5 16 4 Q14 3 14 6"/>
+    <circle cx="12" cy="13" r="8"/>
+    <circle cx="9" cy="12" r="1.1" fill="currentColor" stroke="none"/>
+    <circle cx="15" cy="12" r="1.1" fill="currentColor" stroke="none"/>
+    <path d="M11 15 Q12 16 13 15"/>
+    <path d="M12 16 L12 17"/>
+    <path d="M8 14 Q9 15 10 14.5" stroke-width="1.5"/>
+    <path d="M14 14.5 Q15 15 16 14" stroke-width="1.5"/>
+  </g>`,
+  // 世界书：书 + 猫耳
+  'cat-worldbook': `<g stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M6 4 Q5 1.5 7.5 2.5 Q8.5 1.5 8.5 4"/>
+    <path d="M18 4 Q19 1.5 16.5 2.5 Q15.5 1.5 15.5 4"/>
+    <path d="M4 6 Q8 5 12 6.5 Q16 5 20 6 L20 20 Q16 19 12 20.5 Q8 19 4 20 Z"/>
+    <line x1="12" y1="6.5" x2="12" y2="20.5"/>
+  </g>`,
+  // 朋友圈：图片框 + 山 + 太阳 + 猫爪
+  'cat-moments': `<g stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="3" y="4" width="18" height="16" rx="3"/>
+    <circle cx="8" cy="9" r="1.5" fill="currentColor" opacity="0.3" stroke="none"/>
+    <path d="M3 16 L8 11 L12 14 L16 10 L21 15"/>
+    <circle cx="16" cy="18" r="0.9" fill="currentColor" stroke="none"/>
+    <circle cx="18.5" cy="17.5" r="0.9" fill="currentColor" stroke="none"/>
+    <circle cx="17" cy="20" r="1.3" fill="currentColor" opacity="0.3" stroke="none"/>
+  </g>`,
+  // 梦境：圆球 + 小鱼 + 猫爪
+  'cat-dream': `<g stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="9"/>
+    <path d="M9 12 Q11 10 13 12 Q11 14 9 12 Z M13 12 L15 11 M13 12 L15 13" fill="currentColor" opacity="0.3" stroke="none"/>
+    <circle cx="9" cy="9" r="0.8" fill="currentColor" stroke="none"/>
+    <circle cx="11" cy="8" r="0.8" fill="currentColor" stroke="none"/>
+  </g>`,
+  // 头像：猫脸
+  'cat-avatar': `<g stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M5 8 Q3.5 2.5 8 4 Q10 3 10 6"/>
+    <path d="M19 8 Q20.5 2.5 16 4 Q14 3 14 6"/>
+    <circle cx="12" cy="13" r="8"/>
+    <circle cx="9" cy="12" r="1.1" fill="currentColor" stroke="none"/>
+    <circle cx="15" cy="12" r="1.1" fill="currentColor" stroke="none"/>
+    <path d="M11 15.5 Q12 16.5 13 15.5"/>
+    <path d="M7.5 14 Q8.5 15 9.5 14.5" stroke-width="1.5"/>
+    <path d="M14.5 14.5 Q15.5 15 16.5 14" stroke-width="1.5"/>
+  </g>`,
+  // 钱包：手提包 + 猫眼
+  'cat-wallet': `<g stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M5 9 Q5 4 8 4 L16 4 Q19 4 19 9"/>
+    <rect x="3" y="9" width="18" height="11" rx="3"/>
+    <circle cx="9.5" cy="14" r="1.1" fill="currentColor" stroke="none"/>
+    <circle cx="14.5" cy="14" r="1.1" fill="currentColor" stroke="none"/>
+    <path d="M9.5 16 Q12 17.5 14.5 16"/>
+  </g>`,
+  // 商店：店面 + 猫爪
+  'cat-shop': `<g stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 9 Q4 5 7 4 L17 4 Q20 5 20 9 Z"/>
+    <path d="M4 9 Q12 11 20 9"/>
+    <rect x="5" y="11" width="14" height="9" rx="2"/>
+    <circle cx="9" cy="15" r="1" fill="currentColor" opacity="0.3" stroke="none"/>
+    <circle cx="12" cy="15" r="1" fill="currentColor" opacity="0.3" stroke="none"/>
+    <circle cx="15" cy="15" r="1" fill="currentColor" opacity="0.3" stroke="none"/>
+    <circle cx="12" cy="17.5" r="1.4" fill="currentColor" opacity="0.3" stroke="none"/>
+  </g>`,
+  // 游戏：骰子 + 猫爪
+  'cat-games': `<g stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="4" y="4" width="16" height="16" rx="3.5"/>
+    <circle cx="8.5" cy="8.5" r="1.2" fill="currentColor" stroke="none"/>
+    <circle cx="15.5" cy="8.5" r="1.2" fill="currentColor" stroke="none"/>
+    <circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none"/>
+    <circle cx="8.5" cy="15.5" r="1.2" fill="currentColor" stroke="none"/>
+    <circle cx="15.5" cy="15.5" r="1.2" fill="currentColor" stroke="none"/>
+  </g>`,
+  // 音乐：音符 + 猫耳
+  'cat-music': `<g stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M8 5 Q7 2 9 3 Q10 2 9.5 4.5"/>
+    <path d="M16 5 Q17 2 15 3 Q14 2 14.5 4.5"/>
+    <path d="M9 6 L9 17 Q9 19.5 7 19.5 Q5 19.5 5 17.5 Q5 15.5 7 15.5 Q8 15.5 9 16"/>
+    <path d="M9 6 L18 4 L18 15 Q18 17.5 16 17.5 Q14 17.5 14 15.5 Q14 13.5 16 13.5 Q17 13.5 18 14"/>
+  </g>`,
+  // 收藏：收纳盒 + 猫爪
+  'cat-collections': `<g stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 8 L20 8 L18.5 20 Q18.5 21 17.5 21 L6.5 21 Q5.5 21 5.5 20 Z"/>
+    <path d="M3 6 L21 6"/>
+    <path d="M9 6 Q9 3 12 3 Q15 3 15 6"/>
+    <circle cx="10" cy="13" r="1.1" fill="currentColor" opacity="0.3" stroke="none"/>
+    <circle cx="14" cy="13" r="1.1" fill="currentColor" opacity="0.3" stroke="none"/>
+    <circle cx="12" cy="16" r="1.5" fill="currentColor" opacity="0.3" stroke="none"/>
+  </g>`,
+  // 记仇本：本子 + 锁 + 猫耳
+  'cat-grudge': `<g stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M7 4 Q6 1.5 8.5 2.5 Q9.5 1.5 9 4"/>
+    <path d="M17 4 Q18 1.5 15.5 2.5 Q14.5 1.5 15 4"/>
+    <rect x="4" y="4" width="16" height="17" rx="3"/>
+    <rect x="9" y="11" width="6" height="5" rx="1"/>
+    <path d="M10 11 L10 9 Q10 7.5 12 7.5 Q14 7.5 14 9 L14 11"/>
+    <circle cx="12" cy="13.5" r="0.8" fill="currentColor" stroke="none"/>
+  </g>`,
+  // 记忆：猫爪盒子
+  'cat-memory-viewer': `<g stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="3" y="6" width="18" height="15" rx="3"/>
+    <path d="M3 11 L21 11"/>
+    <circle cx="8" cy="16" r="1.2"/>
+    <circle cx="11" cy="16" r="1.2"/>
+    <circle cx="14" cy="16" r="1.2"/>
+    <circle cx="17" cy="16" r="1.2"/>
+    <circle cx="12.5" cy="19" r="1.6" fill="currentColor" opacity="0.3" stroke="none"/>
+  </g>`,
+  // 消息中心：信封 + 猫爪印
+  'cat-inbox': `<g stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="3" y="5" width="18" height="14" rx="3"/>
+    <path d="M3 8 L12 14 L21 8"/>
+    <circle cx="17" cy="11" r="0.9" fill="currentColor" opacity="0.35" stroke="none"/>
+    <circle cx="19.5" cy="10.5" r="0.9" fill="currentColor" opacity="0.35" stroke="none"/>
+    <circle cx="18" cy="13" r="1.2" fill="currentColor" opacity="0.35" stroke="none"/>
+  </g>`
+};
+
+function registerDesktopIcons() {
+  Object.entries(CAT_ICONS).forEach(([name, inner]) => {
+    registerIcon(name, { inner, viewBox: '0 0 24 24' });
+  });
+}
+registerDesktopIcons();
 
 // ════════════════════════════════════════
 // DOM 引用

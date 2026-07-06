@@ -335,6 +335,13 @@ export function iconHTML(name, size = 22, opts = {}) {
   const path = ICON_PATHS[name];
   if (!path) return '';
   const extra = opts.fill ? `fill="${opts.fill}"` : '';
+  // path 既可以是字符串（单 path d，旧格式），也可以是对象 { inner, viewBox? }（多元素 SVG，新格式）
+  // 对象格式用于复杂图标（如桌面小猫化图标：猫脸+眼睛+爪印等多元素）
+  if (typeof path === 'object' && path !== null) {
+    const viewBox = path.viewBox || '0 0 24 24';
+    const inner = path.inner || '';
+    return `<svg class="popo-icon-svg" width="${size}" height="${size}" viewBox="${viewBox}" ${extra}>${inner}</svg>`;
+  }
   return `<svg class="popo-icon-svg" width="${size}" height="${size}" viewBox="0 0 24 24" ${extra}><path d="${path}"></path></svg>`;
 }
 
@@ -434,6 +441,7 @@ export function focusInto(container) {
 }
 
 export function registerIcon(name, path) {
+  // path 既支持字符串（旧），也支持对象 { inner, viewBox? }（新，多元素 SVG）
   if (name && path) ICON_PATHS[name] = path;
 }
 

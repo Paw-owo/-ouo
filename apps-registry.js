@@ -4,13 +4,17 @@
 //   2. 在此处加一行
 // 红线：只注册真实可用的 App，不允许占位、空壳、"planned"。
 // 依赖：无（loader 是动态 import，懒加载）
+//
+// 图标说明：每个 APP 用 cat-xxx 小猫化图标，在 desktop.js 顶部注册。
+// 颜色走 currentColor（跟随主题 accent），底盘由 .desktop-icon-img 统一柔和磨砂底。
+// iconColor 字段保留不动（数据兼容），渲染时不再使用，避免 20+ 图标花花绿绿。
 
 export const APPS = [
   // ── dock ──
   {
     id: 'settings',
     name: '设置',
-    icon: 'settings',
+    icon: 'cat-settings',
     iconColor: '#7AA2D6',
     dock: true,
     page: 0,
@@ -21,7 +25,7 @@ export const APPS = [
   {
     id: 'calculator',
     name: '计算器',
-    icon: 'edit',
+    icon: 'cat-calculator',
     iconColor: '#E8A04A',
     dock: false,
     page: 0,
@@ -30,7 +34,7 @@ export const APPS = [
   {
     id: 'memo',
     name: '备忘录',
-    icon: 'memo',
+    icon: 'cat-memo',
     iconColor: '#8BADD4',
     dock: false,
     page: 0,
@@ -39,7 +43,7 @@ export const APPS = [
   {
     id: 'countdown',
     name: '倒计时',
-    icon: 'calendar',
+    icon: 'cat-countdown',
     iconColor: '#F5A98A',
     dock: false,
     page: 0,
@@ -48,7 +52,7 @@ export const APPS = [
   {
     id: 'anniversary',
     name: '纪念日',
-    icon: 'heart',
+    icon: 'cat-anniversary',
     iconColor: '#E8A0B8',
     dock: false,
     page: 0,
@@ -57,7 +61,7 @@ export const APPS = [
   {
     id: 'mood',
     name: '心情',
-    icon: 'smile',
+    icon: 'cat-mood',
     iconColor: '#C4A8D4',
     dock: false,
     page: 0,
@@ -66,7 +70,7 @@ export const APPS = [
   {
     id: 'weather',
     name: '天气',
-    icon: 'weather',
+    icon: 'cat-weather',
     iconColor: '#7EC4E0',
     dock: false,
     page: 0,
@@ -75,7 +79,7 @@ export const APPS = [
   {
     id: 'chat',
     name: '聊天',
-    icon: 'chat',
+    icon: 'cat-chat',
     iconColor: '#F5B0B8',
     dock: false,
     page: 0,
@@ -86,7 +90,7 @@ export const APPS = [
   {
     id: 'pomodoro',
     name: '番茄钟',
-    icon: 'bell',
+    icon: 'cat-pomodoro',
     iconColor: '#E89898',
     dock: false,
     page: 1,
@@ -95,7 +99,7 @@ export const APPS = [
   {
     id: 'flashcard',
     name: '记忆卡',
-    icon: 'next',
+    icon: 'cat-flashcard',
     iconColor: '#A8C49A',
     dock: false,
     page: 1,
@@ -104,7 +108,7 @@ export const APPS = [
   {
     id: 'alarm',
     name: '闹钟',
-    icon: 'sun',
+    icon: 'cat-alarm',
     iconColor: '#D4B078',
     dock: false,
     page: 1,
@@ -113,7 +117,7 @@ export const APPS = [
   {
     id: 'astro',
     name: '星座',
-    icon: 'moon',
+    icon: 'cat-astro',
     iconColor: '#8B9AD4',
     dock: false,
     page: 1,
@@ -122,7 +126,7 @@ export const APPS = [
   {
     id: 'health',
     name: '健康',
-    icon: 'star',
+    icon: 'cat-health',
     iconColor: '#7ABE9E',
     dock: false,
     page: 1,
@@ -131,7 +135,7 @@ export const APPS = [
   {
     id: 'characters',
     name: '角色',
-    icon: 'dice',
+    icon: 'cat-characters',
     iconColor: '#D4A4C4',
     dock: false,
     page: 1,
@@ -140,7 +144,7 @@ export const APPS = [
   {
     id: 'worldbook',
     name: '世界书',
-    icon: 'search',
+    icon: 'cat-worldbook',
     iconColor: '#B89878',
     dock: false,
     page: 1,
@@ -149,7 +153,7 @@ export const APPS = [
   {
     id: 'moments',
     name: '朋友圈',
-    icon: 'camera',
+    icon: 'cat-moments',
     iconColor: '#F5A0C8',
     dock: false,
     page: 1,
@@ -158,7 +162,7 @@ export const APPS = [
   {
     id: 'dream',
     name: '梦境',
-    icon: 'dream',
+    icon: 'cat-dream',
     iconColor: '#9A8BD4',
     dock: false,
     page: 1,
@@ -167,7 +171,7 @@ export const APPS = [
   {
     id: 'avatar',
     name: '头像',
-    icon: 'home',
+    icon: 'cat-avatar',
     iconColor: '#F5C498',
     dock: false,
     page: 1,
@@ -176,7 +180,7 @@ export const APPS = [
   {
     id: 'wallet',
     name: '钱包',
-    icon: 'wallet',
+    icon: 'cat-wallet',
     iconColor: '#E8B04A',
     dock: false,
     page: 1,
@@ -185,7 +189,7 @@ export const APPS = [
   {
     id: 'shop',
     name: '商店',
-    icon: 'shop',
+    icon: 'cat-shop',
     iconColor: '#F088A0',
     dock: false,
     page: 1,
@@ -194,7 +198,7 @@ export const APPS = [
   {
     id: 'games',
     name: '游戏',
-    icon: 'games',
+    icon: 'cat-games',
     iconColor: '#88C4D4',
     dock: false,
     page: 1,
@@ -203,7 +207,7 @@ export const APPS = [
   {
     id: 'music',
     name: '音乐',
-    icon: 'music',
+    icon: 'cat-music',
     iconColor: '#D49AC4',
     dock: false,
     page: 1,
@@ -212,7 +216,7 @@ export const APPS = [
   {
     id: 'collections',
     name: '收藏',
-    icon: 'gift',
+    icon: 'cat-collections',
     iconColor: '#A8D4B0',
     dock: false,
     page: 1,
@@ -221,7 +225,7 @@ export const APPS = [
   {
     id: 'grudge',
     name: '记仇本',
-    icon: 'lock',
+    icon: 'cat-grudge',
     iconColor: '#C48888',
     dock: false,
     page: 1,
@@ -230,7 +234,7 @@ export const APPS = [
   {
     id: 'memory-viewer',
     name: '记忆',
-    icon: 'back',
+    icon: 'cat-memory-viewer',
     iconColor: '#88A8D4',
     dock: false,
     page: 1,
@@ -239,7 +243,7 @@ export const APPS = [
   {
     id: 'inbox',
     name: '消息中心',
-    icon: 'phone',
+    icon: 'cat-inbox',
     iconColor: '#7AA2D6',
     dock: true,
     page: 0,

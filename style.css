@@ -353,8 +353,10 @@ img { display: block; max-width: 100%; }
   /* 柔和磨砂底：accent-light 与 bg-card 混合，棉花糖质感，不再是实心色块 */
   background: color-mix(in srgb, var(--accent-light) 55%, var(--bg-card));
   display: flex; align-items: center; justify-content: center;
-  /* 图标线条用 text-primary：深浅主题下对比度都够，且同色系，靠线条形状区分 APP */
-  color: var(--text-primary);
+  /* 图标线条走 accent-dark：跟随主题主色——粉主题粉线条、蓝主题蓝线条
+     用 accent-dark 而非 accent：在浅色磨砂底上对比度更够，图标更清晰
+     SVG 内 stroke=currentColor 自动取这个色；局部填充 fill=currentColor+opacity 也同色系 */
+  color: var(--accent-dark);
   /* neumorphism 凸起：双向同色系阴影，软萌不塑料 */
   box-shadow: var(--shadow-neu-out);
   /* 极淡内描边，增强磨砂层次，深浅主题都自然 */
@@ -364,7 +366,7 @@ img { display: block; max-width: 100%; }
   position: relative;
   overflow: hidden;
 }
-.desktop-icon-img svg { width: 56%; height: 56%; }
+.desktop-icon-img svg { width: 68%; height: 68%; }
 .desktop-icon:active .desktop-icon-img { transform: scale(var(--press-scale)); }
 .desktop-icon-label {
   font-size: var(--font-size-small);
