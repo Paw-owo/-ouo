@@ -367,6 +367,10 @@ img { display: block; max-width: 100%; }
   overflow: hidden;
 }
 .desktop-icon-img svg { width: 68%; height: 68%; }
+/* 桌面小猫化图标：CSS 全局 stroke-width:1.5 会被 SVG attribute 覆盖不了，
+   用 CSS 强制设 2，保证 desktop skill 要求的 2-2.5px 粗线条，软萌不细弱。
+   只作用于桌面图标，不影响其他 createIcon 调用（close/back/check 等仍走 1.5）。 */
+.desktop-icon-img svg g[stroke-width] { stroke-width: 2; }
 .desktop-icon:active .desktop-icon-img { transform: scale(var(--press-scale)); }
 .desktop-icon-label {
   font-size: var(--font-size-small);
