@@ -82,7 +82,7 @@ injectStyle('popo-settings-ai-card', `
   .ai-card-field-label{font-size:var(--font-size-small);color:var(--text-secondary)}
   .ai-card-input-wrap{position:relative;display:flex;align-items:center}
   .ai-card-input-wrap .input{flex:1;padding-right:48px}
-  .ai-card-eye{position:absolute;right:4px;background:transparent;border:none;color:var(--text-hint);font-size:var(--font-size-small);padding:6px 8px;cursor:pointer;border-radius:var(--radius-sm)}
+  .ai-card-eye{position:absolute;right:4px;background:transparent;border:none;color:var(--text-hint);font-size:var(--font-size-small);padding:6px 8px;cursor:pointer;border-radius:var(--radius-md)}
   .ai-card-eye:active{transform:scale(var(--press-scale))}
   .ai-card-textarea{width:100%;min-height:68px;resize:vertical}
   .ai-card-range-row{display:flex;align-items:center;gap:10px}
@@ -95,13 +95,13 @@ injectStyle('popo-settings-ai-card', `
   .ai-card-model-row{display:flex;align-items:center;gap:6px}
   .ai-card-model-row .input{flex:1;min-width:0}
   .ai-card-model-row select.input{cursor:pointer}
-  .ai-card-model-btn{flex-shrink:0;width:36px;height:36px;display:flex;align-items:center;justify-content:center;background:var(--bg-secondary);border:none;border-radius:var(--radius-sm);color:var(--text-secondary);cursor:pointer;transition:var(--motion)}
+  .ai-card-model-btn{flex-shrink:0;width:36px;height:36px;display:flex;align-items:center;justify-content:center;background:var(--bg-secondary);border:none;border-radius:var(--radius-md);color:var(--text-secondary);cursor:pointer;transition:var(--motion)}
   .ai-card-model-btn:active{transform:scale(var(--press-scale))}
   .ai-card-model-btn:disabled{opacity:0.5;cursor:not-allowed}
   .ai-card-model-btn.spinning .popo-icon-svg{animation:popo-ai-spin 0.8s linear infinite}
   @keyframes popo-ai-spin{to{transform:rotate(360deg)}}
   .ai-card-row-hint{font-size:var(--font-size-small);color:var(--text-hint);line-height:1.5;margin:-6px 0 12px 0}
-  .ai-card-details{margin-top:6px;margin-bottom:14px;border-top:1px solid var(--border);padding-top:10px}
+  .ai-card-details{margin-top:6px;margin-bottom:14px;border-top:1px solid color-mix(in srgb, var(--text-hint) 14%, transparent);padding-top:10px}
   .ai-card-summary{font-size:var(--font-size-small);color:var(--text-secondary);cursor:pointer;padding:6px 0;list-style:none;display:flex;align-items:center;gap:6px}
   .ai-card-summary::-webkit-details-marker{display:none}
   .ai-card-summary-arrow{display:inline-block;transition:transform var(--motion);color:var(--text-hint)}

@@ -386,7 +386,7 @@ function buildProviderConfig(provider, cfg) {
           <select class="select input" id="tts-sf-voice" style="flex:1;min-width:0">
             <option value="">（先点右边拉取，或手动填）</option>
           </select>
-          <button class="ai-card-model-btn" id="tts-sf-fetch" type="button" aria-label="拉取音色列表" style="width:36px;height:36px;display:flex;align-items:center;justify-content:center;background:var(--bg-secondary);border:none;border-radius:var(--radius-sm);color:var(--text-secondary);cursor:pointer">${createIcon('refresh', 18).outerHTML}</button>
+          <button class="ai-card-model-btn" id="tts-sf-fetch" type="button" aria-label="拉取音色列表" style="width:36px;height:36px;display:flex;align-items:center;justify-content:center;background:var(--bg-secondary);border:none;border-radius:var(--radius-md);color:var(--text-secondary);cursor:pointer">${createIcon('refresh', 18).outerHTML}</button>
         </div>
         <input class="input" id="tts-sf-voice-manual" type="text" placeholder="或者手动填 voice id" value="${escapeAttr(cfg.voice || '')}" style="margin-top:6px">
         <div style="font-size:var(--font-size-small);color:var(--text-hint);margin-top:4px">
@@ -441,7 +441,7 @@ function buildProviderConfig(provider, cfg) {
           <select class="select input" id="tts-el-voice" style="flex:1;min-width:0">
             <option value="">（先点右边拉取，或手动填）</option>
           </select>
-          <button class="ai-card-model-btn" id="tts-el-fetch" type="button" aria-label="拉取音色列表" style="width:36px;height:36px;display:flex;align-items:center;justify-content:center;background:var(--bg-secondary);border:none;border-radius:var(--radius-sm);color:var(--text-secondary);cursor:pointer">${createIcon('refresh', 18).outerHTML}</button>
+          <button class="ai-card-model-btn" id="tts-el-fetch" type="button" aria-label="拉取音色列表" style="width:36px;height:36px;display:flex;align-items:center;justify-content:center;background:var(--bg-secondary);border:none;border-radius:var(--radius-md);color:var(--text-secondary);cursor:pointer">${createIcon('refresh', 18).outerHTML}</button>
         </div>
         <input class="input" id="tts-el-voice-manual" type="text" placeholder="或者手动填 voice id" value="${escapeAttr(cfg.voice || '')}" style="margin-top:6px">
       </div>

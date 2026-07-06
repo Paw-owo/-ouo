@@ -73,7 +73,7 @@ injectStyle('popo-settings-mcp-card', `
   }
   .mcp-server-actions{ display:flex; gap:4px; flex-shrink:0; }
   .mcp-icon-btn{
-    width:32px; height:32px; border-radius:var(--radius-sm);
+    width:32px; height:32px; border-radius:var(--radius-md);
     background:transparent; border:none; color:var(--text-secondary);
     display:inline-flex; align-items:center; justify-content:center;
     cursor:pointer; transition:var(--motion);
@@ -91,7 +91,7 @@ injectStyle('popo-settings-mcp-card', `
   }
   .mcp-tool-item{
     font-size:var(--font-size-small); color:var(--text-primary);
-    padding:6px 8px; border-radius:var(--radius-sm);
+    padding:6px 8px; border-radius:var(--radius-md);
     background:color-mix(in srgb, var(--bg-secondary) 60%, transparent);
     margin-bottom:4px;
   }

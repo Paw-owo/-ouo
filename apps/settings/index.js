@@ -1,5 +1,5 @@
 // apps/settings/index.js
-// 设置 App——Phase 1 真实可用版。
+// 设置 App——iOS 风格重制版。
 // 功能：主题（6 预设 + 导入导出）/ 壁纸 / 锁屏背景 / 锁屏头像 /
 //      桌面缩放（图标/Widget/Dock）/ 自定义字体 / 今日提示 /
 //      隐藏图标管理 / 数据导出导入 / 关于。
@@ -30,41 +30,91 @@ let containerEl = null;
 let activeTab = 'appearance';
 
 // ════════════════════════════════════════
-// 设置页分组样式：顶部胶囊形 Tab 横向滚动 + 分组卡片容器
+// iOS 风格设置页样式：胶囊标签 + 圆角卡片组 + 宽松间距 + 粗体
 // ════════════════════════════════════════
 injectStyle('popo-settings-sections', `
+  /* ── 标签栏：iOS 风格胶囊，无硬分割线 ── */
   .settings-tabs{
-    display:flex; gap:8px; padding:10px 14px;
+    display:flex; gap:10px; padding:14px 16px 10px;
     overflow-x:auto; -webkit-overflow-scrolling:touch;
-    background:var(--bg-secondary);
-    border-bottom:1px solid color-mix(in srgb, var(--text-hint) 12%, transparent);
+    background:transparent;
     scrollbar-width:none;
   }
   .settings-tabs::-webkit-scrollbar{ display:none; width:0; height:0; }
   .settings-tab{
-    flex-shrink:0; padding:8px 18px;
-    background:transparent;
-    border:1px solid color-mix(in srgb, var(--text-hint) 22%, transparent);
-    border-radius:999px;
+    flex-shrink:0; padding:10px 20px;
+    background:var(--bg-secondary);
+    border:none;
+    border-radius:var(--radius-full);
     color:var(--text-secondary);
-    font-size:var(--font-size-base);
+    font-size:var(--font-size-base); font-weight:500;
     cursor:pointer;
     transition:var(--motion);
     white-space:nowrap;
+    letter-spacing:0.2px;
   }
   .settings-tab.active{
     background:var(--accent);
-    border-color:var(--accent);
     color:var(--bubble-user-text);
-    box-shadow:var(--shadow-sm);
+    font-weight:600;
+    box-shadow:0 2px 8px color-mix(in srgb, var(--accent) 30%, transparent);
   }
   .settings-tab:active{ transform:scale(var(--press-scale)); }
-  .settings-section{ display:none; }
+  .settings-section{ display:none; animation:popo-settings-fadein 260ms var(--ease-soft); }
   .settings-section.active{ display:block; }
-`);
+  @keyframes popo-settings-fadein{
+    from{ opacity:0; transform:translateY(6px); }
+    to{ opacity:1; transform:translateY(0); }
+  }
 
-// 锁屏密码哈希（hashPassword / parseLockStored / formatLockStored）
-// 从 core/lock.js 统一导入，与 desktop.js 共用，避免两端重复实现导致不一致。
+  /* ── 设置页全局：加粗标签 + 宽松间距 ── */
+  #settings-body .card-row-label{
+    font-weight:600; font-size:var(--font-size-base);
+  }
+  #settings-body .card-row-value{
+    font-weight:500; font-size:var(--font-size-base);
+  }
+  /* card-row 轻微按压反馈 */
+  #settings-body .card-row:active{
+    background:color-mix(in srgb, var(--accent) 6%, var(--bg-secondary));
+  }
+
+  /* ── 设置页内输入框确保圆角 ── */
+  #settings-body .input,
+  #settings-body .textarea,
+  #settings-body .select,
+  #settings-body select{
+    border-radius:var(--radius-md);
+  }
+
+  /* ── 设置页内 range / checkbox / select 圆角统一 ── */
+  #settings-body input[type="range"]{
+    accent-color:var(--accent);
+  }
+  #settings-body select{
+    padding:8px 12px;
+    background:var(--bg-secondary);
+    border:1px solid color-mix(in srgb, var(--text-hint) 18%, transparent);
+    border-radius:var(--radius-md);
+    color:var(--text-primary);
+    font-size:var(--font-size-base);
+  }
+  #settings-body input[type="checkbox"]{
+    accent-color:var(--accent);
+    width:18px; height:18px;
+    cursor:pointer;
+  }
+
+  /* ── 卡片间间距 ── */
+  #settings-body .card{
+    margin-bottom:14px;
+  }
+
+  /* ── 折叠卡片适配设置页 ── */
+  #settings-body .popo-collapsible-card{
+    margin-bottom:14px;
+  }
+`);
 
 export async function mount(container, context) {
   containerEl = container;
@@ -119,7 +169,7 @@ async function renderSections() {
   const body = containerEl.querySelector('#settings-body');
   body.innerHTML = '';
 
-  // ── 外观：主题 / 自定义颜色 / 壁纸 / APP 背景 / 字体 / 桌面缩放 ──
+  // ── 外观：主题 / 自定义颜色 / 壁纸 / APP 背景 / 字体 / 个性化 / 桌面缩放 ──
   body.appendChild(wrapCard(await renderThemeCard(), 'appearance'));
   body.appendChild(wrapCard(renderCustomColorsCard(), 'appearance'));
   body.appendChild(wrapCard(renderWallpaperCard(), 'appearance'));
@@ -412,19 +462,19 @@ function renderPersonalizeCard() {
       <span class="card-row-label">字号大小</span>
       <div style="display:flex;align-items:center;gap:8px;flex:1;max-width:180px">
         <input type="range" id="pers-font-scale" min="0.85" max="1.25" step="0.05" value="${fontScale}" style="flex:1">
-        <span style="min-width:36px;text-align:right;color:var(--text-secondary);font-size:var(--font-size-small)" id="pers-font-scale-val">${fontScale.toFixed(2)}</span>
+        <span style="min-width:36px;text-align:right;color:var(--text-secondary);font-size:var(--font-size-small);font-weight:500" id="pers-font-scale-val">${fontScale.toFixed(2)}</span>
       </div>
     </div>
     <div class="card-row">
       <span class="card-row-label">气泡圆角</span>
       <div style="display:flex;align-items:center;gap:8px;flex:1;max-width:180px">
         <input type="range" id="pers-bubble-radius" min="0.5" max="1.8" step="0.1" value="${bubbleRadius}" style="flex:1">
-        <span style="min-width:36px;text-align:right;color:var(--text-secondary);font-size:var(--font-size-small)" id="pers-bubble-radius-val">${bubbleRadius.toFixed(1)}</span>
+        <span style="min-width:36px;text-align:right;color:var(--text-secondary);font-size:var(--font-size-small);font-weight:500" id="pers-bubble-radius-val">${bubbleRadius.toFixed(1)}</span>
       </div>
     </div>
     <div class="card-row">
       <span class="card-row-label">动效强度</span>
-      <select id="pers-motion" style="padding:6px 10px;border-radius:var(--radius-md);background:var(--bg-secondary);color:var(--text-primary)">
+      <select id="pers-motion">
         <option value="full" ${motionLevel === 'full' ? 'selected' : ''}>完整（默认）</option>
         <option value="reduced" ${motionLevel === 'reduced' ? 'selected' : ''}>减弱（更安静）</option>
         <option value="none" ${motionLevel === 'none' ? 'selected' : ''}>关闭（最省电）</option>
@@ -434,15 +484,11 @@ function renderPersonalizeCard() {
       <span class="card-row-label">本地打字速度</span>
       <div style="display:flex;align-items:center;gap:8px;flex:1;max-width:180px">
         <input type="range" id="pers-typing" min="0.5" max="4" step="0.5" value="${typingSpeed}" style="flex:1">
-        <span style="min-width:36px;text-align:right;color:var(--text-secondary);font-size:var(--font-size-small)" id="pers-typing-val">${typingSpeed.toFixed(1)}</span>
+        <span style="min-width:36px;text-align:right;color:var(--text-secondary);font-size:var(--font-size-small);font-weight:500" id="pers-typing-val">${typingSpeed.toFixed(1)}</span>
       </div>
     </div>
     <button class="btn ghost block" id="pers-reset" style="margin-top:10px">还原默认</button>
   `;
-
-  // 字号缩放 / 气泡圆角 / 动效强度都走 theme.js 的 applyPersonalization()：
-  // 它会读 localStorage 里的值并覆盖 CSS 变量，且能正确处理主题切换（清缓存重应用）。
-  // 这里只负责把滑块值存起来，再调 applyPersonalization 让它生效。
 
   // 滑块实时回填
   const fontInput = card.querySelector('#pers-font-scale');
@@ -531,7 +577,7 @@ function renderPagesCard() {
     <div class="card-row"><span class="card-row-label">桌面页数（1-6）</span>
       <div style="display:flex;align-items:center;gap:6px">
         <button class="btn" id="page-minus">−</button>
-        <span class="card-row-value" id="page-count" style="min-width:24px;text-align:center">${count}</span>
+        <span class="card-row-value" id="page-count" style="min-width:24px;text-align:center;font-weight:500">${count}</span>
         <button class="btn" id="page-plus">+</button>
       </div>
     </div>
@@ -712,10 +758,6 @@ function renderWeatherCard() {
 }
 
 // ════════════════════════════════════════
-// 今日提示 widget 文案
-// ════════════════════════════════════════
-
-// ════════════════════════════════════════
 // Widget 管理（显示/隐藏 + 选页）
 // ════════════════════════════════════════
 const WIDGET_LIST = [
@@ -742,7 +784,7 @@ function renderWidgetMgmtCard() {
     row.className = 'card-row';
     row.innerHTML = `<span class="card-row-label">${w.name}</span>
       <input type="checkbox" data-act="show" ${hidden ? '' : 'checked'} style="margin-right:8px">
-      <select data-act="page" style="padding:4px 8px;border-radius:var(--radius-md);background:var(--bg-secondary);color:var(--text-primary)">
+      <select data-act="page">
         <option value="0" ${page === 0 ? 'selected' : ''}>第 1 页</option>
         <option value="1" ${page === 1 ? 'selected' : ''}>第 2 页</option>
       </select>`;
