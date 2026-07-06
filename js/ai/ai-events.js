@@ -61,7 +61,7 @@ function emitResponseComplete(requestId, fullText, meta = {}) {
 function emitError(requestId, error) {
   events.emit(AI_EVENTS.ERROR, {
     requestId,
-    errorType: _classifyError(error),
+    errorType: classifyError(error),
     message: error?.message || String(error),
     timestamp: Date.now()
   });

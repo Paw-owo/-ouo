@@ -35,9 +35,11 @@ function _getActiveAPIConfig() {
   let activeGroup = null;
 
   if (Array.isArray(groups)) {
+    if (groups.length === 0) return null;
     activeGroup = groups.find(g => g.active) || groups[0];
   } else if (typeof groups === 'object') {
     const entries = Object.values(groups);
+    if (entries.length === 0) return null;
     activeGroup = entries.find(g => g.active) || entries[0];
   }
 
