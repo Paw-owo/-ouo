@@ -172,14 +172,30 @@ function _bindEvents(page, hasKey) {
         signal: AbortSignal.timeout(10000)
       });
 
-      if (resp.ok) {
-        statusEl.textContent = '连接成功~';
-        statusEl.className = 'settings-status success';
-      } else {
-        const text = await resp.text().catch(() => '');
+      if (!resp.ok) {
         statusEl.textContent = '连不上呢，检查一下地址、密钥和模型吧';
         statusEl.className = 'settings-status error';
-        console.error('[Settings] 测试连接失败:', resp.status, text.slice(0, 200));
+        console.error('[Settings] 测试连接失败: HTTP', resp.status);
+      } else {
+        try {
+          const data = await resp.json();
+          if (data.error) {
+            statusEl.textContent = '连不上呢，检查一下地址、密钥和模型吧';
+            statusEl.className = 'settings-status error';
+            console.error('[Settings] 测试连接失败: API error');
+          } else if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+            statusEl.textContent = '连不上呢，检查一下地址、密钥和模型吧';
+            statusEl.className = 'settings-status error';
+            console.error('[Settings] 测试连接失败: 响应结构异常');
+          } else {
+            statusEl.textContent = '连接成功~';
+            statusEl.className = 'settings-status success';
+          }
+        } catch {
+          statusEl.textContent = '连不上呢，检查一下地址、密钥和模型吧';
+          statusEl.className = 'settings-status error';
+          console.error('[Settings] 测试连接失败: 响应非JSON');
+        }
       }
     } catch (err) {
       statusEl.textContent = '连不上呢，检查一下地址、密钥和模型吧';
