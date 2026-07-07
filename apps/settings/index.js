@@ -295,3 +295,4 @@ function init(container) {
 }
 
 export { init };
+export default init;
