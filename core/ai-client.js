@@ -7,8 +7,10 @@
 import { get } from './config.js';
 
 function getApiConfig() {
+  const raw = (get('apiBaseUrl') || '').replace(/\/+$/, '');
+  const baseUrl = raw.endsWith('/v1') ? raw : `${raw}/v1`;
   return {
-    baseUrl: (get('apiBaseUrl') || '').replace(/\/+$/, ''),
+    baseUrl,
     apiKey: get('apiKey') || '',
     model: get('apiModel') || ''
   };
@@ -39,7 +41,7 @@ async function sendChat(messages, options = {}) {
     };
   }
 
-  const url = `${cfg.baseUrl}/v1/chat/completions`;
+  const url = `${cfg.baseUrl}/chat/completions`;
   const timeout = get('timeout') || 30000;
   const { temperature = 0.7, max_tokens = 2048 } = options;
 
