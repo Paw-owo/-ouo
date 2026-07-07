@@ -93,52 +93,56 @@ function _getDateStr() {
   return `${mo}月${d}日 星期${w}`;
 }
 
-// 创建时间组件
+// 创建时间组件（内容层，不包 widget-card 外壳）
 function _renderTimeWidget() {
   return `
-    <div class="widget-card widget-time">
+    <div class="widget-header">
+      <span class="widget-deco-dot"></span>
+      <span class="widget-deco-text">今天也醒啦</span>
+    </div>
+    <div class="widget-body">
       <div class="time-display">${_getTimeStr()}</div>
       <div class="date-display">${_getDateStr()}</div>
     </div>
   `;
 }
 
-// 创建天气组件
+// 创建天气组件（内容层，不包 widget-card 外壳）
 function _renderWeatherWidget() {
   return `
-    <div class="widget-card widget-weather">
+    <div class="weather-top">
       <div class="weather-icon">${_getWeatherIcon(WEATHER_MOCK.icon)}</div>
       <div class="weather-info">
         <div class="weather-temp">${WEATHER_MOCK.temp}</div>
         <div class="weather-desc">${WEATHER_MOCK.desc}</div>
       </div>
     </div>
+    <div class="weather-note">好天气模式</div>
   `;
 }
 
-// 创建今日提示
+// 创建今日提示（内容层，不包 widget-card 外壳）
 function _renderTipWidget() {
   const tip = TIPS[Math.floor(Math.random() * TIPS.length)];
   return `
-    <div class="widget-card widget-tip">
-      <div class="tip-icon">${_getTipIcon()}</div>
+    <div class="tip-icon">${_getTipIcon()}</div>
+    <div class="tip-content">
+      <div class="tip-title">今日提示</div>
       <div class="tip-text">${tip}</div>
     </div>
   `;
 }
 
-// 创建黑胶组件
+// 创建黑胶组件（内容层，不包 widget-card 外壳）
 function _renderVinylWidget() {
   return `
-    <div class="widget-card widget-vinyl">
-      <div class="vinyl-disc${_vinylPlaying ? ' playing' : ''}">
-        ${_getVinylIcon()}
-        <div class="disc-hole"></div>
-      </div>
-      <div class="vinyl-info">
-        <div class="vinyl-title">正在播放</div>
-        <div class="vinyl-artist">轻音乐</div>
-      </div>
+    <div class="vinyl-disc${_vinylPlaying ? ' playing' : ''}">
+      ${_getVinylIcon()}
+      <div class="disc-hole"></div>
+    </div>
+    <div class="vinyl-info">
+      <div class="vinyl-title">正在播放</div>
+      <div class="vinyl-artist">轻音乐</div>
     </div>
   `;
 }
@@ -160,13 +164,13 @@ function _buildWidgetsHTML() {
     const isFullWidth = rowWidgets.length === 1 && rowWidgets[0].span === 2;
 
     if (isFullWidth) {
-      html += `<div class="widget-card full-width" data-widget="${rowWidgets[0].id}">`;
+      html += `<div class="widget-card full-width widget-${rowWidgets[0].id}" data-widget="${rowWidgets[0].id}">`;
       html += _getWidgetContent(rowWidgets[0].id);
       html += '</div>';
     } else {
       html += '<div class="widget-row">';
       for (const w of rowWidgets) {
-        html += `<div class="widget-card" data-widget="${w.id}">`;
+        html += `<div class="widget-card widget-${w.id}" data-widget="${w.id}">`;
         html += _getWidgetContent(w.id);
         html += '</div>';
       }
