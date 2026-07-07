@@ -42,6 +42,9 @@ const STORAGE_KEYS = Object.freeze({
   STREAM_ENABLED:     'stream_enabled',
   TIMEOUT:            'api_timeout',
   CREATIVITY:         'ai_creativity',
+  API_BASE_URL:       'api_base_url',
+  API_KEY:            'api_key',
+  API_MODEL:          'api_model',
 
   // === 感官 ===
   SENSORY_EYE_ENABLED: 'sensory_eye_enabled',
