@@ -82,8 +82,8 @@ function _showDesktop() {
 }
 
 // 处理APP打开
-function _handleAppOpen(event) {
-  const { appId } = event;
+function _handleAppOpen(payload) {
+  const appId = payload.data?.appId || payload.appId;
   if (!appId) return;
 
   // 打开APP路由

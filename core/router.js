@@ -185,6 +185,12 @@ function reset() {
   _isTransitioning = false;
 }
 
+// 监听外部关闭（如APP内返回按钮）
+events.on('app:closed', () => {
+  _currentApp = null;
+  _isTransitioning = false;
+});
+
 export {
   getCurrentApp,
   getCurrentAppId,

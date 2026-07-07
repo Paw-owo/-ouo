@@ -46,6 +46,11 @@ const DEFAULT_SETTINGS = Object.freeze({
   timeout: 30000,
   creativity: 'balanced', // 'stable' | 'balanced' | 'creative'
 
+  // API 配置（第一版：单组，最小可用）
+  apiBaseUrl: '',
+  apiKey: '',
+  apiModel: '',
+
   // 感官
   sensoryEyeEnabled: true,
   sensoryEarEnabled: true,

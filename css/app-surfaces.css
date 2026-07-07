@@ -4,6 +4,20 @@
    ============================================ */
 
 /* === APP页面容器 === */
+.app-container {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: none;
+  pointer-events: none;
+}
+
+.app-container.app-container-active {
+  display: block;
+  pointer-events: auto;
+  z-index: 15;
+}
+
 .app-page {
   position: absolute;
   inset: 0;
