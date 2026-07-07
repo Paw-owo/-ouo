@@ -33,13 +33,16 @@ function _injectStyles() {
     .settings-status.error { color: var(--color-error); }
     .settings-key-status { font-size: 0.75rem; font-weight: var(--font-weight-bold); padding: 2px 10px; border-radius: var(--radius-full); }
     .settings-key-status:empty { display: none; }
+    .settings-key-clear { font-size: 0.75rem; color: var(--color-error); background: none; border: 1px solid var(--color-error); border-radius: var(--radius-full); padding: 2px 10px; cursor: pointer; font-family: var(--font-family); transition: all var(--duration-fast) var(--ease-smooth); }
+    .settings-key-clear:active { background: var(--color-error); color: #fff; }
+    .settings-key-clear.pending-clear { background: var(--color-error); color: #fff; border-color: var(--color-error); }
   `;
   document.head.appendChild(_styleEl);
 }
 
 function _render(container) {
   const savedKey = get('apiKey') || '';
-  const cfg = { baseUrl: get('apiBaseUrl') || '', apiKey: savedKey, model: get('apiModel') || '' };
+  const cfg = { baseUrl: get('apiBaseUrl') || '', model: get('apiModel') || '' };
   const hasKey = !!savedKey;
 
   const page = document.createElement('div');
@@ -62,12 +65,15 @@ function _render(container) {
             <input class="settings-input" id="settings-api-url" type="text" placeholder="https://api.openai.com" value="${_esc(cfg.baseUrl)}" autocomplete="off"/>
           </div>
           <div class="settings-field">
-            <div style="display:flex;align-items:center;justify-content:space-between;">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
               <label class="settings-field-label" for="settings-api-key">API Key</label>
-              <span class="settings-key-status" id="settings-key-status">${hasKey ? '已保存密钥' : '未设置'}</span>
+              <div style="display:flex;align-items:center;gap:6px;">
+                <span class="settings-key-status" id="settings-key-status">${hasKey ? '已保存密钥' : '未设置'}</span>
+                ${hasKey ? '<button class="settings-key-clear" id="settings-key-clear-btn" type="button">清除密钥</button>' : ''}
+              </div>
             </div>
             <span class="settings-field-hint">您的 API 密钥，仅保存在本地浏览器</span>
-            <input class="settings-input" id="settings-api-key" type="password" placeholder="sk-xxxxxxxxxxxxxxxx" value="${_esc(cfg.apiKey)}" autocomplete="off"/>
+            <input class="settings-input" id="settings-api-key" type="password" placeholder="输入新密钥以覆盖" value="" autocomplete="off"/>
           </div>
           <div class="settings-field">
             <label class="settings-field-label" for="settings-api-model">模型名</label>
@@ -83,10 +89,10 @@ function _render(container) {
     </div>
   `;
   container.appendChild(page);
-  _bindEvents(page);
+  _bindEvents(page, hasKey);
 }
 
-function _bindEvents(page) {
+function _bindEvents(page, hasKey) {
   const backBtn = page.querySelector('#settings-back-btn');
   const saveBtn = page.querySelector('#settings-save-btn');
   const statusEl = page.querySelector('#settings-status');
@@ -94,12 +100,37 @@ function _bindEvents(page) {
   const keyInput = page.querySelector('#settings-api-key');
   const modelInput = page.querySelector('#settings-api-model');
   const keyStatusEl = page.querySelector('#settings-key-status');
+  const clearBtn = page.querySelector('#settings-key-clear-btn');
 
   let _saveTimer = null;
+  let _clearRequested = false;
 
   backBtn.addEventListener('click', () => {
     events.emit('app:closed', { appId: 'settings' });
   });
+
+  // 清除密钥按钮
+  if (clearBtn) {
+    clearBtn.addEventListener('click', () => {
+      _clearRequested = !_clearRequested;
+      if (_clearRequested) {
+        clearBtn.textContent = '已标记清除';
+        clearBtn.classList.add('pending-clear');
+        keyStatusEl.textContent = '将清除密钥';
+        keyStatusEl.style.color = 'var(--color-error)';
+        keyInput.value = '';
+        keyInput.disabled = true;
+        keyInput.placeholder = '密钥将在保存后被清除';
+      } else {
+        clearBtn.textContent = '清除密钥';
+        clearBtn.classList.remove('pending-clear');
+        keyStatusEl.textContent = '已保存密钥';
+        keyStatusEl.style.color = '';
+        keyInput.disabled = false;
+        keyInput.placeholder = '输入新密钥以覆盖';
+      }
+    });
+  }
 
   saveBtn.addEventListener('click', () => {
     if (_saveTimer) return;
@@ -109,18 +140,40 @@ function _bindEvents(page) {
     const keyInputValue = keyInput.value.trim();
     const model = modelInput.value.trim();
 
-    // 密钥保护：输入为空但本地已有密钥 → 保留旧值，不覆盖
+    // 三种情况：
+    // 1. 输入框有新值 → 用新值覆盖
+    // 2. 输入框为空 + 已标记清除 → 保存空值，真正删掉
+    // 3. 输入框为空 + 未标记清除 → 保留旧值
     const savedKey = get('apiKey') || '';
-    const apiKey = (!keyInputValue && savedKey) ? savedKey : keyInputValue;
+    let apiKey;
+    if (keyInputValue) {
+      apiKey = keyInputValue;
+    } else if (_clearRequested) {
+      apiKey = '';
+    } else {
+      apiKey = savedKey;
+    }
 
     try {
       set('apiBaseUrl', baseUrl);
       set('apiKey', apiKey);
       set('apiModel', model);
 
+      // 重置清除状态
+      _clearRequested = false;
+
       // 更新密钥状态指示
       if (keyStatusEl) {
         keyStatusEl.textContent = apiKey ? '已保存密钥' : '未设置';
+        keyStatusEl.style.color = '';
+      }
+
+      // 重置清除按钮
+      if (clearBtn) {
+        clearBtn.textContent = '清除密钥';
+        clearBtn.classList.remove('pending-clear');
+        keyInput.disabled = false;
+        keyInput.placeholder = '输入新密钥以覆盖';
       }
 
       events.emit('settings.changed', { key: 'api', values: { apiBaseUrl: baseUrl, apiModel: model } });
@@ -128,8 +181,13 @@ function _bindEvents(page) {
 
       saveBtn.textContent = '已保存';
       saveBtn.classList.add('saved');
-      statusEl.textContent = apiKey ? '配置已保存，刷新后仍保留' : '配置已保存（未设置密钥）';
+      statusEl.textContent = apiKey ? '配置已保存，刷新后仍保留' : '配置已保存（已清除密钥）';
       statusEl.className = 'settings-status success';
+
+      // 如果密钥被清除，隐藏清除按钮（下次渲染时不再出现）
+      if (!apiKey && clearBtn) {
+        clearBtn.style.display = 'none';
+      }
 
       setTimeout(() => {
         saveBtn.textContent = '保存配置';
