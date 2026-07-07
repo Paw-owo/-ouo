@@ -28,6 +28,9 @@ function _injectStyles() {
     .settings-save-btn { width: 100%; padding: 14px; min-height: 48px; background: linear-gradient(135deg, var(--color-primary), var(--color-primary-deep)); color: #fff; border: none; border-radius: var(--radius-md); font-size: 1rem; font-weight: var(--font-weight-bold); font-family: var(--font-family); cursor: pointer; transition: all var(--duration-fast) var(--ease-soft); box-shadow: 0 4px 14px var(--color-primary-light); }
     .settings-save-btn:active { transform: scale(0.97); box-shadow: 0 2px 8px var(--color-primary-light); }
     .settings-save-btn.saved { background: var(--color-success); box-shadow: 0 4px 14px rgba(140,184,138,0.3); }
+    .settings-test-btn { width: 100%; padding: 12px; min-height: 44px; background: var(--bg-surface); color: var(--text-primary); border: 1.5px solid var(--border-color); border-radius: var(--radius-md); font-size: 0.9rem; font-weight: var(--font-weight-bold); font-family: var(--font-family); cursor: pointer; transition: all var(--duration-fast) var(--ease-smooth); margin-top: 8px; }
+    .settings-test-btn:active { transform: scale(0.97); background: var(--bg-base); }
+    .settings-test-btn:disabled { opacity: 0.5; cursor: not-allowed; }
     .settings-status { text-align: center; font-size: 0.8rem; color: var(--text-placeholder); margin-top: 8px; min-height: 1.2em; transition: color var(--duration-fast) var(--ease-smooth); }
     .settings-status.success { color: var(--color-success); }
     .settings-status.error { color: var(--color-error); }
@@ -84,6 +87,7 @@ function _render(container) {
       </div>
       <div class="settings-save-area">
         <button class="settings-save-btn" id="settings-save-btn">保存配置</button>
+        <button class="settings-test-btn" id="settings-test-btn">测试连接</button>
         <div class="settings-status" id="settings-status"></div>
       </div>
     </div>
@@ -131,6 +135,61 @@ function _bindEvents(page, hasKey) {
       }
     });
   }
+
+  const testBtn = page.querySelector('#settings-test-btn');
+
+  // 测试连接
+  testBtn.addEventListener('click', async () => {
+    if (testBtn.disabled) return;
+    testBtn.disabled = true;
+    testBtn.textContent = '测试中...';
+    statusEl.textContent = '';
+    statusEl.className = 'settings-status';
+
+    const baseUrl = urlInput.value.trim();
+    const apiKey = keyInput.value.trim() || get('apiKey') || '';
+    const model = modelInput.value.trim() || get('apiModel') || '';
+
+    if (!baseUrl || !apiKey || !model) {
+      statusEl.textContent = '请先填写 API Base URL、API Key 和模型名';
+      statusEl.className = 'settings-status error';
+      testBtn.disabled = false;
+      testBtn.textContent = '测试连接';
+      return;
+    }
+
+    const raw = baseUrl.replace(/\/+$/, '');
+    const url = (raw.endsWith('/v1') ? raw : `${raw}/v1`) + '/chat/completions';
+
+    try {
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({ model, messages: [{ role: 'user', content: 'hi' }] }),
+        signal: AbortSignal.timeout(10000)
+      });
+
+      if (resp.ok) {
+        statusEl.textContent = '连接成功~';
+        statusEl.className = 'settings-status success';
+      } else {
+        const text = await resp.text().catch(() => '');
+        statusEl.textContent = '连不上呢，检查一下地址、密钥和模型吧';
+        statusEl.className = 'settings-status error';
+        console.error('[Settings] 测试连接失败:', resp.status, text.slice(0, 200));
+      }
+    } catch (err) {
+      statusEl.textContent = '连不上呢，检查一下地址、密钥和模型吧';
+      statusEl.className = 'settings-status error';
+      console.error('[Settings] 测试连接失败:', err.name || err.message);
+    }
+
+    testBtn.disabled = false;
+    testBtn.textContent = '测试连接';
+  });
 
   saveBtn.addEventListener('click', () => {
     if (_saveTimer) return;
