@@ -31,12 +31,16 @@ function _injectStyles() {
     .settings-status { text-align: center; font-size: 0.8rem; color: var(--text-placeholder); margin-top: 8px; min-height: 1.2em; transition: color var(--duration-fast) var(--ease-smooth); }
     .settings-status.success { color: var(--color-success); }
     .settings-status.error { color: var(--color-error); }
+    .settings-key-status { font-size: 0.75rem; font-weight: var(--font-weight-bold); padding: 2px 10px; border-radius: var(--radius-full); }
+    .settings-key-status:empty { display: none; }
   `;
   document.head.appendChild(_styleEl);
 }
 
 function _render(container) {
-  const cfg = { baseUrl: get('apiBaseUrl') || '', apiKey: get('apiKey') || '', model: get('apiModel') || '' };
+  const savedKey = get('apiKey') || '';
+  const cfg = { baseUrl: get('apiBaseUrl') || '', apiKey: savedKey, model: get('apiModel') || '' };
+  const hasKey = !!savedKey;
 
   const page = document.createElement('div');
   page.className = 'app-page';
@@ -58,7 +62,10 @@ function _render(container) {
             <input class="settings-input" id="settings-api-url" type="text" placeholder="https://api.openai.com" value="${_esc(cfg.baseUrl)}" autocomplete="off"/>
           </div>
           <div class="settings-field">
-            <label class="settings-field-label" for="settings-api-key">API Key</label>
+            <div style="display:flex;align-items:center;justify-content:space-between;">
+              <label class="settings-field-label" for="settings-api-key">API Key</label>
+              <span class="settings-key-status" id="settings-key-status">${hasKey ? '已保存密钥' : '未设置'}</span>
+            </div>
             <span class="settings-field-hint">您的 API 密钥，仅保存在本地浏览器</span>
             <input class="settings-input" id="settings-api-key" type="password" placeholder="sk-xxxxxxxxxxxxxxxx" value="${_esc(cfg.apiKey)}" autocomplete="off"/>
           </div>
@@ -86,6 +93,7 @@ function _bindEvents(page) {
   const urlInput = page.querySelector('#settings-api-url');
   const keyInput = page.querySelector('#settings-api-key');
   const modelInput = page.querySelector('#settings-api-model');
+  const keyStatusEl = page.querySelector('#settings-key-status');
 
   let _saveTimer = null;
 
@@ -94,24 +102,33 @@ function _bindEvents(page) {
   });
 
   saveBtn.addEventListener('click', () => {
-    if (_saveTimer) return; // 防连点
+    if (_saveTimer) return;
     _saveTimer = setTimeout(() => { _saveTimer = null; }, 600);
 
     const baseUrl = urlInput.value.trim();
-    const apiKey = keyInput.value.trim();
+    const keyInputValue = keyInput.value.trim();
     const model = modelInput.value.trim();
+
+    // 密钥保护：输入为空但本地已有密钥 → 保留旧值，不覆盖
+    const savedKey = get('apiKey') || '';
+    const apiKey = (!keyInputValue && savedKey) ? savedKey : keyInputValue;
 
     try {
       set('apiBaseUrl', baseUrl);
       set('apiKey', apiKey);
       set('apiModel', model);
 
-      events.emit('settings.changed', { key: 'api', values: { apiBaseUrl: baseUrl, apiKey: '***', apiModel: model } });
+      // 更新密钥状态指示
+      if (keyStatusEl) {
+        keyStatusEl.textContent = apiKey ? '已保存密钥' : '未设置';
+      }
+
+      events.emit('settings.changed', { key: 'api', values: { apiBaseUrl: baseUrl, apiModel: model } });
       events.emit('api.changed', { baseUrl, model });
 
       saveBtn.textContent = '已保存';
       saveBtn.classList.add('saved');
-      statusEl.textContent = '配置已保存，刷新后仍保留';
+      statusEl.textContent = apiKey ? '配置已保存，刷新后仍保留' : '配置已保存（未设置密钥）';
       statusEl.className = 'settings-status success';
 
       setTimeout(() => {
