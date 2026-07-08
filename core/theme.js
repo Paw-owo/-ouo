@@ -40,8 +40,20 @@ function applyTheme(themeName) {
   });
 }
 
-// 初始化：读取存储的主题或使用默认
+// 注入所有主题的预览代表色到 :root（一次性，不随主题切换变化）
+// 用于设置页主题色卡预览圆点，色值来自 theme-presets.js 的 swatch 字段
+function _injectSwatchVars() {
+  const root = document.documentElement;
+  for (const [id, preset] of Object.entries(THEME_PRESETS)) {
+    if (preset.swatch) {
+      root.style.setProperty(`--swatch-${id}`, preset.swatch);
+    }
+  }
+}
+
+// 初始化：注入预览色变量 + 读取存储的主题或使用默认
 function initTheme() {
+  _injectSwatchVars();
   const stored = get('theme');
   const themeName = stored || 'berry-cloud';
   applyTheme(themeName);
