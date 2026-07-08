@@ -110,14 +110,38 @@
   --chain-radius: var(--radius-md);
   --chain-summary-bg: var(--bg-surface);
   --chain-summary-border: var(--border-color);
+
+  /* 尺寸缩放（由设置页控制） */
+  --font-size-base: 16px;
+  --icon-size-scale: 1;
+}
+
+html {
+  font-size: var(--font-size-base);
+}
+
+/* 字体大小档位 */
+:root[data-font-size="small"]  { --font-size-base: 14px; }
+:root[data-font-size="normal"] { --font-size-base: 16px; }
+:root[data-font-size="large"]  { --font-size-base: 18px; }
+
+/* 图标大小档位 */
+:root[data-icon-size="standard"] { --icon-size-scale: 1; }
+:root[data-icon-size="large"]    { --icon-size-scale: 1.15; }
+
+:root[data-icon-size="large"] .app-icon-chassis,
+:root[data-icon-size="large"] .dock-icon-chassis {
+  transform: scale(var(--icon-size-scale));
 }
 
 /* === 主题切换类 === */
 [data-theme="berry-cloud"]         {}
+[data-theme="honey"]               {}
 [data-theme="taro-coconut"]        {}
 [data-theme="coconut-americano"]   {}
 [data-theme="night-milk-brown"]    {}
 [data-theme="night-black-pink"]    {}
+[data-theme="night-honey"]         {}
 [data-theme="night-coffee"]        {}
 
 /* === 通用工具类 === */

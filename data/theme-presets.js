@@ -1,16 +1,18 @@
 // ============================================
-// theme-presets.js — 6套主题色值，唯一来源
-// 日间3套 + 夜间3套，由 core/theme.js 读取写入 CSS 变量槽位
+// theme-presets.js — 8套主题色值，唯一来源
+// 日间4套 + 夜间4套，由 core/theme.js 读取写入 CSS 变量槽位
 //
 // 日间：
 //   1. berry-cloud        莓莓云顶奶   (默认)
-//   2. taro-coconut       芋泥椰奶冻
-//   3. coconut-americano  椰青冰美式
+//   2. honey              蜂蜜奶霜
+//   3. taro-coconut       芋泥椰奶冻
+//   4. coconut-americano  椰青冰美式
 //
 // 夜间：
-//   4. night-milk-brown   夜奶棕
-//   5. night-black-pink   夜黑粉
-//   6. night-coffee       夜咖色
+//   5. night-milk-brown   夜奶棕
+//   6. night-black-pink   夜黑粉
+//   7. night-honey        夜蜂蜜
+//   8. night-coffee       夜咖色
 // ============================================
 
 const THEME_PRESETS = {
@@ -87,7 +89,68 @@ const THEME_PRESETS = {
   },
 
   // ==========================================
-  // 2. 芋泥椰奶冻 — 紫色系
+  // 2. 蜂蜜奶霜 — 奶黄色系
+  // 温暖奶油、棉花糖甜、像阳光晒过的被子
+  // 参考：主色=#F5D0A9 辅助浅黄=#FFF5E6 页面浅底=#FFF9F0 强调棕=#C9A87C
+  // ==========================================
+  'honey': {
+    label: '蜂蜜奶霜',
+    mode: 'light',
+    swatch: '#F5D0A9',
+    colors: {
+      '--bg-base':                 '#FFF9F0',
+      '--bg-surface':              '#FDF3E6',
+      '--bg-hover':                '#F7EBD9',
+      '--bg-glass':                'rgba(255,249,240,0.88)',
+      '--bg-mask':                 'rgba(90,70,55,0.25)',
+
+      '--color-primary':           '#F5D0A9',
+      '--color-primary-light':     '#F9E4CA',
+      '--color-primary-ultralight':'#FDF5EA',
+      '--color-primary-deep':      '#C9A87C',
+
+      '--color-accent':            '#FFF5E6',
+      '--color-accent-light':      '#FFFAF2',
+
+      '--text-primary':            '#6B5A50',
+      '--text-secondary':          '#9B8A7D',
+      '--text-placeholder':        '#C8B8A8',
+
+      '--shadow-soft':             '0 2px 8px rgba(200,170,140,0.10)',
+      '--shadow-card':             '0 4px 16px rgba(200,170,140,0.12)',
+      '--shadow-float':            '0 8px 24px rgba(200,170,140,0.15)',
+      '--shadow-neu-out':          '4px 4px 10px rgba(200,170,140,0.10), -4px -4px 10px rgba(255,249,240,0.9)',
+      '--shadow-neu-in':           'inset 2px 2px 6px rgba(200,170,140,0.08), inset -2px -2px 6px rgba(255,249,240,0.8)',
+
+      '--color-success':           '#8CB88A',
+      '--color-warning':           '#D8C898',
+      '--color-error':             '#D8A0A8',
+      '--color-info':              '#A0B8D8',
+
+      '--icon-stroke':             '#C9A87C',
+      '--icon-tile-bg':            '#FFF5E6',
+      '--icon-tile-pattern':       '#F0E2D0',
+      '--icon-stitch':             '#C9A87C',
+      '--icon-inner':              '#FFFCF7',
+      '--icon-shadow':             '0 3px 10px rgba(200,170,140,0.12)',
+      '--icon-shadow-near':        '0 1px 3px rgba(200,170,140,0.08)',
+      '--icon-shadow-inset-top':   'inset 0 1px 0 rgba(255,252,247,0.95)',
+      '--icon-shadow-inset-btm':   'inset 0 -1px 0 rgba(200,170,140,0.06)',
+      '--icon-deco':               '#F5D0A9',
+
+      '--deco-primary':            '#F5D0A9',
+      '--deco-secondary':          '#FFF5E6',
+      '--texture-dot':             'rgba(200,170,140,0.06)',
+
+      '--dock-bg':                 'rgba(255,249,240,0.88)',
+      '--capsule-bg':              'rgba(255,249,240,0.85)',
+
+      '--border-color':            'rgba(210,185,160,0.15)',
+    }
+  },
+
+  // ==========================================
+  // 3. 芋泥椰奶冻 — 紫色系
   // 紫雾感、奶甜、轻盈
   // 参考：主色=#D5CFEC 辅助浅紫=#EDECFA 页面浅底=#F8F6FB 强调紫=#CAB7E3
   // ==========================================
@@ -333,7 +396,68 @@ const THEME_PRESETS = {
   },
 
   // ==========================================
-  // 6. 夜咖色 — 深咖夜底，不做死黑
+  // 7. 夜蜂蜜 — 暖棕灰夜底，不做死黑
+  // 参考：主色=#D4B896 辅助暖棕=#7A6555 深底=#2B2621 奶黄强调=#F5E6D0
+  // ==========================================
+  'night-honey': {
+    label: '夜蜂蜜',
+    mode: 'dark',
+    swatch: '#D4B896',
+    colors: {
+      '--bg-base':                 '#2B2621',
+      '--bg-surface':              '#352F28',
+      '--bg-hover':                '#403931',
+      '--bg-glass':                'rgba(43,38,33,0.92)',
+      '--bg-mask':                 'rgba(10,8,5,0.40)',
+
+      '--color-primary':           '#D4B896',
+      '--color-primary-light':     '#7A6555',
+      '--color-primary-ultralight':'#4A3F35',
+      '--color-primary-deep':      '#ECD8BC',
+
+      '--color-accent':            '#F5E6D0',
+      '--color-accent-light':      '#FAF0E3',
+
+      '--text-primary':            '#E8DDD0',
+      '--text-secondary':          '#B8A894',
+      '--text-placeholder':        '#7A6C5C',
+
+      '--shadow-soft':             '0 2px 8px rgba(10,8,5,0.30)',
+      '--shadow-card':             '0 4px 16px rgba(10,8,5,0.40)',
+      '--shadow-float':            '0 8px 24px rgba(10,8,5,0.50)',
+      '--shadow-neu-out':          '4px 4px 10px rgba(10,8,5,0.35), -4px -4px 10px rgba(53,47,40,0.5)',
+      '--shadow-neu-in':           'inset 2px 2px 6px rgba(10,8,5,0.30), inset -2px -2px 6px rgba(53,47,40,0.4)',
+
+      '--color-success':           '#7AAC78',
+      '--color-warning':           '#C8B878',
+      '--color-error':             '#C89090',
+      '--color-info':              '#90A8C8',
+
+      // 图标（深棕底 + 蜂蜜线稿）
+      '--icon-stroke':             '#D4B896',
+      '--icon-tile-bg':            '#4A3F35',
+      '--icon-tile-pattern':       '#5A4F45',
+      '--icon-stitch':             '#D4B896',
+      '--icon-inner':              '#3D3530',
+      '--icon-shadow':             '0 3px 10px rgba(10,8,5,0.35)',
+      '--icon-shadow-near':        '0 1px 3px rgba(10,8,5,0.25)',
+      '--icon-shadow-inset-top':   'inset 0 1px 0 rgba(74,63,53,0.6)',
+      '--icon-shadow-inset-btm':   'inset 0 -1px 0 rgba(10,8,5,0.20)',
+      '--icon-deco':               '#D4B896',
+
+      '--deco-primary':            '#D4B896',
+      '--deco-secondary':          '#7A6555',
+      '--texture-dot':             'rgba(212,184,150,0.04)',
+
+      '--dock-bg':                 'rgba(43,38,33,0.92)',
+      '--capsule-bg':              'rgba(43,38,33,0.88)',
+
+      '--border-color':            'rgba(212,184,150,0.08)',
+    }
+  },
+
+  // ==========================================
+  // 8. 夜咖色 — 深咖夜底，不做死黑
   // 参考：主色=#B7927C 辅助深咖=#6E5146 深底=#241C19 奶咖强调=#EED8C8
   // ==========================================
   'night-coffee': {

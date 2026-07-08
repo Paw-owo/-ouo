@@ -13,6 +13,7 @@ const KEY_TO_STORAGE = {
   theme:                STORAGE_KEYS.THEME,
   themeMode:            STORAGE_KEYS.THEME_MODE,
   iconSize:             STORAGE_KEYS.ICON_SIZE_MODE,
+  fontSize:             STORAGE_KEYS.FONT_SIZE,
   desktopLayout:        'desktop_layout',
   dockVisible:          'dock_visible',
   pageIndicator:        'page_indicator',

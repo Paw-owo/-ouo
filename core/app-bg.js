@@ -12,10 +12,46 @@ import { getCurrentPreset } from './theme.js';
 // 背景类型
 const BG_TYPE = Object.freeze({
   THEME_DEFAULT: 'theme_default',
+  PRESET:        'preset',
   CUSTOM_URL:    'custom_url',
+  CUSTOM_UPLOAD: 'custom_upload',
   CUSTOM_COLOR:  'custom_color',
   CUSTOM_GRADIENT: 'custom_gradient'
 });
+
+// 预设壁纸（CSS 渐变，即时预览，不依赖外部图片）
+const WALLPAPER_PRESETS = Object.freeze([
+  {
+    id: 'mist-pink',
+    label: '柔雾粉彩',
+    value: 'linear-gradient(135deg, #FFF4F5 0%, #FDE8F0 50%, #E2F3FF 100%)'
+  },
+  {
+    id: 'cream-cloud',
+    label: '奶油云朵',
+    value: 'linear-gradient(135deg, #FFF9F0 0%, #FDF3E6 50%, #FFFAF2 100%)'
+  },
+  {
+    id: 'taro-milk',
+    label: '芋泥奶盖',
+    value: 'linear-gradient(135deg, #F8F6FB 0%, #F2EFF7 50%, #E5E0F4 100%)'
+  },
+  {
+    id: 'sky-breeze',
+    label: '海风浅蓝',
+    value: 'linear-gradient(135deg, #EDDFD4 0%, #E1EFF4 50%, #F0F6FA 100%)'
+  },
+  {
+    id: 'honey-dream',
+    label: '蜂蜜甜梦',
+    value: 'linear-gradient(135deg, #FFF9F0 0%, #FDE8D0 50%, #F9E4CA 100%)'
+  },
+  {
+    id: 'berry-soft',
+    label: '莓莓软糖',
+    value: 'radial-gradient(circle at 80% 20%, rgba(250,199,218,0.35) 0%, transparent 40%), radial-gradient(circle at 20% 80%, rgba(226,243,255,0.45) 0%, transparent 45%), linear-gradient(135deg, #FFF4F5 0%, #F9EEF0 100%)'
+  }
+]);
 
 // 背景作用域
 const BG_SCOPE = Object.freeze({
@@ -45,9 +81,10 @@ let _appBgOverrides = new Map();
 function _getThemeDefaultBg() {
   const preset = getCurrentPreset();
   if (preset && preset.colors) {
-    return preset.colors['--bg-primary'] || preset.colors['--bg-deep'] || '#f5f0e8';
+    return preset.colors['--bg-base'] || '#f5f0e8';
   }
-  return '#f5f0e8';
+  const fallback = getComputedStyle(document.documentElement).getPropertyValue('--bg-base').trim();
+  return fallback || '#f5f0e8';
 }
 
 // 计算CSS背景值
@@ -55,12 +92,18 @@ function _computeBgValue(type, value) {
   switch (type) {
     case BG_TYPE.THEME_DEFAULT:
       return _getThemeDefaultBg();
+    case BG_TYPE.PRESET: {
+      const preset = WALLPAPER_PRESETS.find(p => p.id === value);
+      return preset ? preset.value : _getThemeDefaultBg();
+    }
     case BG_TYPE.CUSTOM_URL:
-      return `url("${value}") center / cover no-repeat`;
+      return value ? `url("${value}") center / cover no-repeat` : _getThemeDefaultBg();
+    case BG_TYPE.CUSTOM_UPLOAD:
+      return value ? `url("${value}") center / cover no-repeat` : _getThemeDefaultBg();
     case BG_TYPE.CUSTOM_COLOR:
-      return value;
+      return value || _getThemeDefaultBg();
     case BG_TYPE.CUSTOM_GRADIENT:
-      return value;
+      return value || _getThemeDefaultBg();
     default:
       return _getThemeDefaultBg();
   }
@@ -234,6 +277,7 @@ events.on('theme:changed', () => {
 export {
   BG_TYPE,
   BG_SCOPE,
+  WALLPAPER_PRESETS,
   initBackgrounds,
   getBackground,
   getBackgroundCSS,

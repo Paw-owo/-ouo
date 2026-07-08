@@ -6,10 +6,11 @@
 const DEFAULT_SETTINGS = Object.freeze({
   // 外观
   theme: 'berry-cloud',
-  themeMode: 'manual', // 'manual' | 'auto'
+  themeMode: 'light', // 'light' | 'dark' | 'auto'
 
   // 桌面
   iconSize: 'standard', // 'standard' | 'large'
+  fontSize: 'normal', // 'small' | 'normal' | 'large'
   desktopLayout: 'compact', // 'compact' | 'comfortable'
   dockVisible: true,
   pageIndicator: true,

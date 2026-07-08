@@ -22,6 +22,7 @@ const STORAGE_KEYS = Object.freeze({
   DESKTOP_FOLDERS:    'desktop_folders',
   DESKTOP_WIDGETS:    'desktop_widgets',
   ICON_SIZE_MODE:     'icon_size_mode',
+  FONT_SIZE:          'font_size',
   DESKTOP_NOTICE_STYLE: 'desktop_notice_style',
 
   // === 锁屏 ===
