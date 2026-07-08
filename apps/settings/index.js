@@ -51,18 +51,18 @@ function _injectStyles() {
       border: 1px solid var(--border-color);
       border-radius: var(--radius-full);
       padding: 12px 16px;
-      box-shadow: var(--shadow-soft);
+      box-shadow: var(--shadow-soft), inset 0 1px 0 rgba(255,255,255,0.5);
       transition: transform var(--duration-fast) var(--ease-soft),
                   box-shadow var(--duration-fast) var(--ease-smooth);
       cursor: pointer; user-select: none;
     }
     .st-capsule:active { transform: scale(0.97); box-shadow: var(--shadow-neu-in); }
     .st-capsule-icon {
-      width: 34px; height: 34px; border-radius: 50%; flex-shrink: 0;
-      background: var(--color-primary-ultralight);
+      width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0;
+      background: linear-gradient(135deg, var(--color-primary-ultralight), var(--color-primary-light));
       color: var(--color-primary-deep);
       display: flex; align-items: center; justify-content: center;
-      box-shadow: var(--shadow-neu-out);
+      box-shadow: var(--shadow-neu-out), inset 0 1px 0 rgba(255,255,255,0.6);
     }
     .st-capsule-icon svg { width: 18px; height: 18px; }
     .st-capsule-body { flex: 1; display: flex; flex-direction: column; gap: 1px; min-width: 0; }
@@ -82,19 +82,32 @@ function _injectStyles() {
     .st-collapse-inner { padding: 4px 4px 6px; display: flex; flex-direction: column; gap: 8px; }
 
     /* ====== 主题小色卡 ====== */
-    .st-theme-row { display: flex; gap: 10px; overflow-x: auto; padding: 4px 0 2px; -webkit-overflow-scrolling: touch; scroll-snap-type: x mandatory; }
+    .st-theme-row { display: flex; gap: 12px; overflow-x: auto; padding: 4px 0 6px; -webkit-overflow-scrolling: touch; scroll-snap-type: x mandatory; }
     .st-theme-chip {
-      flex-shrink: 0; width: 64px; scroll-snap-align: start;
+      flex-shrink: 0; width: 88px; scroll-snap-align: start;
       display: flex; flex-direction: column; align-items: center; gap: 6px;
-      padding: 8px 4px; border-radius: var(--radius-lg);
+      padding: 8px 6px 10px; border-radius: var(--radius-lg);
       border: 1.5px solid transparent; background: transparent;
       transition: all var(--duration-fast) var(--ease-soft);
     }
-    .st-theme-chip:active { transform: scale(0.92); }
-    .st-theme-chip.active { border-color: var(--color-primary); background: var(--color-primary-ultralight); }
-    .st-theme-dot { width: 36px; height: 36px; border-radius: 50%; border: 2px solid var(--bg-base); box-shadow: var(--shadow-soft); }
-    .st-theme-label { font-size: 0.66rem; color: var(--text-secondary); text-align: center; line-height: 1.1; max-width: 58px; }
-    .st-theme-chip.active .st-theme-label { color: var(--text-primary); font-weight: 600; }
+    .st-theme-chip:active { transform: scale(0.94); }
+    .st-theme-chip.active { border-color: var(--color-primary); background: var(--color-primary-ultralight); box-shadow: 0 0 0 3px var(--color-primary-ultralight), var(--shadow-soft); }
+    .st-theme-card {
+      width: 72px; height: 56px; border-radius: var(--radius-md);
+      border: 2px solid var(--bg-base);
+      box-shadow: var(--shadow-soft), inset 0 1px 0 rgba(255,255,255,0.6);
+      position: relative; overflow: hidden;
+    }
+    .st-theme-card::after {
+      content: ''; position: absolute; inset: 0;
+      background: linear-gradient(160deg, rgba(255,255,255,0.32), transparent 50%);
+      pointer-events: none;
+    }
+    .st-theme-meta { display: flex; flex-direction: column; align-items: center; gap: 1px; }
+    .st-theme-label { font-size: 0.72rem; font-weight: 600; color: var(--text-secondary); text-align: center; line-height: 1.1; max-width: 76px; }
+    .st-theme-chip.active .st-theme-label { color: var(--text-primary); }
+    .st-theme-sub { font-size: 0.6rem; color: var(--text-placeholder); letter-spacing: 0.04em; }
+    .st-theme-chip.active .st-theme-sub { color: var(--color-primary-deep); }
 
     /* ====== 开关 ====== */
     .st-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
@@ -130,9 +143,10 @@ function _injectStyles() {
     .st-status.err { color: var(--color-error); }
 
     /* ====== 壁纸类型小段 ====== */
-    .st-seg { display: flex; gap: 6px; background: var(--bg-base); border-radius: var(--radius-full); padding: 3px; }
-    .st-seg-btn { flex: 1; padding: 8px 4px; border: none; background: transparent; border-radius: var(--radius-full); font-size: 0.76rem; color: var(--text-secondary); cursor: pointer; font-family: var(--font-family); transition: all var(--duration-fast) var(--ease-smooth); }
-    .st-seg-btn.active { background: var(--bg-surface); color: var(--color-primary); box-shadow: var(--shadow-soft); font-weight: 600; }
+    .st-seg { display: flex; gap: 4px; background: var(--color-primary-ultralight); border-radius: var(--radius-full); padding: 4px; box-shadow: var(--shadow-neu-in); }
+    .st-seg-btn { flex: 1; padding: 9px 4px; border: none; background: transparent; border-radius: var(--radius-full); font-size: 0.76rem; color: var(--color-primary-deep); cursor: pointer; font-family: var(--font-family); font-weight: 500; transition: all var(--duration-fast) var(--ease-smooth); }
+    .st-seg-btn:active { transform: scale(0.96); }
+    .st-seg-btn.active { background: linear-gradient(135deg, var(--color-primary), var(--color-primary-deep)); color: var(--bg-base); box-shadow: 0 2px 8px var(--color-primary-light), inset 0 1px 0 rgba(255,255,255,0.4); font-weight: 600; }
 
     /* ====== API 子页 ====== */
     .st-subpage { position: absolute; inset: 0; background: var(--bg-base); display: flex; flex-direction: column; z-index: 30; transform: translateX(100%); transition: transform var(--duration-normal) var(--ease-soft); }
@@ -180,8 +194,11 @@ function _renderThemeSection() {
 
   const chips = themes.map(t => `
     <div class="st-theme-chip${t.id === current ? ' active' : ''}" data-theme="${t.id}">
-      <div class="st-theme-dot" style="background:${_swatch(t.id)};"></div>
-      <span class="st-theme-label">${t.label}</span>
+      <div class="st-theme-card" style="background:${_swatch(t.id)};"></div>
+      <div class="st-theme-meta">
+        <span class="st-theme-label">${t.label}</span>
+        <span class="st-theme-sub">${t.mode === 'dark' ? '夜间·奶霜' : '日间·软糖'}</span>
+      </div>
     </div>
   `).join('');
 

@@ -802,7 +802,7 @@
 
 .dock-area {
   flex-shrink: 0;
-  padding: clamp(6px, 1.6vw, 10px) 16px 16px;
+  padding: clamp(8px, 2vw, 12px) 16px clamp(14px, 3vw, 18px);
   display: flex;
   justify-content: center;
 }
@@ -811,9 +811,9 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: clamp(6px, 1.6vw, 10px);
-  padding: clamp(8px, 2.2vw, 12px) clamp(14px, 4vw, 22px);
-  border-radius: clamp(24px, 6vw, 32px);
+  gap: clamp(8px, 2vw, 14px);
+  padding: clamp(12px, 3vw, 18px) clamp(18px, 5vw, 28px);
+  border-radius: clamp(28px, 7vw, 38px);
   background: var(--dock-bg);
   backdrop-filter: var(--backdrop-blur);
   -webkit-backdrop-filter: var(--backdrop-blur);
@@ -822,8 +822,8 @@
 }
 
 .dock-item {
-  width: clamp(48px, 13vw, 58px);
-  height: clamp(48px, 13vw, 58px);
+  width: clamp(58px, 15vw, 72px);
+  height: clamp(58px, 15vw, 72px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -838,10 +838,10 @@
 }
 
 .dock-item .dock-icon-chassis {
-  width: clamp(40px, 11vw, 50px);
-  height: clamp(40px, 11vw, 50px);
-  border-radius: clamp(14px, 3.8vw, 20px);
-  padding: clamp(4px, 1.1vw, 6px);
+  width: clamp(50px, 13vw, 62px);
+  height: clamp(50px, 13vw, 62px);
+  border-radius: clamp(16px, 4.2vw, 22px);
+  padding: clamp(5px, 1.3vw, 7px);
   background:
     linear-gradient(135deg, rgba(255,255,255,0.42), rgba(255,255,255,0.14)),
     conic-gradient(
@@ -862,9 +862,9 @@
 .dock-item .dock-icon-chassis::before {
   content: '';
   position: absolute;
-  inset: clamp(4px, 1.1vw, 5px);
+  inset: clamp(5px, 1.3vw, 6px);
   border: 1.5px dashed var(--icon-stitch);
-  border-radius: clamp(10px, 2.8vw, 15px);
+  border-radius: clamp(12px, 3.2vw, 17px);
   pointer-events: none;
   opacity: 0.18;
 }
@@ -872,11 +872,11 @@
 .dock-item .dock-icon-chassis::after {
   content: '';
   position: absolute;
-  inset: clamp(8px, 2.2vw, 10px);
+  inset: clamp(10px, 2.6vw, 12px);
   background:
     linear-gradient(145deg, rgba(255,255,255,0.5), rgba(255,255,255,0.16)),
     var(--icon-inner);
-  border-radius: clamp(6px, 1.8vw, 10px);
+  border-radius: clamp(8px, 2.2vw, 12px);
   pointer-events: none;
 }
 
@@ -884,8 +884,8 @@
   position: absolute;
   inset: 0;
   margin: auto;
-  width: 58%;
-  height: 58%;
+  width: 60%;
+  height: 60%;
   z-index: 1;
   color: var(--icon-stroke);
   stroke-width: 2.5;
