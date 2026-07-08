@@ -842,10 +842,21 @@
   height: clamp(50px, 13vw, 62px);
   border-radius: clamp(16px, 4.2vw, 22px);
   padding: clamp(5px, 1.3vw, 7px);
-  background: var(--icon-tile-bg);
   position: relative;
-  box-shadow: var(--icon-shadow-near);
-  border: 1px solid var(--border-color);
+  background:
+    linear-gradient(135deg, rgba(255,255,255,0.42), rgba(255,255,255,0.14)),
+    conic-gradient(
+      from 180deg at 50% 50%,
+      var(--icon-inner) 0deg 90deg,
+      var(--icon-tile-bg) 90deg 180deg,
+      var(--color-primary-light) 180deg 270deg,
+      var(--color-accent-light) 270deg 360deg
+    );
+  box-shadow:
+    var(--icon-shadow),
+    var(--icon-shadow-near),
+    inset 0 1px 0 rgba(255,255,255,0.76);
+  border: 1px solid rgba(255,255,255,0.55);
   overflow: hidden;
 }
 
@@ -856,16 +867,19 @@
   border: 1.5px dashed var(--icon-stitch);
   border-radius: clamp(12px, 3.2vw, 17px);
   pointer-events: none;
-  opacity: 0.18;
+  opacity: 0.22;
 }
 
 .dock-item .dock-icon-chassis::after {
   content: '';
   position: absolute;
   inset: clamp(10px, 2.6vw, 12px);
-  background: var(--icon-inner);
   border-radius: clamp(8px, 2.2vw, 12px);
+  background:
+    linear-gradient(145deg, rgba(255,255,255,0.55), rgba(255,255,255,0.18)),
+    var(--icon-inner);
   pointer-events: none;
+  box-shadow: var(--icon-shadow-inset-top);
 }
 
 .dock-item .dock-icon-chassis svg {

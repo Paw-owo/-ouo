@@ -1,9 +1,10 @@
 // ============================================
 // settings/index.js — 设置 APP 入口
 // 导出 init(container) → 渲染设置页面 → 返回 destroy
-// 第一版：外观与主题 / 壁纸背景 / AI与接口
+// 布局：主页 = 分组入口列表，每个入口点进去是独立子页
+// 第一版真实可用入口：外观与主题 / AI与接口
 // 所有开关真实接 config / theme / app-bg 出口，不造假
-// 视觉：Soft Cozy Minimal — 小胶囊 + 折叠栏 + 果冻触感 + API独立子页
+// 视觉：Soft Cozy Minimal — 纯色 + 小胶囊 + 折叠栏 + 果冻触感 + 滑入子页
 // ============================================
 
 import { get, set, reset } from '../../core/config.js';
@@ -12,9 +13,8 @@ import { getAvailableThemes, switchTheme, getCurrentTheme } from '../../core/the
 import { BG_TYPE, BG_SCOPE, setBackground, resetBackground } from '../../core/app-bg.js';
 
 let _styleEl = null;
-let _root = null;       // 设置主页面
-let _apiPage = null;    // API 子页面
-let _apiDestroy = null;
+let _root = null;         // 设置主页面（入口列表）
+let _currentPage = null;  // 当前打开的子页
 
 // 线条风小图标（viewBox 24x24, stroke=currentColor）
 const ICONS = {
@@ -142,7 +142,7 @@ function _injectStyles() {
     .st-seg-btn:active { transform: scale(0.96); }
     .st-seg-btn.active { background: var(--color-primary); color: var(--bg-base); box-shadow: 0 2px 8px var(--color-primary-light); font-weight: 600; }
 
-    /* ====== API 子页 ====== */
+    /* ====== 通用子页（滑入） ====== */
     .st-subpage { position: absolute; inset: 0; background: var(--bg-base); display: flex; flex-direction: column; z-index: 30; transform: translateX(100%); transition: transform var(--duration-normal) var(--ease-soft); }
     .st-subpage.entered { transform: translateX(0); }
     .st-subpage-body { flex: 1; overflow-y: auto; padding: 0 14px max(20px, env(safe-area-inset-bottom)); }
@@ -159,7 +159,7 @@ function _injectStyles() {
 }
 
 // ============================================
-// 主页面渲染
+// 主页面渲染（入口列表）
 // ============================================
 function _render(container) {
   _root = document.createElement('div');
@@ -171,16 +171,121 @@ function _render(container) {
       <div class="app-header-action"></div>
     </div>
     <div class="st-scroll">
-      ${_renderThemeSection()}
-      ${_renderWallpaperSection()}
-      ${_renderApiEntrySection()}
+      ${_renderEntryList()}
     </div>
   `;
   container.appendChild(_root);
   _bindMainEvents();
 }
 
-// ---- 外观与主题 ----
+// ---- 主页入口列表 ----
+function _renderEntryList() {
+  // 外观入口 hint：当前主题名
+  const currentThemeId = getCurrentTheme() || get('theme') || 'berry-cloud';
+  const currentTheme = getAvailableThemes().find(t => t.id === currentThemeId);
+  const themeHint = currentTheme ? currentTheme.label : '未选择';
+
+  // AI入口 hint：API配置状态
+  const baseUrl = get('apiBaseUrl') || '';
+  const model = get('apiModel') || '';
+  const apiHint = baseUrl ? `${baseUrl}${model ? ' · ' + model : ''}` : '未配置';
+
+  return `
+    <div class="st-section">
+      <div class="st-section-head">
+        <div class="st-section-icon">${ICONS.palette}</div>
+        <span class="st-section-title">个性化</span>
+      </div>
+      <div class="st-capsule-group">
+        <div class="st-capsule" id="st-entry-appearance">
+          <div class="st-capsule-icon">${ICONS.palette}</div>
+          <div class="st-capsule-body">
+            <span class="st-capsule-name">外观与主题</span>
+            <span class="st-capsule-hint">${themeHint}</span>
+          </div>
+          <div class="st-capsule-arrow">${ICONS.chevron}</div>
+        </div>
+        <div class="st-capsule" id="st-entry-api">
+          <div class="st-capsule-icon">${ICONS.plug}</div>
+          <div class="st-capsule-body">
+            <span class="st-capsule-name">AI与接口</span>
+            <span class="st-capsule-hint">${apiHint}</span>
+          </div>
+          <div class="st-capsule-arrow">${ICONS.chevron}</div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// ============================================
+// 通用子页机制
+// ============================================
+function _openSubpage(key) {
+  const SUBPAGE_CONFIG = {
+    appearance: {
+      title: '外观与主题',
+      render: () => _renderThemeSection() + _renderWallpaperSection(),
+      bind: () => { _bindThemeEvents(); _bindWallpaperEvents(); }
+    },
+    api: {
+      title: 'AI与接口',
+      render: () => _renderApiContent(),
+      bind: () => _bindApiEvents()
+    }
+  };
+  const cfg = SUBPAGE_CONFIG[key];
+  if (!cfg) return;
+
+  _currentPage = document.createElement('div');
+  _currentPage.className = 'app-page st-page st-subpage';
+  _currentPage.innerHTML = `
+    <div class="app-header">
+      <button class="app-header-back" id="st-subpage-back" aria-label="返回">${ICONS.back}</button>
+      <span class="app-header-title">${cfg.title}</span>
+      <div class="app-header-action"></div>
+    </div>
+    <div class="st-subpage-body">
+      ${cfg.render()}
+    </div>
+  `;
+  _root.appendChild(_currentPage);
+  // 触发滑入动画
+  requestAnimationFrame(() => _currentPage.classList.add('entered'));
+  // 返回按钮
+  _currentPage.querySelector('#st-subpage-back').addEventListener('click', () => _closeSubpage());
+  // 内容事件
+  cfg.bind();
+}
+
+function _closeSubpage() {
+  if (!_currentPage) return;
+  _currentPage.classList.remove('entered');
+  setTimeout(() => {
+    if (_currentPage && _currentPage.parentNode) _currentPage.remove();
+    _currentPage = null;
+  }, 280);
+}
+
+// ============================================
+// 主页事件
+// ============================================
+function _bindMainEvents() {
+  // 返回
+  _root.querySelector('#settings-back-btn').addEventListener('click', () => {
+    events.emit('app:closed', { appId: 'settings' });
+  });
+
+  // 入口点击 → 打开子页
+  _root.querySelector('#st-entry-appearance')?.addEventListener('click', () => _openSubpage('appearance'));
+  _root.querySelector('#st-entry-api')?.addEventListener('click', () => _openSubpage('api'));
+}
+
+// ============================================
+// 外观子页：主题 + 壁纸
+// ============================================
+
+// ---- 主题区 ----
 function _renderThemeSection() {
   const themes = getAvailableThemes();
   const current = getCurrentTheme() || get('theme') || 'berry-cloud';
@@ -200,7 +305,7 @@ function _renderThemeSection() {
     <div class="st-section">
       <div class="st-section-head">
         <div class="st-section-icon">${ICONS.palette}</div>
-        <span class="st-section-title">外观与主题</span>
+        <span class="st-section-title">主题色</span>
       </div>
       <div class="st-theme-row">${chips}</div>
       <div class="st-capsule-group" style="margin-top:8px;">
@@ -222,7 +327,7 @@ function _swatch(id) {
   return `var(--swatch-${id}, var(--color-primary))`;
 }
 
-// ---- 壁纸与背景（折叠） ----
+// ---- 壁纸区（折叠） ----
 function _renderWallpaperSection() {
   const wallpaper = get('wallpaper');
   const sync = get('wallpaperSync');
@@ -298,54 +403,26 @@ function _renderWallpaperSection() {
   `;
 }
 
-// ---- AI与接口入口（胶囊，点开进子页） ----
-function _renderApiEntrySection() {
-  const baseUrl = get('apiBaseUrl') || '';
-  const hasKey = !!get('apiKey');
-  const model = get('apiModel') || '';
-  const hint = baseUrl ? `${baseUrl}${model ? ' · ' + model : ''}` : '未配置';
-
-  return `
-    <div class="st-section">
-      <div class="st-section-head">
-        <div class="st-section-icon">${ICONS.plug}</div>
-        <span class="st-section-title">AI与接口</span>
-      </div>
-      <div class="st-capsule-group">
-        <div class="st-capsule" id="st-api-entry">
-          <div class="st-capsule-icon">${ICONS.plug}</div>
-          <div class="st-capsule-body">
-            <span class="st-capsule-name">接口与模型</span>
-            <span class="st-capsule-hint">${hint}</span>
-          </div>
-          <div class="st-capsule-arrow">${ICONS.chevron}</div>
-        </div>
-      </div>
-    </div>
-  `;
-}
-
-// ============================================
-// 主页事件
-// ============================================
-function _bindMainEvents() {
-  // 返回
-  _root.querySelector('#settings-back-btn').addEventListener('click', () => {
-    events.emit('app:closed', { appId: 'settings' });
-  });
-
+// ---- 主题事件 ----
+function _bindThemeEvents() {
   // 主题色卡
-  _root.querySelectorAll('.st-theme-chip').forEach(chip => {
+  _currentPage.querySelectorAll('.st-theme-chip').forEach(chip => {
     chip.addEventListener('click', () => {
       const id = chip.dataset.theme;
       switchTheme(id);
-      _root.querySelectorAll('.st-theme-chip').forEach(c => c.classList.remove('active'));
+      _currentPage.querySelectorAll('.st-theme-chip').forEach(c => c.classList.remove('active'));
       chip.classList.add('active');
+      // 同步主页入口 hint
+      const entryHint = _root.querySelector('#st-entry-appearance .st-capsule-hint');
+      if (entryHint) {
+        const t = getAvailableThemes().find(t => t.id === id);
+        if (t) entryHint.textContent = t.label;
+      }
     });
   });
 
   // 跟随系统开关
-  const modeSwitch = _root.querySelector('#st-theme-mode-switch');
+  const modeSwitch = _currentPage.querySelector('#st-theme-mode-switch');
   if (modeSwitch) {
     modeSwitch.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -353,7 +430,7 @@ function _bindMainEvents() {
       const next = cur === 'auto' ? 'manual' : 'auto';
       set('themeMode', next);
       modeSwitch.classList.toggle('on', next === 'auto');
-      const row = _root.querySelector('#st-theme-mode-row');
+      const row = _currentPage.querySelector('#st-theme-mode-row');
       const icon = row.querySelector('.st-capsule-icon');
       icon.innerHTML = next === 'auto' ? ICONS.sun : ICONS.moon;
       row.querySelector('.st-capsule-hint').textContent = next === 'auto' ? '已开启' : '关闭';
@@ -368,17 +445,20 @@ function _bindMainEvents() {
             const target = themes.find(t => t.mode === targetMode);
             if (target) {
               switchTheme(target.id);
-              _root.querySelectorAll('.st-theme-chip').forEach(c => c.classList.toggle('active', c.dataset.theme === target.id));
+              _currentPage.querySelectorAll('.st-theme-chip').forEach(c => c.classList.toggle('active', c.dataset.theme === target.id));
             }
           }
         }
       }
     });
   }
+}
 
+// ---- 壁纸区事件 ----
+function _bindWallpaperEvents() {
   // 壁纸折叠
-  const wpToggle = _root.querySelector('#st-wp-toggle');
-  const wpCollapse = _root.querySelector('#st-wp-collapse');
+  const wpToggle = _currentPage.querySelector('#st-wp-toggle');
+  const wpCollapse = _currentPage.querySelector('#st-wp-collapse');
   if (wpToggle && wpCollapse) {
     wpToggle.addEventListener('click', () => {
       const open = wpCollapse.classList.toggle('open');
@@ -386,26 +466,14 @@ function _bindMainEvents() {
     });
   }
 
-  // 壁纸区交互
-  _bindWallpaperEvents();
-
-  // API 子页入口
-  const apiEntry = _root.querySelector('#st-api-entry');
-  if (apiEntry) {
-    apiEntry.addEventListener('click', () => _openApiSubpage());
-  }
-}
-
-// ---- 壁纸区事件 ----
-function _bindWallpaperEvents() {
   // 类型切换
-  _root.querySelectorAll('.st-seg-btn').forEach(btn => {
+  _currentPage.querySelectorAll('.st-seg-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       const type = btn.dataset.bgType;
-      _root.querySelectorAll('.st-seg-btn').forEach(b => b.classList.remove('active'));
+      _currentPage.querySelectorAll('.st-seg-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
-      const urlInput = _root.querySelector('#st-wp-url');
-      const colorInput = _root.querySelector('#st-wp-color');
+      const urlInput = _currentPage.querySelector('#st-wp-url');
+      const colorInput = _currentPage.querySelector('#st-wp-color');
       let value = null;
       if (type === BG_TYPE.CUSTOM_URL && urlInput) value = urlInput.value.trim() || null;
       if (type === BG_TYPE.CUSTOM_COLOR && colorInput) value = colorInput.value.trim() || null;
@@ -416,10 +484,10 @@ function _bindWallpaperEvents() {
   });
 
   // URL 预览
-  const urlInput = _root.querySelector('#st-wp-url');
+  const urlInput = _currentPage.querySelector('#st-wp-url');
   if (urlInput) {
     urlInput.addEventListener('input', () => {
-      const preview = _root.querySelector('#st-wp-preview');
+      const preview = _currentPage.querySelector('#st-wp-preview');
       const val = urlInput.value.trim();
       if (preview) {
         if (val) { preview.style.backgroundImage = `url('${val}')`; preview.textContent = ''; }
@@ -435,10 +503,10 @@ function _bindWallpaperEvents() {
   }
 
   // 纯色
-  const colorInput = _root.querySelector('#st-wp-color');
+  const colorInput = _currentPage.querySelector('#st-wp-color');
   if (colorInput) {
     colorInput.addEventListener('input', () => {
-      const preview = _root.querySelector('#st-wp-preview');
+      const preview = _currentPage.querySelector('#st-wp-preview');
       const val = colorInput.value.trim();
       if (preview) {
         preview.style.background = val || '';
@@ -454,7 +522,7 @@ function _bindWallpaperEvents() {
   }
 
   // 同步开关
-  const syncSwitch = _root.querySelector('#st-wp-sync');
+  const syncSwitch = _currentPage.querySelector('#st-wp-sync');
   if (syncSwitch) {
     syncSwitch.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -470,7 +538,7 @@ function _bindWallpaperEvents() {
   }
 
   // 锁屏壁纸
-  const lockInput = _root.querySelector('#st-wp-lock');
+  const lockInput = _currentPage.querySelector('#st-wp-lock');
   if (lockInput) {
     lockInput.addEventListener('blur', () => {
       const val = lockInput.value.trim() || null;
@@ -480,7 +548,7 @@ function _bindWallpaperEvents() {
   }
 
   // 模糊
-  const blurInput = _root.querySelector('#st-wp-blur');
+  const blurInput = _currentPage.querySelector('#st-wp-blur');
   if (blurInput) {
     blurInput.addEventListener('blur', () => {
       let v = parseInt(blurInput.value, 10);
@@ -496,14 +564,14 @@ function _bindWallpaperEvents() {
 
 // 局部刷新壁纸区（保持折叠展开状态）
 function _rerenderWallpaper() {
-  const oldSection = Array.from(_root.querySelectorAll('.st-section')).find(s => {
+  const oldSection = Array.from(_currentPage.querySelectorAll('.st-section')).find(s => {
     const t = s.querySelector('.st-section-title');
     return t && t.textContent.includes('壁纸');
   });
   if (!oldSection) return;
   const wasOpen = oldSection.querySelector('.st-collapse')?.classList.contains('open');
   oldSection.outerHTML = _renderWallpaperSection().trim();
-  const newSection = Array.from(_root.querySelectorAll('.st-section')).find(s => {
+  const newSection = Array.from(_currentPage.querySelectorAll('.st-section')).find(s => {
     const t = s.querySelector('.st-section-title');
     return t && t.textContent.includes('壁纸');
   });
@@ -511,11 +579,12 @@ function _rerenderWallpaper() {
     newSection.querySelector('.st-collapse').classList.add('open');
     newSection.querySelector('#st-wp-toggle').classList.add('expanded');
   }
+  // 重新绑定壁纸区事件（outerHTML 替换后旧事件丢失）
   _bindWallpaperEvents();
 }
 
 function _updateWpHint() {
-  const hint = _root.querySelector('#st-wp-toggle .st-capsule-hint');
+  const hint = _currentPage.querySelector('#st-wp-toggle .st-capsule-hint');
   if (!hint) return;
   const wp = get('wallpaper');
   if (!wp || wp.type === BG_TYPE.THEME_DEFAULT) hint.textContent = '主题默认';
@@ -523,27 +592,8 @@ function _updateWpHint() {
 }
 
 // ============================================
-// API 子页
+// AI子页：API配置
 // ============================================
-function _openApiSubpage() {
-  _apiPage = document.createElement('div');
-  _apiPage.className = 'app-page st-page st-subpage';
-  _apiPage.innerHTML = `
-    <div class="app-header">
-      <button class="app-header-back" id="st-api-back" aria-label="返回">${ICONS.back}</button>
-      <span class="app-header-title">接口与模型</span>
-      <div class="app-header-action"></div>
-    </div>
-    <div class="st-subpage-body">
-      ${_renderApiContent()}
-    </div>
-  `;
-  _root.appendChild(_apiPage);
-  // 触发滑入动画
-  requestAnimationFrame(() => _apiPage.classList.add('entered'));
-  _bindApiEvents();
-}
-
 function _renderApiContent() {
   const savedKey = get('apiKey') || '';
   const cfg = { baseUrl: get('apiBaseUrl') || '', model: get('apiModel') || '' };
@@ -594,17 +644,14 @@ function _renderApiContent() {
 }
 
 function _bindApiEvents() {
-  // 返回
-  _apiPage.querySelector('#st-api-back').addEventListener('click', () => _closeApiSubpage());
-
-  const saveBtn = _apiPage.querySelector('#st-api-save');
-  const testBtn = _apiPage.querySelector('#st-api-test');
-  const statusEl = _apiPage.querySelector('#st-api-status');
-  const urlInput = _apiPage.querySelector('#st-api-url');
-  const keyInput = _apiPage.querySelector('#st-api-key');
-  const modelInput = _apiPage.querySelector('#st-api-model');
-  const keyStatusEl = _apiPage.querySelector('#st-key-status');
-  const clearBtn = _apiPage.querySelector('#st-key-clear-btn');
+  const saveBtn = _currentPage.querySelector('#st-api-save');
+  const testBtn = _currentPage.querySelector('#st-api-test');
+  const statusEl = _currentPage.querySelector('#st-api-status');
+  const urlInput = _currentPage.querySelector('#st-api-url');
+  const keyInput = _currentPage.querySelector('#st-api-key');
+  const modelInput = _currentPage.querySelector('#st-api-model');
+  const keyStatusEl = _currentPage.querySelector('#st-key-status');
+  const clearBtn = _currentPage.querySelector('#st-key-clear-btn');
 
   let _clearRequested = false;
 
@@ -726,8 +773,8 @@ function _bindApiEvents() {
       statusEl.className = 'st-status ok';
       if (!apiKey && clearBtn) clearBtn.style.display = 'none';
 
-      // 同步主页 hint
-      const mainHint = _root.querySelector('#st-api-entry .st-capsule-hint');
+      // 同步主页入口 hint
+      const mainHint = _root.querySelector('#st-entry-api .st-capsule-hint');
       if (mainHint) mainHint.textContent = baseUrl ? `${baseUrl}${model ? ' · ' + model : ''}` : '未配置';
 
       setTimeout(() => { saveBtn.textContent = '保存配置'; saveBtn.classList.remove('saved'); }, 1800);
@@ -737,15 +784,6 @@ function _bindApiEvents() {
       console.error('[Settings] 保存失败:', err);
     }
   });
-}
-
-function _closeApiSubpage() {
-  if (!_apiPage) return;
-  _apiPage.classList.remove('entered');
-  setTimeout(() => {
-    if (_apiPage && _apiPage.parentNode) _apiPage.remove();
-    _apiPage = null;
-  }, 280);
 }
 
 // ============================================
@@ -762,7 +800,7 @@ function _destroy() {
   const el = document.getElementById('settings-app-styles');
   if (el) el.remove();
   _root = null;
-  _apiPage = null;
+  _currentPage = null;
 }
 
 function init(container) {
