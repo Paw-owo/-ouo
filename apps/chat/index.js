@@ -1,10 +1,11 @@
 // ============================================
 // chat/index.js — 聊天 APP 入口
 // 导出 init(container) → 渲染聊天界面 → 返回 destroy
-// 最小可用：用户发一句 → AI 回一句
+// 核心链路：输入 → 读 api_groups → 调 js/ai/ai-client.js → 流式/普通回复 → 持久化
 // ============================================
 
-import { sendChat } from '../../core/ai-client.js';
+import { sendChat } from '../../js/ai/ai-client.js';
+import { getMessages, saveMessage, getCurrentCharacter } from '../../core/storage.js';
 import events from '../../core/events.js';
 
 let _styleEl = null;
@@ -37,6 +38,7 @@ function _injectStyles() {
     .chat-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--text-placeholder); gap: 8px; padding: 24px; text-align: center; }
     .chat-empty svg { width: 48px; height: 48px; opacity: 0.35; }
     .chat-empty-text { font-size: 0.9rem; }
+    .chat-error-hint { align-self: center; color: var(--color-error); font-size: 0.75rem; text-align: center; padding: 4px 12px; }
   `;
   document.head.appendChild(_styleEl);
 }
@@ -78,6 +80,9 @@ function _bindEvents(page) {
   const messagesEl = page.querySelector('#chat-messages');
   const emptyEl = page.querySelector('#chat-empty');
 
+  const characterId = getCurrentCharacter() || 'default';
+  const conversationId = 'default';
+  const _messages = [];
   let _sending = false;
 
   backBtn.addEventListener('click', () => {
@@ -88,11 +93,17 @@ function _bindEvents(page) {
     if (emptyEl) emptyEl.style.display = 'none';
   }
 
-  function _addMessage(role, text, extraClass) {
+  function _scrollToBottom() {
+    requestAnimationFrame(() => {
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    });
+  }
+
+  function _renderMessage(msg) {
     _hideEmpty();
     const div = document.createElement('div');
-    div.className = `chat-msg ${role}${extraClass ? ' ' + extraClass : ''}`;
-    div.textContent = text;
+    div.className = `chat-msg ${msg.role}${msg.degraded ? ' fallback' : ''}`;
+    div.textContent = msg.content;
     messagesEl.appendChild(div);
     _scrollToBottom();
     return div;
@@ -114,10 +125,31 @@ function _bindEvents(page) {
     if (el) el.remove();
   }
 
-  function _scrollToBottom() {
-    requestAnimationFrame(() => {
-      messagesEl.scrollTop = messagesEl.scrollHeight;
-    });
+  function _genId() {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+      return crypto.randomUUID();
+    }
+    return `chat-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  }
+
+  function _buildHistory(excludeId = null) {
+    return _messages
+      .filter(m => (m.role === 'user' || m.role === 'ai') && m.id !== excludeId)
+      .map(m => ({ role: m.role === 'ai' ? 'assistant' : 'user', content: m.content }));
+  }
+
+  async function _loadMessages() {
+    try {
+      const stored = await getMessages(characterId, conversationId);
+      if (!stored || stored.length === 0) return;
+      _hideEmpty();
+      for (const msg of stored) {
+        _messages.push(msg);
+        _renderMessage(msg);
+      }
+    } catch (err) {
+      console.error('[Chat] 加载历史消息失败:', err.message);
+    }
   }
 
   async function _doSend() {
@@ -130,35 +162,79 @@ function _bindEvents(page) {
     inputEl.disabled = true;
     inputEl.value = '';
 
-    // 显示用户消息
-    _addMessage('user', text);
+    // 保存并显示用户消息
+    const userMsg = {
+      id: _genId(),
+      characterId,
+      conversationId,
+      role: 'user',
+      content: text,
+      timestamp: Date.now()
+    };
+    _messages.push(userMsg);
+    try { await saveMessage(userMsg); } catch (err) { console.error('[Chat] 保存用户消息失败:', err.message); }
+    _renderMessage(userMsg);
 
-    // 显示 typing 动画
+    // 准备 AI 回复占位
+    const aiMsg = {
+      id: _genId(),
+      characterId,
+      conversationId,
+      role: 'ai',
+      content: '',
+      timestamp: Date.now(),
+      degraded: false
+    };
+    let aiDiv = null;
+
     _addTyping();
 
     try {
-      const result = await sendChat([{ role: 'user', content: text }]);
+      const history = _buildHistory(userMsg.id);
+      const result = await sendChat({
+        appId: 'chat',
+        userMessage: text,
+        history,
+        onChunk: (chunk) => {
+          if (!aiDiv) {
+            _removeTyping();
+            aiDiv = _renderMessage(aiMsg);
+          }
+          aiMsg.content += chunk;
+          aiDiv.textContent = aiMsg.content;
+          _scrollToBottom();
+        }
+      });
+
       _removeTyping();
 
-      if (result.ok && result.content && result.content.trim()) {
-        _addMessage('ai', result.content);
-      } else if (result.ok) {
-        // 响应结构异常（choices/message 缺失导致空内容）
-        _addMessage('ai', '唔…收到的回复好像不太对，再试一次吧~', 'fallback');
+      if (!aiDiv) {
+        aiMsg.content = result.text || '';
+        aiMsg.degraded = !!result.degraded;
+        aiDiv = _renderMessage(aiMsg);
       } else {
-        // 根据 reason 给出更具体的提示
-        let hint;
-        if (result.reason === 'api_not_configured') {
-          hint = '还没配置 API 呢，去设置里填一下就好啦~';
-        } else {
-          hint = result.content; // 使用 ai-client 的 fallback 消息
-        }
-        _addMessage('ai', hint, 'fallback');
+        aiMsg.content = result.text || aiMsg.content;
+        aiMsg.degraded = !!result.degraded;
+        aiDiv.textContent = aiMsg.content;
+        if (aiMsg.degraded) aiDiv.classList.add('fallback');
       }
+
+      // 空回复兜底
+      if (!aiMsg.content.trim()) {
+        aiMsg.content = '唔…收到的回复好像不太对，再试一次吧~';
+        aiMsg.degraded = true;
+        aiDiv.textContent = aiMsg.content;
+        aiDiv.classList.add('fallback');
+      }
+
+      try { await saveMessage(aiMsg); } catch (err) { console.error('[Chat] 保存AI回复失败:', err.message); }
     } catch (err) {
       _removeTyping();
       console.error('[Chat] 发送异常:', err.message);
-      _addMessage('ai', '唔…出了点小问题，再试一次吧~', 'fallback');
+      aiMsg.content = '唔…出了点小问题，再试一次吧~';
+      aiMsg.degraded = true;
+      _renderMessage(aiMsg);
+      try { await saveMessage(aiMsg); } catch (e) { console.error('[Chat] 保存错误提示失败:', e.message); }
     }
 
     _sending = false;
@@ -174,6 +250,9 @@ function _bindEvents(page) {
       _doSend();
     }
   });
+
+  // 加载历史
+  _loadMessages();
 }
 
 function _destroy() {
