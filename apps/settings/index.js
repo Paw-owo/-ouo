@@ -121,6 +121,8 @@ function _injectStyles() {
     }
     .st-input:focus { outline: none; border-color: var(--color-primary); box-shadow: 0 0 0 3px var(--color-primary-ultralight); }
     .st-input::placeholder { color: var(--text-placeholder); }
+    .st-input-masked { -webkit-text-security: disc; text-security: disc; }
+    .st-input-masked::selection { -webkit-text-security: none; text-security: none; }
     .st-field { display: flex; flex-direction: column; gap: 5px; }
     .st-field-label { font-size: 0.8rem; font-weight: 600; color: var(--text-primary); }
     .st-field-hint { font-size: 0.7rem; color: var(--text-placeholder); }
@@ -642,7 +644,7 @@ function _renderApiContent() {
                 <button class="st-key-clear" id="st-key-toggle-visibility" type="button">显示</button>
               </div>
             </div>
-            <input class="st-input" id="st-api-key" type="password" placeholder="粘贴或输入 API Key" value="" autocomplete="off" spellcheck="false"/>
+            <input class="st-input st-input-masked" id="st-api-key" type="text" placeholder="粘贴或输入 API Key" value="" autocomplete="off" spellcheck="false" inputmode="text"/>
           </div>
         </div>
         <div class="st-capsule" id="st-api-model-toggle" style="cursor:default;">
@@ -682,9 +684,9 @@ function _bindApiEvents() {
   // ===== 密钥显示/隐藏切换 =====
   if (toggleVisibilityBtn) {
     toggleVisibilityBtn.addEventListener('click', () => {
-      const isPassword = keyInput.type === 'password';
-      keyInput.type = isPassword ? 'text' : 'password';
-      toggleVisibilityBtn.textContent = isPassword ? '隐藏' : '显示';
+      const isMasked = keyInput.classList.contains('st-input-masked');
+      keyInput.classList.toggle('st-input-masked', !isMasked);
+      toggleVisibilityBtn.textContent = isMasked ? '隐藏' : '显示';
     });
   }
 
