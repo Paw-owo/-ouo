@@ -51,7 +51,7 @@ function _injectStyles() {
       border: 1px solid var(--border-color);
       border-radius: var(--radius-full);
       padding: 12px 16px;
-      box-shadow: var(--shadow-soft), inset 0 1px 0 rgba(255,255,255,0.5);
+      box-shadow: var(--shadow-soft);
       transition: transform var(--duration-fast) var(--ease-soft),
                   box-shadow var(--duration-fast) var(--ease-smooth);
       cursor: pointer; user-select: none;
@@ -59,10 +59,10 @@ function _injectStyles() {
     .st-capsule:active { transform: scale(0.97); box-shadow: var(--shadow-neu-in); }
     .st-capsule-icon {
       width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0;
-      background: linear-gradient(135deg, var(--color-primary-ultralight), var(--color-primary-light));
+      background: var(--color-primary-ultralight);
       color: var(--color-primary-deep);
       display: flex; align-items: center; justify-content: center;
-      box-shadow: var(--shadow-neu-out), inset 0 1px 0 rgba(255,255,255,0.6);
+      box-shadow: var(--shadow-soft);
     }
     .st-capsule-icon svg { width: 18px; height: 18px; }
     .st-capsule-body { flex: 1; display: flex; flex-direction: column; gap: 1px; min-width: 0; }
@@ -91,17 +91,11 @@ function _injectStyles() {
       transition: all var(--duration-fast) var(--ease-soft);
     }
     .st-theme-chip:active { transform: scale(0.94); }
-    .st-theme-chip.active { border-color: var(--color-primary); background: var(--color-primary-ultralight); box-shadow: 0 0 0 3px var(--color-primary-ultralight), var(--shadow-soft); }
+    .st-theme-chip.active { border-color: var(--color-primary); background: var(--color-primary-ultralight); }
     .st-theme-card {
       width: 72px; height: 56px; border-radius: var(--radius-md);
       border: 2px solid var(--bg-base);
-      box-shadow: var(--shadow-soft), inset 0 1px 0 rgba(255,255,255,0.6);
-      position: relative; overflow: hidden;
-    }
-    .st-theme-card::after {
-      content: ''; position: absolute; inset: 0;
-      background: linear-gradient(160deg, rgba(255,255,255,0.32), transparent 50%);
-      pointer-events: none;
+      box-shadow: var(--shadow-soft);
     }
     .st-theme-meta { display: flex; flex-direction: column; align-items: center; gap: 1px; }
     .st-theme-label { font-size: 0.72rem; font-weight: 600; color: var(--text-secondary); text-align: center; line-height: 1.1; max-width: 76px; }
@@ -135,7 +129,7 @@ function _injectStyles() {
     /* ====== 按钮 ====== */
     .st-btn { width: 100%; padding: 13px; min-height: 46px; border: none; border-radius: var(--radius-full); font-size: 0.92rem; font-weight: 600; font-family: var(--font-family); cursor: pointer; transition: transform var(--duration-fast) var(--ease-soft); box-shadow: var(--shadow-soft); }
     .st-btn:active { transform: scale(0.97); }
-    .st-btn-primary { background: linear-gradient(135deg, var(--color-primary), var(--color-primary-deep)); color: var(--bg-base); box-shadow: 0 4px 14px var(--color-primary-light); }
+    .st-btn-primary { background: var(--color-primary); color: var(--bg-base); box-shadow: 0 4px 14px var(--color-primary-light); }
     .st-btn-ghost { background: var(--bg-surface); color: var(--text-primary); border: 1.5px solid var(--border-color); }
     .st-btn-saved { background: var(--color-success) !important; }
     .st-status { text-align: center; font-size: 0.76rem; color: var(--text-placeholder); min-height: 1.2em; transition: color var(--duration-fast) var(--ease-smooth); }
@@ -146,7 +140,7 @@ function _injectStyles() {
     .st-seg { display: flex; gap: 4px; background: var(--color-primary-ultralight); border-radius: var(--radius-full); padding: 4px; box-shadow: var(--shadow-neu-in); }
     .st-seg-btn { flex: 1; padding: 9px 4px; border: none; background: transparent; border-radius: var(--radius-full); font-size: 0.76rem; color: var(--color-primary-deep); cursor: pointer; font-family: var(--font-family); font-weight: 500; transition: all var(--duration-fast) var(--ease-smooth); }
     .st-seg-btn:active { transform: scale(0.96); }
-    .st-seg-btn.active { background: linear-gradient(135deg, var(--color-primary), var(--color-primary-deep)); color: var(--bg-base); box-shadow: 0 2px 8px var(--color-primary-light), inset 0 1px 0 rgba(255,255,255,0.4); font-weight: 600; }
+    .st-seg-btn.active { background: var(--color-primary); color: var(--bg-base); box-shadow: 0 2px 8px var(--color-primary-light); font-weight: 600; }
 
     /* ====== API 子页 ====== */
     .st-subpage { position: absolute; inset: 0; background: var(--bg-base); display: flex; flex-direction: column; z-index: 30; transform: translateX(100%); transition: transform var(--duration-normal) var(--ease-soft); }

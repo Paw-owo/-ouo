@@ -23,7 +23,7 @@ const THEME_PRESETS = {
   'berry-cloud': {
     label: '莓莓云顶奶',
     mode: 'light',
-    swatch: 'linear-gradient(135deg, #FAC7DA, #D1E3FF)',
+    swatch: '#FAC7DA',
     colors: {
       // 背景
       '--bg-base':                 '#FFF4F5',
@@ -94,7 +94,7 @@ const THEME_PRESETS = {
   'taro-coconut': {
     label: '芋泥椰奶冻',
     mode: 'light',
-    swatch: 'linear-gradient(135deg, #D5CFEC, #CAB7E3)',
+    swatch: '#D5CFEC',
     colors: {
       '--bg-base':                 '#F8F6FB',
       '--bg-surface':              '#F2EFF7',
@@ -156,7 +156,7 @@ const THEME_PRESETS = {
   'coconut-americano': {
     label: '椰青冰美式',
     mode: 'light',
-    swatch: 'linear-gradient(135deg, #9D7C6D, #E1EFF4)',
+    swatch: '#9D7C6D',
     colors: {
       '--bg-base':                 '#EDDFD4',
       '--bg-surface':              '#E7D8CB',
@@ -217,7 +217,7 @@ const THEME_PRESETS = {
   'night-milk-brown': {
     label: '夜奶棕',
     mode: 'dark',
-    swatch: 'linear-gradient(135deg, #CDB8AB, #2B2321)',
+    swatch: '#CDB8AB',
     colors: {
       '--bg-base':                 '#2B2321',
       '--bg-surface':              '#352D2A',
@@ -278,7 +278,7 @@ const THEME_PRESETS = {
   'night-black-pink': {
     label: '夜黑粉',
     mode: 'dark',
-    swatch: 'linear-gradient(135deg, #F0B7CC, #1F1A1D)',
+    swatch: '#F0B7CC',
     colors: {
       '--bg-base':                 '#1F1A1D',
       '--bg-surface':              '#2A2428',
@@ -339,7 +339,7 @@ const THEME_PRESETS = {
   'night-coffee': {
     label: '夜咖色',
     mode: 'dark',
-    swatch: 'linear-gradient(135deg, #B7927C, #241C19)',
+    swatch: '#B7927C',
     colors: {
       '--bg-base':                 '#241C19',
       '--bg-surface':              '#2E2521',
