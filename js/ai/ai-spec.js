@@ -4,7 +4,7 @@
 // 供 ai-context.js 拼装系统提示时使用
 // ============================================
 
-import { getAll } from '../../data/apps-registry.js';
+import { APPS_REGISTRY } from '../../data/apps-registry.js';
 
 /**
  * 加载所有已注册APP的AI spec
@@ -14,7 +14,7 @@ import { getAll } from '../../data/apps-registry.js';
  * @returns {Promise<Map<string, Object>>} appId → spec对象
  */
 async function loadAllSpecs() {
-  const apps = getAll();
+  const apps = APPS_REGISTRY;
   const specs = new Map();
 
   const loadPromises = apps.map(async (app) => {
