@@ -136,6 +136,25 @@ function _injectStyles() {
     .st-status.ok { color: var(--color-success); }
     .st-status.err { color: var(--color-error); }
 
+    .st-model-list {
+      margin-top: 8px;
+      display: flex; flex-wrap: wrap; gap: 8px;
+      max-height: 140px; overflow-y: auto;
+      padding: 8px; background: var(--bg-base);
+      border: 1px solid var(--border-color); border-radius: var(--radius-lg);
+    }
+    .st-model-chip {
+      padding: 6px 12px; border-radius: var(--radius-full);
+      background: var(--color-primary-ultralight); color: var(--color-primary-deep);
+      font-size: 0.76rem; font-weight: 500; cursor: pointer;
+      transition: transform var(--duration-fast) var(--ease-soft), background var(--duration-fast) var(--ease-smooth);
+      border: 1px solid transparent;
+    }
+    .st-model-chip:hover { background: var(--color-primary-light); }
+    .st-model-chip:active { transform: scale(0.94); }
+    .st-model-chip.selected { background: var(--color-primary); color: var(--bg-base); border-color: var(--color-primary); }
+    .st-model-empty { width: 100%; text-align: center; font-size: 0.72rem; color: var(--text-placeholder); padding: 8px; }
+
     /* ====== 壁纸类型小段 ====== */
     .st-seg { display: flex; gap: 4px; background: var(--color-primary-ultralight); border-radius: var(--radius-full); padding: 4px; box-shadow: var(--shadow-neu-in); }
     .st-seg-btn { flex: 1; padding: 9px 4px; border: none; background: transparent; border-radius: var(--radius-full); font-size: 0.76rem; color: var(--color-primary-deep); cursor: pointer; font-family: var(--font-family); font-weight: 500; transition: all var(--duration-fast) var(--ease-smooth); }
@@ -620,16 +639,19 @@ function _renderApiContent() {
               <div style="display:flex;align-items:center;gap:6px;">
                 <span class="st-key-tag" id="st-key-status">${hasKey ? '已保存' : '未设置'}</span>
                 ${hasKey ? '<button class="st-key-clear" id="st-key-clear-btn" type="button">清除</button>' : ''}
+                <button class="st-key-clear" id="st-key-toggle-visibility" type="button">显示</button>
               </div>
             </div>
-            <input class="st-input" id="st-api-key" type="password" placeholder="输入新密钥以覆盖" value="" autocomplete="off"/>
+            <input class="st-input" id="st-api-key" type="password" placeholder="粘贴或输入 API Key" value="" autocomplete="off" spellcheck="false"/>
           </div>
         </div>
         <div class="st-capsule" id="st-api-model-toggle" style="cursor:default;">
           <div class="st-capsule-icon">${ICONS.plug}</div>
           <div class="st-capsule-body" style="flex:1;">
             <span class="st-capsule-name" style="font-size:0.82rem;">模型名</span>
-            <input class="st-input" id="st-api-model" type="text" placeholder="gpt-4o" value="${_esc(cfg.model)}" autocomplete="off" style="margin-top:4px;"/>
+            <input class="st-input" id="st-api-model" type="text" placeholder="gpt-4o" value="${_esc(cfg.model)}" autocomplete="off" spellcheck="false" style="margin-top:4px;"/>
+            <button class="st-btn st-btn-ghost" id="st-api-fetch-models" type="button" style="margin-top:8px; width:auto; padding:10px 14px; font-size:0.8rem; min-height:40px;">拉取模型列表</button>
+            <div class="st-model-list" id="st-model-list" style="display:none;"></div>
           </div>
         </div>
       </div>
@@ -645,14 +667,35 @@ function _renderApiContent() {
 function _bindApiEvents() {
   const saveBtn = _currentPage.querySelector('#st-api-save');
   const testBtn = _currentPage.querySelector('#st-api-test');
+  const fetchBtn = _currentPage.querySelector('#st-api-fetch-models');
   const statusEl = _currentPage.querySelector('#st-api-status');
   const urlInput = _currentPage.querySelector('#st-api-url');
   const keyInput = _currentPage.querySelector('#st-api-key');
   const modelInput = _currentPage.querySelector('#st-api-model');
   const keyStatusEl = _currentPage.querySelector('#st-key-status');
   const clearBtn = _currentPage.querySelector('#st-key-clear-btn');
+  const toggleVisibilityBtn = _currentPage.querySelector('#st-key-toggle-visibility');
+  const modelListEl = _currentPage.querySelector('#st-model-list');
 
   let _clearRequested = false;
+
+  // ===== 密钥显示/隐藏切换 =====
+  if (toggleVisibilityBtn) {
+    toggleVisibilityBtn.addEventListener('click', () => {
+      const isPassword = keyInput.type === 'password';
+      keyInput.type = isPassword ? 'text' : 'password';
+      toggleVisibilityBtn.textContent = isPassword ? '隐藏' : '显示';
+    });
+  }
+
+  // ===== 明确允许 paste，不拦截剪贴板 =====
+  keyInput.addEventListener('paste', (e) => {
+    // 不调用 preventDefault，让浏览器默认粘贴行为发生
+    // 粘贴后清理首尾空白
+    requestAnimationFrame(() => {
+      keyInput.value = keyInput.value.trim();
+    });
+  });
 
   if (clearBtn) {
     clearBtn.addEventListener('click', () => {
@@ -669,24 +712,136 @@ function _bindApiEvents() {
         clearBtn.classList.remove('on');
         keyStatusEl.textContent = '已保存';
         keyInput.disabled = false;
-        keyInput.placeholder = '输入新密钥以覆盖';
+        keyInput.placeholder = '粘贴或输入 API Key';
       }
     });
   }
 
-  // 构造请求 URL，与 js/ai/ai-client.js 的 _buildRequestURL 完全一致
-  // 确保测试连接和实际聊天用同一个 URL
-  function _buildRequestURL(baseURL) {
-    const base = baseURL.replace(/\/+$/, '');
-    if (base.endsWith('/chat/completions') || base.endsWith('/v1/chat/completions')) {
+  // ===== 共享 URL 规范化（与 ai-client.js 完全一致） =====
+  // 规范后的 baseURL 是 "用户填什么就是什么"，只在需要时补 /v1
+  function _normalizeBaseURL(raw) {
+    return raw.trim().replace(/\/+$/, '');
+  }
+
+  function _timeoutSignal(ms) {
+    if (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) {
+      return AbortSignal.timeout(ms);
+    }
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(), ms);
+    return controller.signal;
+  }
+
+  function _buildEndpoint(baseURL, endpoint) {
+    const base = _normalizeBaseURL(baseURL);
+    if (base.endsWith(endpoint)) return base;
+    if (endpoint === '/chat/completions' && (base.endsWith('/chat/completions') || base.endsWith('/v1/chat/completions'))) {
       return base;
     }
     if (base.endsWith('/v1')) {
-      return `${base}/chat/completions`;
+      return `${base}${endpoint}`;
     }
-    return `${base}/v1/chat/completions`;
+    return `${base}/v1${endpoint}`;
   }
 
+  function _buildRequestURL(baseURL) {
+    return _buildEndpoint(baseURL, '/chat/completions');
+  }
+
+  function _buildModelsURL(baseURL) {
+    return _buildEndpoint(baseURL, '/models');
+  }
+
+  // ===== 拉取模型列表 =====
+  fetchBtn.addEventListener('click', async () => {
+    if (fetchBtn.disabled) return;
+    fetchBtn.disabled = true;
+    fetchBtn.textContent = '拉取中...';
+    statusEl.textContent = '';
+    statusEl.className = 'st-status';
+
+    const saved = getApiGroupConfig();
+    const baseUrl = urlInput.value.trim() || saved.baseURL;
+    const apiKey = keyInput.value.trim() || saved.apiKey;
+
+    if (!baseUrl || !apiKey) {
+      statusEl.textContent = '先填好地址和密钥哦~';
+      statusEl.className = 'st-status err';
+      fetchBtn.disabled = false;
+      fetchBtn.textContent = '拉取模型列表';
+      return;
+    }
+
+    const url = _buildModelsURL(baseUrl);
+
+    try {
+      const resp = await fetch(url, {
+        method: 'GET',
+        headers: { 'Authorization': `Bearer ${apiKey}` },
+        signal: _timeoutSignal(10000)
+      });
+
+      if (!resp.ok) {
+        if (resp.status === 401 || resp.status === 403) {
+          statusEl.textContent = '密钥好像不对呢，再检查一下~';
+        } else if (resp.status === 404) {
+          statusEl.textContent = '这个地址没有模型列表接口，看看 URL 对不对~';
+        } else {
+          statusEl.textContent = '模型列表没拉取到，检查一下地址或密钥哦';
+        }
+        statusEl.className = 'st-status err';
+        modelListEl.style.display = 'none';
+        modelListEl.innerHTML = '';
+      } else {
+        const data = await resp.json();
+        // OpenAI 兼容格式：data.data = [{ id: 'gpt-4o', ... }]
+        // 也兼容 data.models = [...]
+        const rawModels = Array.isArray(data?.data) ? data.data : (Array.isArray(data?.models) ? data.models : null);
+
+        if (!rawModels || rawModels.length === 0) {
+          statusEl.textContent = '这个接口不像标准 OpenAI 兼容格式，没找到模型列表';
+          statusEl.className = 'st-status err';
+          modelListEl.style.display = 'none';
+          modelListEl.innerHTML = '';
+        } else {
+          const models = rawModels
+            .map(m => typeof m === 'string' ? m : (m?.id || m?.name || ''))
+            .filter(Boolean)
+            .slice(0, 50); // 最多显示 50 个，避免刷屏
+
+          modelListEl.innerHTML = models.map(id => `<div class="st-model-chip" data-model="${_esc(id)}">${_esc(id)}</div>`).join('');
+          modelListEl.style.display = 'flex';
+          statusEl.textContent = `找到 ${models.length} 个模型，点一下就能用~`;
+          statusEl.className = 'st-status ok';
+
+          modelListEl.querySelectorAll('.st-model-chip').forEach(chip => {
+            chip.addEventListener('click', () => {
+              modelListEl.querySelectorAll('.st-model-chip').forEach(c => c.classList.remove('selected'));
+              chip.classList.add('selected');
+              modelInput.value = chip.dataset.model;
+              statusEl.textContent = `已选 ${chip.dataset.model}~`;
+              statusEl.className = 'st-status ok';
+            });
+          });
+        }
+      }
+    } catch (err) {
+      if (err.name === 'TimeoutError' || err.name === 'AbortError') {
+        statusEl.textContent = '接口等太久了，可能地址不通~';
+      } else {
+        statusEl.textContent = '网络连不上，看看地址对不对~';
+      }
+      statusEl.className = 'st-status err';
+      modelListEl.style.display = 'none';
+      modelListEl.innerHTML = '';
+      console.error('[Settings] 拉取模型失败:', err.name || err.message);
+    }
+
+    fetchBtn.disabled = false;
+    fetchBtn.textContent = '拉取模型列表';
+  });
+
+  // ===== 测试连接 =====
   testBtn.addEventListener('click', async () => {
     if (testBtn.disabled) return;
     testBtn.disabled = true;
@@ -694,7 +849,6 @@ function _bindApiEvents() {
     statusEl.textContent = '';
     statusEl.className = 'st-status';
 
-    // 测试用当前表单值；表单空时回退到已保存配置
     const saved = getApiGroupConfig();
     const baseUrl = urlInput.value.trim() || saved.baseURL;
     const apiKey = keyInput.value.trim() || saved.apiKey;
@@ -714,13 +868,11 @@ function _bindApiEvents() {
       const resp = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-        // max_tokens=1, temperature=0 最小化测试消耗
         body: JSON.stringify({ model, messages: [{ role: 'user', content: 'hi' }], max_tokens: 1, temperature: 0 }),
-        signal: AbortSignal.timeout(10000)
+        signal: _timeoutSignal(10000)
       });
 
       if (!resp.ok) {
-        // HTTP 错误：401/403 多半是密钥不对，404 多半是地址不对
         if (resp.status === 401 || resp.status === 403) {
           statusEl.textContent = '密钥好像不对呢，再检查一下~';
         } else if (resp.status === 404) {
@@ -733,26 +885,24 @@ function _bindApiEvents() {
         try {
           const data = await resp.json();
           if (data.error || !data.choices?.[0]?.message) {
-            statusEl.textContent = '接口没有牵上小手，检查一下地址或密钥哦';
+            statusEl.textContent = '这个接口不像标准 OpenAI 兼容格式呢';
             statusEl.className = 'st-status err';
           } else {
             statusEl.textContent = '连上啦，小手牵好了~';
             statusEl.className = 'st-status ok';
           }
         } catch {
-          statusEl.textContent = '接口没有牵上小手，检查一下地址或密钥哦';
+          statusEl.textContent = '这个接口不像标准 OpenAI 兼容格式呢';
           statusEl.className = 'st-status err';
         }
       }
     } catch (err) {
-      // 网络错误 / 超时 / CORS
       if (err.name === 'TimeoutError' || err.name === 'AbortError') {
         statusEl.textContent = '接口等太久了，可能地址不通~';
       } else {
         statusEl.textContent = '网络连不上，看看地址对不对~';
       }
       statusEl.className = 'st-status err';
-      // 不打印密钥，只打印错误类型用于排查
       console.error('[Settings] 测试连接失败:', err.name || err.message);
     }
 
@@ -760,6 +910,7 @@ function _bindApiEvents() {
     testBtn.textContent = '测试连接';
   });
 
+  // ===== 保存配置 =====
   saveBtn.addEventListener('click', () => {
     const baseUrl = urlInput.value.trim();
     const keyInputValue = keyInput.value.trim();
@@ -772,7 +923,6 @@ function _bindApiEvents() {
     else apiKey = saved.apiKey;
 
     try {
-      // 走统一出口，同步写入 api_groups 默认分组 + 简单键 + default_chat_model
       setApiGroupConfig({ baseURL: baseUrl, apiKey, model });
       _clearRequested = false;
 
@@ -783,7 +933,7 @@ function _bindApiEvents() {
         clearBtn.textContent = '清除';
         clearBtn.classList.remove('on');
         keyInput.disabled = false;
-        keyInput.placeholder = '输入新密钥以覆盖';
+        keyInput.placeholder = '粘贴或输入 API Key';
       }
 
       events.emit('settings.changed', { key: 'api', values: { apiBaseUrl: baseUrl, apiModel: model } });
@@ -795,7 +945,6 @@ function _bindApiEvents() {
       statusEl.className = 'st-status ok';
       if (!apiKey && clearBtn) clearBtn.style.display = 'none';
 
-      // 同步主页入口 hint
       const mainHint = _root.querySelector('#st-entry-api .st-capsule-hint');
       if (mainHint) mainHint.textContent = baseUrl ? `${baseUrl}${model ? ' · ' + model : ''}` : '未配置';
 
