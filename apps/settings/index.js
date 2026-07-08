@@ -7,7 +7,7 @@
 // 视觉：Soft Cozy Minimal — 纯色 + 小胶囊 + 折叠栏 + 果冻触感 + 滑入子页
 // ============================================
 
-import { get, set, reset } from '../../core/config.js';
+import { get, set, reset, getApiGroupConfig, setApiGroupConfig } from '../../core/config.js';
 import events from '../../core/events.js';
 import { getAvailableThemes, switchTheme, getCurrentTheme } from '../../core/theme.js';
 import { BG_TYPE, BG_SCOPE, setBackground, resetBackground } from '../../core/app-bg.js';
@@ -185,10 +185,9 @@ function _renderEntryList() {
   const currentTheme = getAvailableThemes().find(t => t.id === currentThemeId);
   const themeHint = currentTheme ? currentTheme.label : '未选择';
 
-  // AI入口 hint：API配置状态
-  const baseUrl = get('apiBaseUrl') || '';
-  const model = get('apiModel') || '';
-  const apiHint = baseUrl ? `${baseUrl}${model ? ' · ' + model : ''}` : '未配置';
+  // AI入口 hint：API配置状态（从单一真实来源读）
+  const apiCfg = getApiGroupConfig();
+  const apiHint = apiCfg.baseURL ? `${apiCfg.baseURL}${apiCfg.model ? ' · ' + apiCfg.model : ''}` : '未配置';
 
   return `
     <div class="st-section">
@@ -595,9 +594,9 @@ function _updateWpHint() {
 // AI子页：API配置
 // ============================================
 function _renderApiContent() {
-  const savedKey = get('apiKey') || '';
-  const cfg = { baseUrl: get('apiBaseUrl') || '', model: get('apiModel') || '' };
-  const hasKey = !!savedKey;
+  // 从 api_groups 默认分组读（单一真实来源，ai-client.js 也读这里）
+  const cfg = getApiGroupConfig();
+  const hasKey = !!cfg.apiKey;
 
   return `
     <div class="st-section">
@@ -610,7 +609,7 @@ function _renderApiContent() {
           <div class="st-capsule-icon">${ICONS.plug}</div>
           <div class="st-capsule-body" style="flex:1;">
             <span class="st-capsule-name" style="font-size:0.82rem;">API Base URL</span>
-            <input class="st-input" id="st-api-url" type="text" placeholder="https://api.openai.com" value="${_esc(cfg.baseUrl)}" autocomplete="off" style="margin-top:4px;"/>
+            <input class="st-input" id="st-api-url" type="text" placeholder="https://api.openai.com" value="${_esc(cfg.baseURL)}" autocomplete="off" style="margin-top:4px;"/>
           </div>
         </div>
         <div class="st-capsule" id="st-api-key-toggle" style="cursor:default;">
@@ -675,6 +674,19 @@ function _bindApiEvents() {
     });
   }
 
+  // 构造请求 URL，与 js/ai/ai-client.js 的 _buildRequestURL 完全一致
+  // 确保测试连接和实际聊天用同一个 URL
+  function _buildRequestURL(baseURL) {
+    const base = baseURL.replace(/\/+$/, '');
+    if (base.endsWith('/chat/completions') || base.endsWith('/v1/chat/completions')) {
+      return base;
+    }
+    if (base.endsWith('/v1')) {
+      return `${base}/chat/completions`;
+    }
+    return `${base}/v1/chat/completions`;
+  }
+
   testBtn.addEventListener('click', async () => {
     if (testBtn.disabled) return;
     testBtn.disabled = true;
@@ -682,9 +694,11 @@ function _bindApiEvents() {
     statusEl.textContent = '';
     statusEl.className = 'st-status';
 
-    const baseUrl = urlInput.value.trim();
-    const apiKey = keyInput.value.trim() || get('apiKey') || '';
-    const model = modelInput.value.trim() || get('apiModel') || '';
+    // 测试用当前表单值；表单空时回退到已保存配置
+    const saved = getApiGroupConfig();
+    const baseUrl = urlInput.value.trim() || saved.baseURL;
+    const apiKey = keyInput.value.trim() || saved.apiKey;
+    const model = modelInput.value.trim() || saved.model;
 
     if (!baseUrl || !apiKey || !model) {
       statusEl.textContent = '先填好地址、密钥和模型哦~';
@@ -694,42 +708,51 @@ function _bindApiEvents() {
       return;
     }
 
-    // URL 构造与 ai-client.js 的 _buildURL 保持一致，确保测试连接和实际聊天用同一个 URL
-    let url = baseUrl.trim().replace(/\/+$/, '');
-    if (!url.includes('/v1')) {
-      url += '/v1';
-    }
-    url += '/chat/completions';
+    const url = _buildRequestURL(baseUrl);
 
     try {
       const resp = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+        // max_tokens=1, temperature=0 最小化测试消耗
         body: JSON.stringify({ model, messages: [{ role: 'user', content: 'hi' }], max_tokens: 1, temperature: 0 }),
         signal: AbortSignal.timeout(10000)
       });
 
       if (!resp.ok) {
-        statusEl.textContent = '连不上呢，检查一下地址和密钥吧~';
+        // HTTP 错误：401/403 多半是密钥不对，404 多半是地址不对
+        if (resp.status === 401 || resp.status === 403) {
+          statusEl.textContent = '密钥好像不对呢，再检查一下~';
+        } else if (resp.status === 404) {
+          statusEl.textContent = '找不到这个地址，看看 URL 对不对~';
+        } else {
+          statusEl.textContent = '接口没有牵上小手，检查一下地址或密钥哦';
+        }
         statusEl.className = 'st-status err';
       } else {
         try {
           const data = await resp.json();
           if (data.error || !data.choices?.[0]?.message) {
-            statusEl.textContent = '连不上呢，检查一下地址和密钥吧~';
+            statusEl.textContent = '接口没有牵上小手，检查一下地址或密钥哦';
             statusEl.className = 'st-status err';
           } else {
-            statusEl.textContent = '连接成功~';
+            statusEl.textContent = '连上啦，小手牵好了~';
             statusEl.className = 'st-status ok';
           }
         } catch {
-          statusEl.textContent = '连不上呢，检查一下地址和密钥吧~';
+          statusEl.textContent = '接口没有牵上小手，检查一下地址或密钥哦';
           statusEl.className = 'st-status err';
         }
       }
     } catch (err) {
-      statusEl.textContent = '连不上呢，检查一下地址和密钥吧~';
+      // 网络错误 / 超时 / CORS
+      if (err.name === 'TimeoutError' || err.name === 'AbortError') {
+        statusEl.textContent = '接口等太久了，可能地址不通~';
+      } else {
+        statusEl.textContent = '网络连不上，看看地址对不对~';
+      }
       statusEl.className = 'st-status err';
+      // 不打印密钥，只打印错误类型用于排查
       console.error('[Settings] 测试连接失败:', err.name || err.message);
     }
 
@@ -742,16 +765,15 @@ function _bindApiEvents() {
     const keyInputValue = keyInput.value.trim();
     const model = modelInput.value.trim();
 
-    const savedKey = get('apiKey') || '';
+    const saved = getApiGroupConfig();
     let apiKey;
     if (keyInputValue) apiKey = keyInputValue;
     else if (_clearRequested) apiKey = '';
-    else apiKey = savedKey;
+    else apiKey = saved.apiKey;
 
     try {
-      set('apiBaseUrl', baseUrl);
-      set('apiKey', apiKey);
-      set('apiModel', model);
+      // 走统一出口，同步写入 api_groups 默认分组 + 简单键 + default_chat_model
+      setApiGroupConfig({ baseURL: baseUrl, apiKey, model });
       _clearRequested = false;
 
       if (keyStatusEl) {

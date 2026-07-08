@@ -110,4 +110,85 @@ function resetAll() {
   }
 }
 
-export { get, set, getAll, reset, resetAll };
+// ============================================
+// API 分组专用出口（单一真实来源 = api_groups）
+// ai-client.js 只读 STORAGE_KEYS.API_GROUPS，所以 settings 保存时必须同步写入这里
+// 简单键 apiBaseUrl/apiKey/apiModel 只作为 UI 层便捷字段和兼容老数据
+// ============================================
+
+// 读取默认分组的 API 配置 { baseURL, apiKey, model }
+// 优先从 api_groups 默认分组读；如果没有分组，回退到简单键
+// 注意：storage.js 的 getSetting 会自动 JSON.parse，所以这里直接拿到对象/原始值
+function getApiGroupConfig() {
+  const groups = getSetting(STORAGE_KEYS.API_GROUPS);
+
+  if (groups) {
+    let activeGroup = null;
+    const g = typeof groups === 'string' ? (() => { try { return JSON.parse(groups); } catch { return null; } })() : groups;
+    if (Array.isArray(g)) {
+      if (g.length > 0) {
+        activeGroup = g.find(x => x.active) || g.find(x => x.id === 'default') || g[0];
+      }
+    } else if (g && typeof g === 'object') {
+      const entries = Object.values(g);
+      if (entries.length > 0) {
+        activeGroup = entries.find(x => x.active) || entries.find(x => x.id === 'default') || entries[0];
+      }
+    }
+    if (activeGroup && activeGroup.baseURL) {
+      const defaultModel = getSetting(STORAGE_KEYS.API_DEFAULT_CHAT_MODEL);
+      return {
+        baseURL: activeGroup.baseURL,
+        apiKey: activeGroup.apiKey || '',
+        model: defaultModel || activeGroup.model || ''
+      };
+    }
+  }
+
+  // 回退到简单键（兼容老数据或未初始化分组）
+  return {
+    baseURL: getSetting(STORAGE_KEYS.API_BASE_URL) || '',
+    apiKey: getSetting(STORAGE_KEYS.API_KEY) || '',
+    model: getSetting(STORAGE_KEYS.API_MODEL) || getSetting(STORAGE_KEYS.API_DEFAULT_CHAT_MODEL) || ''
+  };
+}
+
+// 保存 API 配置到默认分组（同步更新 api_groups + 简单键 + default_chat_model）
+// 写入结构：[{ id, name, baseURL, apiKey, model, active }]
+// 注意：storage.js 的 setSetting 会自动 JSON.stringify，这里直接传对象/原始值
+function setApiGroupConfig({ baseURL, apiKey, model }) {
+  // 1. 同步简单键（兼容老数据，UI 层便捷读取）
+  setSetting(STORAGE_KEYS.API_BASE_URL, baseURL);
+  setSetting(STORAGE_KEYS.API_KEY, apiKey);
+  setSetting(STORAGE_KEYS.API_MODEL, model);
+  setSetting(STORAGE_KEYS.API_DEFAULT_CHAT_MODEL, model);
+
+  // 2. 写入 api_groups 默认分组（ai-client.js 的单一真实来源）
+  const raw = getSetting(STORAGE_KEYS.API_GROUPS);
+  let groups = [];
+  if (raw) {
+    const parsed = typeof raw === 'string' ? (() => { try { return JSON.parse(raw); } catch { return []; } })() : raw;
+    if (Array.isArray(parsed)) groups = parsed;
+  }
+
+  const idx = groups.findIndex(g => g.id === 'default');
+  const newGroup = {
+    id: 'default',
+    name: '默认',
+    baseURL: baseURL,
+    apiKey: apiKey,
+    model: model,
+    active: true
+  };
+  if (idx >= 0) {
+    groups[idx] = newGroup;
+  } else {
+    groups.unshift(newGroup);
+  }
+  // 确保只有一个 active
+  groups.forEach((g, i) => { if (i !== (idx >= 0 ? idx : 0)) g.active = false; });
+
+  setSetting(STORAGE_KEYS.API_GROUPS, groups);
+}
+
+export { get, set, getAll, reset, resetAll, getApiGroupConfig, setApiGroupConfig };
