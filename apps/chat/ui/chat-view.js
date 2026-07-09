@@ -106,10 +106,14 @@ function render(container, convId, callbacks = {}) {
 function _buildHTML() {
   const title = _escapeHtml(_conv?.title || '对话');
   const modeIcon = _mode === 'conversation' ? 'bubble' : 'edit';
+  const isGroup = _conv?.type === 'group';
+  // 群聊：堆叠头像（最多3个）+ 群名 + 成员数角标
+  const headerCenter = isGroup ? _buildGroupHeader() : `<span class="app-header-title">${title}</span>`;
   return `
     <div class="app-header chat-header">
       <button class="app-header-back" id="chat-back-btn" aria-label="返回">${ICONS.back(22)}</button>
-      <span class="app-header-title">${title}</span>
+      <div class="chat-header-center" id="chat-header-center">${headerCenter}</div>
+      <button class="app-header-action" id="chat-memory-btn" aria-label="记忆" hidden>${ICONS.brain(20)}</button>
       <button class="app-header-action" id="chat-mode-btn" aria-label="切换模式">${ICONS[modeIcon](20)}</button>
       <button class="app-header-action" id="chat-more-btn" aria-label="设置">${ICONS.more(20)}</button>
     </div>
@@ -140,6 +144,38 @@ function _buildHTML() {
   `;
 }
 
+// 构建群聊头部（堆叠头像 + 群名 + 成员数角标）
+function _buildGroupHeader() {
+  const members = _conv?.members || [];
+  const title = _escapeHtml(_conv?.title || '群聊');
+  const maxStack = 3;
+  const stackedMembers = members.slice(0, maxStack);
+  const memberCount = members.length;
+
+  const avatarsHTML = stackedMembers.map((m, i) => {
+    const initial = _escapeHtml((m.name || '?')[0]);
+    const offset = i * 8;
+    const isLast = i === stackedMembers.length - 1 && memberCount > maxStack;
+    const extraLabel = isLast ? `+${memberCount - maxStack}` : '';
+    return `
+      <div class="chat-group-avatar" style="left:${offset}px;">
+        <span class="chat-group-avatar-text">${initial}</span>
+        ${extraLabel ? `<span class="chat-group-avatar-extra">${extraLabel}</span>` : ''}
+      </div>
+    `;
+  }).join('');
+
+  return `
+    <div class="chat-group-header" id="chat-group-header">
+      <div class="chat-group-avatars">${avatarsHTML}</div>
+      <div class="chat-group-info">
+        <span class="chat-group-name">${title}</span>
+        <span class="chat-group-count">${memberCount}人</span>
+      </div>
+    </div>
+  `;
+}
+
 // ========== 事件绑定 ==========
 
 function _bindEvents() {
@@ -160,6 +196,12 @@ function _bindEvents() {
     _showSettingsDrawer();
   });
 
+  // 群聊头部点击 → 打开成员面板
+  const groupHeader = _pageEl.querySelector('#chat-group-header');
+  if (groupHeader) {
+    groupHeader.addEventListener('click', _showMemberPanel);
+  }
+
   // 发送
   _sendBtn.addEventListener('click', () => {
     if (_sending) {
@@ -177,6 +219,8 @@ function _bindEvents() {
     }
   });
   _inputEl.addEventListener('input', _autoResize);
+  // @ 提及检测（群聊）+ Slash 指令检测
+  _inputEl.addEventListener('input', _checkInputTrigger);
 
   // 工具箱触发
   _plusBtn.addEventListener('click', () => {
@@ -368,6 +412,14 @@ function _buildMessageRow(msg, prevMsg) {
 function _buildBubbleHTML(msg, isContinuation) {
   const isUser = msg.role === 'user';
   const bubbleClass = isUser ? 'chat-bubble chat-bubble-user' : 'chat-bubble chat-bubble-ai';
+  const isGroup = _conv?.type === 'group';
+
+  // 群聊：AI消息强制显示名称标签
+  let nameTagHTML = '';
+  if (isGroup && !isUser && !isContinuation) {
+    const senderName = msg.senderName || _conv?.title || 'AI';
+    nameTagHTML = `<div class="chat-bubble-name-tag">${_escapeHtml(senderName)}</div>`;
+  }
 
   // 内容渲染（content 已剥离思维块）
   const contentHTML = _renderContent(msg);
@@ -434,6 +486,7 @@ function _buildBubbleHTML(msg, isContinuation) {
 
   return `
     <div class="${bubbleClass}" style="position:relative">
+      ${nameTagHTML}
       ${replyHTML}
       ${cotHTML}
       <div class="chat-bubble-content">${contentHTML}</div>
@@ -465,6 +518,9 @@ function _renderContent(msg) {
       return _renderVideoBubble(msg);
     case 'file':
       return _renderFileBubble(msg);
+    case 'github':
+      // GitHub 操作结果卡片（SKILL 第十二节）
+      return _renderGithubCard(msg.githubCard || msg.content);
     case 'error':
       return _escapeHtml(msg.content || '出了点小问题');
     default:
@@ -606,6 +662,18 @@ function _isContinuation(msg, prevMsg) {
   if (!prevMsg || prevMsg.role !== msg.role) return false;
   const gap = msg.timestamp - prevMsg.timestamp;
   return gap < 2 * 60 * 1000;
+}
+
+// 上下文范围判断（SKILL 10.2）：根据 contextWindow 判断消息是否在上下文窗口内
+function _isInContext(msg) {
+  if (!_messages || _messages.length === 0) return true;
+  const settings = _conv?.settings || _defaultConversationSettings();
+  const windowSize = settings.contextWindow || 16;
+  const idx = _messages.findIndex(m => m.id === msg.id);
+  if (idx === -1) return true;
+  // 最近的 windowSize 条消息在上下文内
+  const contextStart = _messages.length - windowSize;
+  return idx >= contextStart;
 }
 
 // ========== 思维链 (CoT) ==========
@@ -1095,6 +1163,30 @@ function _bindActionEvents() {
       if (!row) return;
       const msgId = row.dataset.msgId;
       _handleAIAction(action, msgId);
+      return;
+    }
+    // 版本切换按钮（SKILL 10.4）
+    const versionBtn = e.target.closest('.chat-version-btn');
+    if (versionBtn) {
+      e.stopPropagation();
+      const action = versionBtn.dataset.action;
+      const msgId = versionBtn.dataset.msgId;
+      if (action === 'version-prev') _switchVersion(msgId, -1);
+      if (action === 'version-next') _switchVersion(msgId, 1);
+      return;
+    }
+    // GitHub 卡片操作按钮（SKILL 第十二节）
+    const ghBtn = e.target.closest('.chat-github-card-btn');
+    if (ghBtn) {
+      e.stopPropagation();
+      const action = ghBtn.dataset.action;
+      const cardEl = ghBtn.closest('[data-github-card]');
+      if (cardEl) {
+        const row = cardEl.closest('.chat-msg-row');
+        const msg = _messages.find(m => m.id === row?.dataset.msgId);
+        const card = msg?.githubCard || msg?.content;
+        if (card) _handleGithubCardAction(card, action);
+      }
       return;
     }
     // 代码复制按钮
@@ -1663,6 +1755,115 @@ function _confirmForward(msg, targetConv) {
   });
 }
 
+// ========== 群聊功能 ==========
+
+// @ 提及面板
+let _mentionPanel = null;
+
+function _showMentionPanel(query) {
+  _closeMentionPanel();
+  const members = (_conv?.members || []).filter(m => m.name);
+  const filtered = query
+    ? members.filter(m => m.name.toLowerCase().includes(query.toLowerCase()))
+    : members;
+  if (filtered.length === 0) return;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'chat-mention-overlay';
+  overlay.innerHTML = `
+    <div class="chat-mention-panel">
+      ${filtered.map(m => `
+        <div class="chat-mention-item" data-name="${_escapeAttr(m.name)}">
+          <div class="chat-mention-avatar">${_escapeHtml((m.name || '?')[0])}</div>
+          <span class="chat-mention-name">${_escapeHtml(m.name)}</span>
+        </div>
+      `).join('')}
+    </div>
+  `;
+  _pageEl.appendChild(overlay);
+  _mentionPanel = overlay;
+
+  overlay.addEventListener('click', (e) => {
+    const item = e.target.closest('.chat-mention-item');
+    if (!item) return;
+    const name = item.dataset.name;
+    _insertMention(name);
+    _closeMentionPanel();
+  });
+}
+
+function _closeMentionPanel() {
+  if (_mentionPanel) {
+    _mentionPanel.remove();
+    _mentionPanel = null;
+  }
+}
+
+// 插入 @提及
+function _insertMention(name) {
+  const text = _inputEl.value;
+  const cursorPos = _inputEl.selectionStart;
+  const before = text.slice(0, cursorPos);
+  const after = text.slice(cursorPos);
+  // 替换最后一个 @xxx 为 @name + 空格
+  const newBefore = before.replace(/@([^\s@]*)$/, `@${name} `);
+  _inputEl.value = newBefore + after;
+  const newPos = newBefore.length;
+  _inputEl.setSelectionRange(newPos, newPos);
+  _inputEl.focus();
+  _autoResize();
+}
+
+// 成员列表面板（右侧滑出，宽度65vw）
+function _showMemberPanel() {
+  const members = _conv?.members || [];
+  const overlay = document.createElement('div');
+  overlay.className = 'chat-member-panel-overlay';
+  overlay.innerHTML = `
+    <div class="chat-member-panel">
+      <div class="chat-member-panel-header">
+        <span class="chat-member-panel-title">群成员（${members.length}）</span>
+        <button class="chat-member-panel-close" aria-label="关闭">${ICONS.close(20)}</button>
+      </div>
+      <div class="chat-member-list">
+        ${members.length === 0 ? '<div class="chat-member-empty">暂无成员</div>' : ''}
+        ${members.map(m => `
+          <div class="chat-member-item">
+            <div class="chat-member-avatar">${_escapeHtml((m.name || '?')[0])}</div>
+            <div class="chat-member-info">
+              <span class="chat-member-name">${_escapeHtml(m.name || '未命名')}</span>
+              <span class="chat-member-source">${_escapeHtml(m.source || '本地人设')}</span>
+            </div>
+            ${m.removable !== false ? `<button class="chat-member-remove" data-id="${_escapeAttr(m.id || '')}" aria-label="移除">${ICONS.close(16)}</button>` : ''}
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  const close = () => {
+    overlay.classList.add('closing');
+    setTimeout(() => overlay.remove(), 250);
+  };
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) { close(); return; }
+    if (e.target.closest('.chat-member-panel-close')) { close(); return; }
+    const removeBtn = e.target.closest('.chat-member-remove');
+    if (removeBtn) {
+      const memberId = removeBtn.dataset.id;
+      const newMembers = members.filter(m => m.id !== memberId);
+      _conv = updateConversation(_convId, { members: newMembers });
+      // 更新头部
+      const headerCenter = _pageEl.querySelector('#chat-header-center');
+      if (headerCenter) headerCenter.innerHTML = _buildGroupHeader();
+      // 重新打开面板
+      close();
+      _showMemberPanel();
+    }
+  });
+}
+
 // ========== 聊天设置抽屉（三点菜单） ==========
 
 function _showSettingsDrawer() {
@@ -2147,6 +2348,210 @@ function _exportConversation() {
   _showToast('已导出 Markdown');
 }
 
+// ========== GitHub 联动 ==========
+
+// GitHub 操作类型映射到 Slash 指令
+const GITHUB_ACTIONS = [
+  { id: 'pr-list',   label: '查看PR列表', icon: 'github', cmd: '/github pr' },
+  { id: 'branches',  label: '查看分支',   icon: 'github', cmd: '/github branches' },
+  { id: 'merge',     label: '合并PR',     icon: 'github', cmd: '/github merge' },
+  { id: 'create-pr', label: '创建PR',     icon: 'github', cmd: '/github create-pr' },
+  { id: 'commits',   label: '查看Commits', icon: 'github', cmd: '/github commits' },
+  { id: 'push',      label: 'Push当前改动', icon: 'github', cmd: '/github push' },
+  { id: 'switch',    label: '切换分支',   icon: 'github', cmd: '/github switch' },
+  { id: 'view-file', label: '查看文件',   icon: 'github', cmd: '/github file' }
+];
+
+// GitHub 工具箱面板（二级小抽屉）
+function _showGithubToolPanel() {
+  const cfg = getGithubConfig(_convId);
+  if (!cfg?.repo) {
+    _showToast('请先在设置中关联 GitHub 仓库');
+    _showSettingsDrawer();
+    return;
+  }
+
+  const overlay = document.createElement('div');
+  overlay.className = 'chat-bottom-sheet-overlay';
+  overlay.innerHTML = `
+    <div class="chat-bottom-sheet">
+      <div class="chat-github-panel-header">
+        <span class="chat-github-panel-title">GitHub · ${_escapeHtml(cfg.repo)}</span>
+        <button class="chat-github-panel-close" aria-label="关闭" data-action="close">${ICONS.close(20)}</button>
+      </div>
+      <div class="chat-github-panel-body">
+        <div class="chat-github-action-grid">
+          ${GITHUB_ACTIONS.map(a => `
+            <button class="chat-github-action" data-cmd="${_escapeAttr(a.cmd)}">
+              <span class="chat-github-action-icon">${ICONS.github(20)}</span>
+              <span class="chat-github-action-label">${a.label}</span>
+            </button>
+          `).join('')}
+        </div>
+        <div class="chat-github-panel-hint">
+          当前分支：<span class="chat-github-branch">${_escapeHtml(cfg.branch || 'main')}</span>
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  const close = () => {
+    overlay.classList.add('closing');
+    setTimeout(() => overlay.remove(), 200);
+  };
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) { close(); return; }
+    if (e.target.closest('[data-action="close"]')) { close(); return; }
+    const btn = e.target.closest('.chat-github-action');
+    if (btn) {
+      const cmd = btn.dataset.cmd;
+      _closeToolbox();
+      close();
+      // 预填 Slash 指令到输入框，AI 解析并执行
+      _inputEl.value = cmd + ' ';
+      _autoResize();
+      _inputEl.focus();
+    }
+  });
+}
+
+// 渲染 GitHub 操作结果卡片（在消息内容中）
+function _renderGithubCard(card) {
+  if (!card || !card.type) return '';
+  const t = card.type;
+  const repo = _escapeHtml(card.repo || '');
+  const branch = _escapeHtml(card.branch || '');
+  const targetBranch = _escapeHtml(card.targetBranch || '');
+  const status = _escapeHtml(card.status || '');
+  const commitSha = _escapeHtml(card.commitSha || '');
+  const title = _escapeHtml(card.title || '');
+  const commitsCount = card.commitsCount || 0;
+  const additions = card.additions || 0;
+  const deletions = card.deletions || 0;
+  const fileName = _escapeHtml(card.fileName || '');
+  const commitMsg = _escapeHtml(card.commitMsg || '');
+  const diff = card.diff || '';
+
+  const statusColorClass = {
+    open: 'chat-github-status-open',
+    closed: 'chat-github-status-closed',
+    merged: 'chat-github-status-merged'
+  }[status.toLowerCase()] || '';
+
+  if (t === 'pr') {
+    return `
+      <div class="chat-github-card" data-github-card="pr">
+        <div class="chat-github-card-header">
+          <span class="chat-github-card-icon">${ICONS.github(16)}</span>
+          <span class="chat-github-card-title">PR #${_escapeHtml(card.number || '')}</span>
+          <span class="chat-github-status ${statusColorClass}">${status}</span>
+        </div>
+        <div class="chat-github-card-body">
+          <div class="chat-github-card-title-text">${title}</div>
+          <div class="chat-github-card-meta">
+            ${targetBranch ? `<span>${_escapeHtml(branch)} ← ${targetBranch}</span>` : ''}
+            <span>${commitsCount} commits · +${additions} -${deletions}</span>
+          </div>
+        </div>
+        <div class="chat-github-card-actions">
+          <button class="chat-github-card-btn" data-action="github-view">查看详情</button>
+          <button class="chat-github-card-btn" data-action="github-merge" ${status.toLowerCase() !== 'open' ? 'disabled' : ''}>合并</button>
+          <button class="chat-github-card-btn danger" data-action="github-close" ${status.toLowerCase() !== 'open' ? 'disabled' : ''}>关闭</button>
+        </div>
+      </div>
+    `;
+  }
+  if (t === 'merge') {
+    return `
+      <div class="chat-github-card" data-github-card="merge">
+        <div class="chat-github-card-header">
+          <span class="chat-github-card-icon">${ICONS.check(16)}</span>
+          <span class="chat-github-card-title">已合并 PR #${_escapeHtml(card.number || '')}</span>
+        </div>
+        <div class="chat-github-card-body">
+          <div class="chat-github-card-meta">
+            <span>${targetBranch} → ${branch}</span>
+            <span>${_escapeHtml(card.mergeMethod || 'Squash')} merge · commit ${commitSha}</span>
+          </div>
+        </div>
+        <div class="chat-github-card-actions">
+          <button class="chat-github-card-btn" data-action="github-view-commit">查看 Commit</button>
+        </div>
+      </div>
+    `;
+  }
+  if (t === 'file-change') {
+    const diffHTML = diff ? _renderDiff(diff) : '';
+    return `
+      <div class="chat-github-card" data-github-card="file">
+        <div class="chat-github-card-header">
+          <span class="chat-github-card-icon">${ICONS.file(16)}</span>
+          <span class="chat-github-card-title">${fileName}</span>
+        </div>
+        <div class="chat-github-card-body">
+          <div class="chat-github-card-meta">
+            <span>+${additions} -${deletions} 已提交到 ${branch}</span>
+            <span>commit: "${commitMsg}"</span>
+          </div>
+          ${diffHTML ? `<details class="chat-github-diff"><summary>查看 Diff</summary><pre class="chat-github-diff-content">${diffHTML}</pre></details>` : ''}
+        </div>
+        <div class="chat-github-card-actions">
+          <button class="chat-github-card-btn" data-action="github-view-diff">查看 Diff</button>
+          <button class="chat-github-card-btn danger" data-action="github-revert">撤销 Commit</button>
+        </div>
+      </div>
+    `;
+  }
+  return '';
+}
+
+// 渲染 diff（增行绿色背景，删行红色背景）
+function _renderDiff(diff) {
+  if (!diff) return '';
+  return diff.split('\n').map(line => {
+    const escaped = _escapeHtml(line);
+    if (line.startsWith('+')) {
+      return `<span class="chat-diff-add">${escaped}</span>`;
+    }
+    if (line.startsWith('-')) {
+      return `<span class="chat-diff-del">${escaped}</span>`;
+    }
+    return escaped;
+  }).join('\n');
+}
+
+// 处理 GitHub 卡片操作（写操作需二次确认）
+function _handleGithubCardAction(card, action) {
+  switch (action) {
+    case 'github-view':
+    case 'github-view-commit':
+    case 'github-view-diff':
+      // 只读操作直接执行
+      events.emit('chat:github:view', { conversationId: _convId, card, action });
+      _showToast('正在查看详情...');
+      break;
+    case 'github-merge':
+      _showConfirmDialog('合并 PR', `确定要合并 PR #${card.number || ''} 吗？`, () => {
+        events.emit('chat:github:merge', { conversationId: _convId, card });
+        _showToast('正在合并...');
+      });
+      break;
+    case 'github-close':
+      _showConfirmDialog('关闭 PR', `确定要关闭 PR #${card.number || ''} 吗？（不合并）`, () => {
+        events.emit('chat:github:close', { conversationId: _convId, card });
+        _showToast('正在关闭...');
+      });
+      break;
+    case 'github-revert':
+      _showConfirmDialog('撤销 Commit', `确定要撤销 commit ${card.commitSha || ''} 吗？`, () => {
+        events.emit('chat:github:revert', { conversationId: _convId, card });
+        _showToast('正在撤销...');
+      });
+      break;
+  }
+}
+
 // ========== 工具箱 ==========
 
 function _toggleToolbox() {
@@ -2213,9 +2618,7 @@ function _handleTool(tool) {
       _showSlashPanel();
       break;
     case 'github':
-      // 预留路由：Step 4 实现 GitHub 面板
-      events.emit('chat:github:open', { conversationId: _convId });
-      _showToast('GitHub面板打开中...');
+      _showGithubToolPanel();
       break;
     case 'cot':
       _toggleCot();
@@ -2546,6 +2949,30 @@ function _onExternalMessage(payload) {
 function _autoResize() {
   _inputEl.style.height = 'auto';
   _inputEl.style.height = Math.min(_inputEl.scrollHeight, 100) + 'px';
+}
+
+// 输入触发检测：@ 提及（群聊）+ / Slash 指令
+function _checkInputTrigger() {
+  const text = _inputEl.value;
+  const cursorPos = _inputEl.selectionStart;
+  // 取光标前的文本
+  const beforeCursor = text.slice(0, cursorPos);
+  const isGroup = _conv?.type === 'group';
+
+  // @ 提及：检测最后一个 @ 后无空格
+  if (isGroup) {
+    const atMatch = beforeCursor.match(/@([^\s@]*)$/);
+    if (atMatch) {
+      _showMentionPanel(atMatch[1]);
+      return;
+    }
+    _closeMentionPanel();
+  }
+
+  // Slash 指令：行首 /
+  if (/^\/[^\s]*$/.test(beforeCursor) && !beforeCursor.includes(' ')) {
+    _showSlashPanel();
+  }
 }
 
 // ========== Toast ==========

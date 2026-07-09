@@ -501,6 +501,285 @@
   -webkit-backdrop-filter: var(--backdrop-blur);
 }
 
+/* 头部中间区 */
+.chat-header-center {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 群聊头部 */
+.chat-group-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.chat-group-avatars {
+  position: relative;
+  display: flex;
+  height: 28px;
+  width: 36px;
+  flex-shrink: 0;
+}
+
+.chat-group-avatar {
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-avatar);
+  background: var(--color-primary-light);
+  border: 2px solid var(--input-bar-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.chat-group-avatar-text {
+  font-size: 0.7rem;
+  font-weight: var(--font-weight-bold);
+  color: var(--color-primary-dark);
+}
+
+.chat-group-avatar-extra {
+  position: absolute;
+  inset: 0;
+  background: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.6rem;
+  color: var(--text-on-primary);
+}
+
+.chat-group-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.chat-group-name {
+  font-size: 0.95rem;
+  font-weight: var(--font-weight-bold);
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chat-group-count {
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+}
+
+/* 群聊气泡名称标签 */
+.chat-bubble-name-tag {
+  font-size: 0.6875rem;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+  font-weight: var(--font-weight-bold);
+}
+
+/* @ 提及高亮 */
+.chat-bubble-content .chat-mention {
+  background: var(--color-primary-light);
+  color: var(--color-primary-dark);
+  border-radius: var(--radius-sm);
+  padding: 0 4px;
+}
+
+/* @ 提及浮层 */
+.chat-mention-overlay {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  right: 0;
+  z-index: 50;
+  margin-bottom: 4px;
+}
+
+.chat-mention-panel {
+  background: var(--card-bg);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-soft);
+  max-height: 200px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.chat-mention-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-out);
+}
+
+.chat-mention-item:active {
+  background: var(--bg-hover);
+}
+
+.chat-mention-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-avatar);
+  background: var(--color-primary-light);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: var(--font-weight-bold);
+  color: var(--color-primary-dark);
+  flex-shrink: 0;
+}
+
+.chat-mention-name {
+  font-size: 0.85rem;
+  color: var(--text-primary);
+}
+
+/* 成员列表面板（右侧滑出，65vw） */
+.chat-member-panel-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--overlay-bg);
+  z-index: 100;
+  animation: fadeIn var(--duration-fast) var(--ease-out) both;
+}
+
+.chat-member-panel-overlay .chat-member-panel {
+  position: fixed;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 65vw;
+  max-width: 360px;
+  background: var(--card-bg);
+  z-index: 101;
+  display: flex;
+  flex-direction: column;
+  animation: chatPanelSlideIn var(--duration-spring) var(--spring) both;
+}
+
+.chat-member-panel-overlay.closing .chat-member-panel {
+  animation: chatPanelSlideOut var(--duration-spring) var(--spring) both;
+}
+
+@keyframes chatPanelSlideIn {
+  from { transform: translateX(100%); }
+  to   { transform: translateX(0); }
+}
+
+@keyframes chatPanelSlideOut {
+  from { transform: translateX(0); }
+  to   { transform: translateX(100%); }
+}
+
+.chat-member-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px;
+  border-bottom: 1px solid var(--border-soft);
+  flex-shrink: 0;
+}
+
+.chat-member-panel-title {
+  font-size: 1rem;
+  font-weight: var(--font-weight-bold);
+  color: var(--text-primary);
+}
+
+.chat-member-panel-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-avatar);
+  color: var(--text-secondary);
+}
+
+.chat-member-panel-close:active {
+  background: var(--bg-hover);
+}
+
+.chat-member-list {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.chat-member-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.chat-member-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-avatar);
+  background: var(--color-primary-light);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.9rem;
+  font-weight: var(--font-weight-bold);
+  color: var(--color-primary-dark);
+  flex-shrink: 0;
+}
+
+.chat-member-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.chat-member-name {
+  font-size: 0.9rem;
+  font-weight: var(--font-weight-bold);
+  color: var(--text-primary);
+}
+
+.chat-member-source {
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+}
+
+.chat-member-remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-avatar);
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.chat-member-remove:active {
+  background: var(--bg-hover);
+  color: var(--text-danger);
+}
+
+.chat-member-empty {
+  padding: 32px;
+  text-align: center;
+  color: var(--text-placeholder);
+  font-size: 0.85rem;
+}
+
 /* 消息滚动区 */
 .chat-messages-area {
   flex: 1;
@@ -1772,6 +2051,302 @@
   background: var(--color-primary);
   color: var(--text-on-primary);
   font-size: 0.8rem;
+}
+
+/* Token 用量显示（SKILL 10.1） */
+.chat-token-usage {
+  margin-top: 4px;
+  font-size: 0.625rem;
+  color: var(--text-secondary);
+  opacity: var(--opacity-disabled);
+  text-align: right;
+}
+
+/* 版本历史指示器（SKILL 10.4） */
+.chat-version-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 6px;
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+}
+
+.chat-version-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-avatar);
+  color: var(--text-secondary);
+  transition: background var(--duration-fast) var(--ease-out);
+}
+
+.chat-version-btn:active {
+  background: var(--bg-hover);
+}
+
+.chat-version-btn:first-child {
+  transform: rotate(180deg);
+}
+
+.chat-version-text {
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 上下文范围可视化（SKILL 10.2） */
+.chat-msg-in-context {
+  position: relative;
+}
+
+.chat-msg-in-context::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 4px;
+  bottom: 4px;
+  width: 2px;
+  background: var(--color-primary);
+  border-radius: var(--radius-button);
+}
+
+.chat-msg-out-context {
+  position: relative;
+  opacity: var(--opacity-secondary);
+}
+
+.chat-msg-out-context::after {
+  content: '上下文之外';
+  position: absolute;
+  top: 2px;
+  right: 8px;
+  font-size: 0.6rem;
+  color: var(--text-placeholder);
+  pointer-events: none;
+}
+
+/* GitHub 卡片（SKILL 第十二节） */
+.chat-github-card {
+  background: var(--github-bg);
+  border: 1px solid var(--github-border);
+  border-radius: var(--radius-card);
+  overflow: hidden;
+  margin: 4px 0;
+}
+
+.chat-github-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--github-border);
+}
+
+.chat-github-card-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+}
+
+.chat-github-card-title {
+  flex: 1;
+  font-size: 0.9rem;
+  font-weight: var(--font-weight-bold);
+  color: var(--text-primary);
+}
+
+.chat-github-status {
+  font-size: 0.7rem;
+  padding: 2px 8px;
+  border-radius: var(--radius-button);
+  font-weight: var(--font-weight-bold);
+}
+
+.chat-github-status-open {
+  background: var(--diff-add-bg);
+  color: var(--github-open-color);
+}
+
+.chat-github-status-closed {
+  background: var(--diff-del-bg);
+  color: var(--github-closed-color);
+}
+
+.chat-github-status-merged {
+  background: var(--color-primary-light);
+  color: var(--github-merge-color);
+}
+
+.chat-github-card-body {
+  padding: 10px 12px;
+}
+
+.chat-github-card-title-text {
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+
+.chat-github-card-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+}
+
+.chat-github-card-actions {
+  display: flex;
+  gap: 8px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--github-border);
+}
+
+.chat-github-card-btn {
+  flex: 1;
+  padding: 6px 12px;
+  border-radius: var(--radius-button);
+  background: var(--card-bg);
+  border: 1px solid var(--github-border);
+  font-size: 0.75rem;
+  color: var(--text-primary);
+  text-align: center;
+  transition: background var(--duration-fast) var(--ease-out);
+}
+
+.chat-github-card-btn:active {
+  background: var(--bg-hover);
+}
+
+.chat-github-card-btn.danger {
+  color: var(--text-danger);
+  border-color: var(--text-danger);
+}
+
+.chat-github-card-btn.danger:active {
+  background: var(--diff-del-bg);
+}
+
+.chat-github-card-btn[disabled] {
+  opacity: var(--opacity-disabled);
+  pointer-events: none;
+}
+
+/* Diff 展示 */
+.chat-github-diff {
+  margin-top: 8px;
+}
+
+.chat-github-diff summary {
+  cursor: pointer;
+  font-size: 0.75rem;
+  color: var(--color-primary);
+}
+
+.chat-github-diff-content {
+  margin-top: 6px;
+  padding: 8px;
+  background: var(--code-bg);
+  color: var(--code-text);
+  border-radius: var(--radius-sm);
+  font-size: 0.72rem;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.chat-diff-add {
+  background: var(--diff-add-bg);
+  display: block;
+}
+
+.chat-diff-del {
+  background: var(--diff-del-bg);
+  display: block;
+}
+
+/* GitHub 工具箱面板 */
+.chat-github-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.chat-github-panel-title {
+  font-size: 1rem;
+  font-weight: var(--font-weight-bold);
+  color: var(--text-primary);
+}
+
+.chat-github-panel-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-avatar);
+  color: var(--text-secondary);
+}
+
+.chat-github-panel-close:active {
+  background: var(--bg-hover);
+}
+
+.chat-github-panel-body {
+  padding: 12px 16px;
+}
+
+.chat-github-action-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.chat-github-action {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 14px 8px;
+  border-radius: var(--radius-md);
+  background: var(--bg-hover);
+  transition: background var(--duration-fast) var(--ease-out);
+}
+
+.chat-github-action:active {
+  background: var(--color-primary-light);
+}
+
+.chat-github-action-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-primary);
+}
+
+.chat-github-action-label {
+  font-size: 0.78rem;
+  color: var(--text-primary);
+}
+
+.chat-github-panel-hint {
+  margin-top: 12px;
+  padding: 8px 12px;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.chat-github-branch {
+  font-weight: var(--font-weight-bold);
+  color: var(--color-primary);
 }
 
 /* 全屏图片预览 */
