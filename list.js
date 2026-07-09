@@ -918,8 +918,8 @@ async function confirmDeleteCharacter(item) {
   showToast('已经把 TA 从列表里移走了');
   await rerender();
 
-  window.dispatchEvent(new CustomEvent('characters:updated'));
   window.dispatchEvent(new CustomEvent('desktop:refresh'));
+  try { window.AppBus?.emit('characters:updated', {}); } catch (_) {}
 }
 
 async function renameGroup(item) {
