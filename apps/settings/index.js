@@ -83,7 +83,7 @@ function _injectStyles() {
                   opacity var(--duration-fast) var(--ease-smooth);
     }
     .st-collapse.open { max-height: 800px; opacity: 1; }
-    .st-collapse-inner { padding: 4px 4px 6px; display: flex; flex-direction: column; gap: 10px; }
+    .st-collapse-inner { padding: 4px 4px 6px; display: flex; flex-direction: column; gap: 10px; position: relative; }
 
     /* ====== 主题小色卡 ====== */
     .st-theme-row { display: flex; gap: 12px; overflow-x: auto; padding: 4px 0 6px; -webkit-overflow-scrolling: touch; scroll-snap-type: x mandatory; }

@@ -261,7 +261,7 @@ function _wpPreviewStyle(type, value) {
 function bindAppearance(currentPage, root) {
   _bindThemeChips(currentPage, root);
   _bindModeSeg(currentPage, root);
-  _bindDisplaySeg(currentPage);
+  _bindDisplaySeg(currentPage, root);
   _bindWallpaper(currentPage);
 }
 
@@ -306,7 +306,7 @@ function _bindModeSeg(currentPage, root) {
   });
 }
 
-function _bindDisplaySeg(currentPage) {
+function _bindDisplaySeg(currentPage, root) {
   const iconSeg = currentPage.querySelector('#st-icon-size-seg');
   if (iconSeg) {
     iconSeg.querySelectorAll('.st-seg-btn').forEach(btn => {
@@ -316,6 +316,9 @@ function _bindDisplaySeg(currentPage) {
         applySizeSettings();
         iconSeg.querySelectorAll('.st-seg-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
+        // 同步首页桌面入口 hint
+        const entryHint = root?.querySelector('#st-entry-desktop .st-capsule-hint');
+        if (entryHint) entryHint.textContent = size === 'large' ? '大图标模式' : '标准图标';
       });
     });
   }
