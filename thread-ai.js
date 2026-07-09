@@ -2327,8 +2327,6 @@ async function updateUnreadCount(characterId, delta = 0) {
 
   setData(key, next);
 
-  window.AppEvents?.emit?.('badge:chat', { characterId, count: next[characterId] });
-
   if (typeof window.refreshDesktopBadges === 'function') window.refreshDesktopBadges();
 }
 

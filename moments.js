@@ -103,7 +103,6 @@ export async function maybeCreateAutoMoment(characterId, sourceText = '') {
   await setDB('characters', character.id, character);
   setData(`last_moment_${characterId}`, Date.now());
 
-  window.AppEvents?.emit?.('badge:moments', 1);
   window.refreshDesktopBadges?.();
 
   return post;
@@ -131,7 +130,6 @@ async function markAllRead() {
     return setDB('moments', item.id, item);
   }));
 
-  window.AppEvents?.emit?.('badge:moments', 0);
   window.refreshDesktopBadges?.();
 }
 
@@ -467,7 +465,6 @@ async function aiReplyToUserComment(post, userComment) {
     window.AppBus?.emit('moments:interaction', { type: 'reply', characterId: character.id, postId: latest.id, content: reply });
   } catch (_) {}
 
-  window.AppEvents?.emit?.('badge:moments', 1);
   window.refreshDesktopBadges?.();
 
   await loadData();
@@ -525,7 +522,6 @@ async function maybeAiInteract(post) {
   await setDB('moments', targetPost.id, targetPost);
 
   if (targetPost.authorId === 'user' && (targetPost.likes.length || targetPost.comments.length)) {
-    window.AppEvents?.emit?.('badge:moments', 1);
     window.refreshDesktopBadges?.();
   }
 

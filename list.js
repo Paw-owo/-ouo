@@ -919,7 +919,6 @@ async function confirmDeleteCharacter(item) {
   await rerender();
 
   window.dispatchEvent(new CustomEvent('characters:updated'));
-  window.dispatchEvent(new CustomEvent('chat:refresh'));
   window.dispatchEvent(new CustomEvent('desktop:refresh'));
 }
 
@@ -1038,7 +1037,6 @@ async function confirmDeleteGroup(item) {
   showToast('群聊删掉啦');
   await rerender();
 
-  window.dispatchEvent(new CustomEvent('chat:refresh'));
   window.dispatchEvent(new CustomEvent('desktop:refresh'));
 }
 
@@ -1206,7 +1204,6 @@ function clearPrivateUnread(characterId) {
     setData(PRIVATE_UNREAD_KEY, unreadMap);
   }
 
-  window.AppEvents?.emit?.('badge:chat', { characterId: id, count: 0 });
   window.refreshDesktopBadges?.();
 }
 

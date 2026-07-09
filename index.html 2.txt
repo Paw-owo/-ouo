@@ -2257,8 +2257,6 @@
 
     function setupAppEvents() {
       window.addEventListener('app-close', () => closeCurrentApp());
-      window.addEventListener('app-refresh-badges', () => refreshBadges());
-      window.addEventListener('app-refresh-desktop', () => refreshDesktop());
       window.addEventListener('app-lock', () => { setData('app_lock_unlocked', false); updateLockState(); });
     }
 

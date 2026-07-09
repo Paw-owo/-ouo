@@ -342,7 +342,6 @@ function bindHubEvents() {
     const unread = getData(BADGE_KEY) || {};
     unread.games = 0;
     setData(BADGE_KEY, unread);
-    window.AppEvents?.emit?.('badge:games', 0);
     window.refreshDesktopBadges?.();
     showToast('提醒清掉啦');
   });

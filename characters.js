@@ -1852,12 +1852,9 @@ function clearLongPress() {
 
 function emitCharacterUpdates() {
   window.AppEvents?.emit?.('desktop:refresh');
-  window.AppEvents?.emit?.('chat:refresh');
-  window.dispatchEvent(new CustomEvent('chat:refresh'));
   // characters:updated 统一只走 appBus 一条通道，避免三机制重复触发 chat 监听器
   try {
     window.AppBus?.emit('characters:updated', {});
-    window.AppBus?.emit('chat:refresh', {});
   } catch (_) {}
   window.refreshDesktopBadges?.();
 }
