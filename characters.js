@@ -1852,11 +1852,9 @@ function clearLongPress() {
 
 function emitCharacterUpdates() {
   window.AppEvents?.emit?.('desktop:refresh');
-  window.AppEvents?.emit?.('characters:updated');
   window.AppEvents?.emit?.('chat:refresh');
-  window.dispatchEvent(new CustomEvent('characters:updated'));
   window.dispatchEvent(new CustomEvent('chat:refresh'));
-  // 同步走 appBus，让 chat 等通过 appBus.on 监听的 APP 也能收到
+  // characters:updated 统一只走 appBus 一条通道，避免三机制重复触发 chat 监听器
   try {
     window.AppBus?.emit('characters:updated', {});
     window.AppBus?.emit('chat:refresh', {});
