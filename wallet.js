@@ -902,6 +902,7 @@ export function addBalance(amount, description = '充值', extra = {}) {
   nextWallet.balance = wallet.balance;
 
   saveWallet(nextWallet);
+  window.AppBus?.emit('wallet:balance-updated', { balance: nextWallet.balance, type: 'income', amount: value, description });
   return true;
 }
 
@@ -924,6 +925,7 @@ export function deductBalance(amount, description = '消费', extra = {}) {
   nextWallet.balance = wallet.balance;
 
   saveWallet(nextWallet);
+  window.AppBus?.emit('wallet:balance-updated', { balance: nextWallet.balance, type: 'expense', amount: value, description });
   return true;
 }
 
