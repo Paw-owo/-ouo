@@ -4,7 +4,7 @@
 //   from '../core/ui.js': showToast, showBottomSheet, hideBottomSheet, showConfirm, createIcon
 
 import {
-  getData, setData, generateId, getNow, getDB, setDB, deleteDB, compressImage
+  getData, setData, generateId, getNow, getDB, setDB, deleteDB, compressImage, getAllDB
 } from '../core/storage.js';
 
 import {
