@@ -2019,7 +2019,6 @@
       window.addEventListener('storage', async () => { await applyAllImages(); refreshBadges(); });
       window.addEventListener('desktop:refresh', async () => { loadTheme(); applyDesktopScale(); await applyCustomFontFromStorage(); await refreshDesktop(); });
       window.addEventListener('app-settings-updated', async () => { loadTheme(); applyDesktopScale(); await applyCustomFontFromStorage(); await refreshDesktop(); });
-      window.addEventListener('app-images-changed', applyAllImages);
       window.addEventListener('app-images-updated', applyAllImages);
     }
 
