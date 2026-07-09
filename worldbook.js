@@ -225,7 +225,7 @@ export async function mount(containerEl) {
       },
       getAll: () => getWorldbookEntries(),
       getVisual: (entryId) => getWorldbookVisual(entryId),
-      getWorldbookForCharacter: (characterId) => getWorldbookForCharacter(characterId)
+      getWorldbookForCharacter: (character) => getWorldbookForCharacter(character)
     });
   } catch (_) {}
 }
@@ -264,44 +264,68 @@ export async function getWorldbookVisual(entryId) {
   };
 }
 
-export async function getWorldbookForCharacter(characterId) {
+export async function getWorldbookForCharacter(character) {
   try {
-    const all = await getWorldbookEntries();
-    if (!Array.isArray(all) || all.length === 0) return '';
+    const list = await getWorldbookEntries();
+    const all = (Array.isArray(list) ? list : []).filter((entry) => entry && entry.enabled !== false);
 
-    const priorityOrder = { core: 4, high: 3, normal: 2, low: 1 };
-    const parts = [];
+    if (!all.length) return [];
 
-    const sorted = all
-      .filter((entry) => entry && entry.enabled !== false)
-      .filter((entry) => entry.content && String(entry.content).trim())
-      .sort((a, b) => (priorityOrder[b.priority] || 2) - (priorityOrder[a.priority] || 2));
+    // 兼容两种调用：传 character 对象，或仅传 characterId 字符串
+    const charObj = character && typeof character === 'object' ? character : null;
+    const charId = charObj ? String(charObj.id || '') : String(character || '');
 
-    for (const entry of sorted) {
-      if (entry.type === 'B') {
-        parts.push(formatWorldbookPart(entry));
-        continue;
-      }
-
-      if (entry.type === 'A') {
-        const targets = entry.targetIds;
-
-        if (targets === 'all' || (Array.isArray(targets) && targets.includes('all'))) {
-          parts.push(formatWorldbookPart(entry));
-          continue;
-        }
-
-        if (Array.isArray(targets) && characterId && targets.includes(characterId)) {
-          parts.push(formatWorldbookPart(entry));
-        }
-      }
+    if (!charId) {
+      return sortByPriority(all);
     }
 
-    return parts.length ? `\n\n[世界书]\n${parts.join('\n\n')}` : '';
+    // 角色侧绑定（character.worldbookIds）
+    const ids = normalizeList(charObj?.worldbookIds).map(String);
+    const mode = charObj?.worldbookMode || 'bound_plus_global';
+    const bound = all.filter((item) => ids.includes(String(item.id)));
+
+    if (mode === 'only_bound') {
+      // 仅角色绑定的条目，但也包含条目侧显式 targetIds 命中本角色的条目
+      const entryBound = all.filter((item) => {
+        if (ids.includes(String(item.id))) return false;
+        const targets = item.targetIds;
+        if (targets === 'all' || (Array.isArray(targets) && targets.includes('all'))) return false;
+        return Array.isArray(targets) && targets.includes(charId);
+      });
+      return sortByPriority([...bound, ...entryBound]);
+    }
+
+    const global = all.filter((item) => {
+      if (ids.includes(String(item.id))) return false;
+      if (item.characterId && String(item.characterId) !== charId) return false;
+      return item.global === true || item.isGlobal === true || !item.characterId;
+    });
+
+    // 条目侧显式 targetIds 命中本角色的条目
+    const entryBound = all.filter((item) => {
+      if (ids.includes(String(item.id))) return false;
+      if (global.includes(item)) return false;
+      const targets = item.targetIds;
+      if (targets === 'all' || (Array.isArray(targets) && targets.includes('all'))) return false;
+      return Array.isArray(targets) && targets.includes(charId);
+    });
+
+    return sortByPriority([...bound, ...global, ...entryBound]);
   } catch (error) {
     console.warn('[worldbook] getWorldbookForCharacter failed', error);
-    return '';
+    return [];
   }
+}
+
+function normalizeList(value) {
+  return Array.isArray(value) ? value.filter(Boolean) : [];
+}
+
+function sortByPriority(items) {
+  const priorityOrder = { core: 4, high: 3, normal: 2, low: 1 };
+  return items
+    .filter((entry) => entry.content && String(entry.content).trim())
+    .sort((a, b) => (priorityOrder[b.priority] || 2) - (priorityOrder[a.priority] || 2));
 }
 
 function formatWorldbookPart(entry) {
