@@ -337,8 +337,8 @@ export function setConfig(key, value) {
   }
 }
 
-export function getData(key) {
-  return getConfig(key, null);
+export function getData(key, defaultValue = null) {
+  return getConfig(key, defaultValue);
 }
 
 export function setData(key, value) {
