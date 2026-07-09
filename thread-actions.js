@@ -17,6 +17,7 @@ import {
 
 import { showToast } from '../../core/ui.js';
 import { playTTS, stopAll } from '../../core/tts.js';
+import { deductBalance, getBalance } from '../wallet.js';
 
 let requestThreadAIReplyFn = null;
 let stopThreadAIReplyFn = null;
@@ -422,6 +423,21 @@ export async function sendTransferMessage(state, amount, note = '', extra = {}) 
 
   if (!Number.isFinite(value) || value <= 0) {
     showToast('金额要大于 0');
+    return null;
+  }
+
+  if (getBalance() < value) {
+    showToast('钱包余额不足，转账失败');
+    return null;
+  }
+
+  const deductOk = deductBalance(value, `转账给 ${extra.characterName || state.character?.name || 'TA'}`, {
+    category: 'transfer',
+    source: 'chat_transfer',
+    ownerType: 'user'
+  });
+  if (!deductOk) {
+    showToast('钱包扣款失败，转账未成功');
     return null;
   }
 
