@@ -130,7 +130,8 @@ async function sendChat(options = {}) {
         text: result.text,
         requestId,
         degraded: false,
-        error: null
+        error: null,
+        usage: result.usage || null
       };
 
     } catch (err) {
@@ -162,12 +163,17 @@ async function sendChat(options = {}) {
 async function _doRequest({ apiConfig, messages, temperature, stream, timeout, onChunk, signal }) {
   const url = _buildRequestURL(apiConfig.baseURL);
   const headers = _buildHeaders(apiConfig.apiKey);
-  const body = JSON.stringify({
+  const bodyObj = {
     model: apiConfig.model,
     messages,
     temperature,
     stream: !!stream
-  });
+  };
+  // 流式请求附带 usage 信息
+  if (stream) {
+    bodyObj.stream_options = { include_usage: true };
+  }
+  const body = JSON.stringify(bodyObj);
 
   // 超时控制
   const controller = new AbortController();
@@ -195,12 +201,13 @@ async function _doRequest({ apiConfig, messages, temperature, stream, timeout, o
     }
 
     if (stream && response.body) {
-      const text = await _readStream(response.body, onChunk);
-      return { text };
+      const result = await _readStream(response.body, onChunk);
+      return { text: result.text, usage: result.usage || null };
     } else {
       const data = await response.json();
       const text = _extractContent(data);
-      return { text };
+      const usage = data?.usage || null;
+      return { text, usage };
     }
   } finally {
     clearTimeout(timeoutId);
@@ -237,6 +244,7 @@ async function _readStream(body, onChunk) {
   const decoder = new TextDecoder();
   let buffer = '';
   let fullText = '';
+  let usage = null;
 
   try {
     while (true) {
@@ -264,6 +272,10 @@ async function _readStream(body, onChunk) {
             fullText += delta;
             if (typeof onChunk === 'function') onChunk(delta);
           }
+          // 捕获 usage（通常在最后一个 chunk）
+          if (parsed.usage) {
+            usage = parsed.usage;
+          }
         } catch {
           // 单行解析失败跳过，不影响整体
         }
@@ -273,7 +285,7 @@ async function _readStream(body, onChunk) {
     reader.releaseLock();
   }
 
-  return fullText;
+  return { text: fullText, usage };
 }
 
 // 从非流式响应中提取文本内容

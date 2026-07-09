@@ -111,6 +111,77 @@
   --chain-summary-bg: var(--bg-surface);
   --chain-summary-border: var(--border-color);
 
+  /* === 消息APP专属变量（o3o-messaging-app v2） === */
+  /* 映射到项目已有变量，保持主题联动 */
+  --color-primary-dark: var(--color-primary-deep);
+  --color-danger: var(--color-error);
+  --page-bg: var(--bg-base);
+  --card-bg: var(--bg-surface);
+  --input-bar-bg: var(--bg-glass);
+  --overlay-bg: var(--bg-mask);
+
+  /* 气泡背景 */
+  --bubble-ai-bg: var(--bg-surface);
+  --bubble-user-bg: var(--color-primary-ultralight);
+  --bubble-github-bg: var(--color-accent-light);
+
+  /* 文字 */
+  --text-danger: var(--color-error);
+  --text-on-primary: var(--bg-base);
+
+  /* 边框 */
+  --border-soft: var(--border-color);
+  --border-medium: rgba(0,0,0,0.15);
+  --border-input: rgba(0,0,0,0.12);
+  --border-input-focus: var(--color-primary);
+
+  /* diff */
+  --diff-add-bg: rgba(34, 197, 94, 0.15);
+  --diff-del-bg: rgba(239, 68, 68, 0.15);
+
+  /* 代码块 */
+  --code-bg: #1e1e2e;
+  --code-text: #cdd6f4;
+  --code-header-bg: #313244;
+  /* 代码语法高亮 token 色（仅在 --code-bg 深色背景上使用） */
+  --code-kw: #c792ea;       /* 关键字 */
+  --code-str: #c3e88d;      /* 字符串 */
+  --code-comment: #676e95;  /* 注释 */
+  --code-num: #f78c6c;      /* 数字 */
+
+  /* 思维链 */
+  --cot-bg: var(--chain-bg);
+  --cot-border: var(--color-primary-light);
+
+  /* Toast */
+  --toast-bg: rgba(44,44,44,0.88);
+  --toast-text: #ffffff;
+
+  /* GitHub卡片 */
+  --github-bg: #f6f8fa;
+  --github-border: #d0d7de;
+  --github-merge-color: #8250df;
+  --github-open-color: #1f883d;
+  --github-closed-color: #cf222e;
+
+  /* 透明度 */
+  --opacity-secondary: 0.55;
+  --opacity-timestamp: 0.4;
+  --opacity-disabled: 0.3;
+
+  /* 圆角 */
+  --radius-bubble: 18px;
+  --radius-bubble-corner: 6px;
+  --radius-card: var(--radius-lg);
+  --radius-button: var(--radius-full);
+  --radius-input: var(--radius-lg);
+  --radius-avatar: 50%;
+
+  /* 动画 */
+  --spring: var(--ease-soft);
+  --ease-out: ease-out;
+  --duration-spring: 320ms;
+
   /* 尺寸缩放（由设置页控制） */
   --font-size-base: 16px;
   --icon-size-scale: 1;

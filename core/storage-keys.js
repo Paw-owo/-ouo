@@ -86,7 +86,13 @@ const STORAGE_KEYS = Object.freeze({
 
   // === 通用 ===
   EXPERIMENTAL_MODE:  'experimental_mode',
-  FIRST_LAUNCH:       'first_launch'
+  FIRST_LAUNCH:       'first_launch',
+
+  // === 消息APP ===
+  CHAT_CONVERSATIONS: 'chat_conversations',
+  CHAT_GITHUB_CONFIG: 'chat_github_config',
+  CHAT_SLASH_COMMANDS: 'chat_slash_commands',
+  CHAT_DRAFTS:        'chat_drafts'
 });
 
 // IndexedDB 库名与表名
