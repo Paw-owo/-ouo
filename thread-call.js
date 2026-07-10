@@ -15,6 +15,7 @@ import {
 import { createIcon, showToast } from '../../core/ui.js';
 import { silentRequest } from '../../core/api.js';
 import { playTTS, stopAll } from '../../core/tts.js';
+import { addMemory } from '../../core/memory.js';
 
 const CALL_STYLE_ID = 'chat-thread-call-style';
 
@@ -446,23 +447,14 @@ async function writeCallMemory() {
 
   if (!content) return null;
 
-  const exists = await getByIndexDB('memories', 'characterId', callState.characterId).catch(() => []);
-  const duplicated = exists.some((item) => similarText(item.content, content));
+  const memory = await addMemory(callState.characterId, content, 'summary', false, {
+    importance: 3,
+    mood: ''
+  });
 
-  if (duplicated) return null;
-
-  const now = getNow();
-  const memory = {
-    id: generateId('memory'),
-    characterId: callState.characterId,
-    content,
-    source: 'summary',
-    createdAt: now,
-    updatedAt: now
-  };
-
-  await setDB('memories', memory);
-  showToast('这通电话已经记好啦');
+  if (memory) {
+    showToast('这通电话已经记好啦');
+  }
   return memory;
 }
 
