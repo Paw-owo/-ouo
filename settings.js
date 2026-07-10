@@ -1507,6 +1507,7 @@ async function clearStoreWithConfirm(store, message, successText) {
   await clearStoreDB(store);
   if (store === 'messages' || store === 'group_messages') {
     removeData('chat_unread_counts');
+    removeData('chat_group_unread_counts');
   }
 
   showToast(successText);

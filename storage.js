@@ -545,4 +545,4 @@ export async function getStorageUsage() {
   };
 }
 
-// 改了什么：DB_VERSION 从 5 升到 6，新增 AI个人手机 7 个仓库与索引，保留已有 store 与导出函数不变。
+// 改了什么：DB_VERSION 从 6 升到 7，新增 songs/playlists/albums/memories_album 四个 store，保留已有 store 与导出函数不变。
