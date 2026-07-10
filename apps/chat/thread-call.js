@@ -16,6 +16,7 @@ import { createIcon, showToast } from '../../core/ui.js';
 import { silentRequest } from '../../core/api.js';
 import { playTTS, stopAll } from '../../core/tts.js';
 import { addMemory } from '../../core/memory.js';
+import { getWorldbookForCharacter } from '../worldbook.js';
 
 const CALL_STYLE_ID = 'chat-thread-call-style';
 
@@ -35,7 +36,9 @@ const callState = {
   timer: null,
   seconds: 0,
   isSending: false,
-  isEnding: false
+  isEnding: false,
+  activeLock: null,
+  worldbookItems: []
 };
 
 export async function mountThreadCall(containerEl, options = {}) {
@@ -52,7 +55,13 @@ export async function mountThreadCall(containerEl, options = {}) {
   callState.seconds = 0;
   callState.isSending = false;
   callState.isEnding = false;
+  callState.activeLock = null;
+  callState.worldbookItems = [];
   callState.mounted = true;
+
+  // 预载关系锁和世界书，对齐私聊 thread-ai 的处理方式
+  callState.activeLock = await getActiveRelationshipLock(callState.characterId).catch(() => null);
+  callState.worldbookItems = await getWorldbookForCharacter(callState.character).catch(() => []);
 
   injectStyle();
   renderCall();
@@ -86,6 +95,8 @@ export function unmountThreadCall() {
   callState.seconds = 0;
   callState.isSending = false;
   callState.isEnding = false;
+  callState.activeLock = null;
+  callState.worldbookItems = [];
 }
 
 function renderCall() {
@@ -301,7 +312,20 @@ function rejectIncomingCall() {
 }
 
 function speakOpening() {
-  const content = callState.incoming ? `你接起来了，我在。` : `电话接通了，我在。`;
+  let content = callState.incoming ? `你接起来了，我在。` : `电话接通了，我在。`;
+
+  // 关系锁严格状态下，开场也降级，对齐私聊的冷淡/距离感
+  if (isStrictLockActive()) {
+    const lock = callState.activeLock;
+    if (lock?.type === 'soft_block') {
+      content = `……你怎么打过来了。我还没准备好说话。`;
+    } else if (lock?.type === 'cooldown') {
+      content = `电话接了。但我现在不想多说。`;
+    } else if (lock?.type === 'ultimatum') {
+      content = `你只剩这一次机会说清楚。我在听。`;
+    }
+  }
+
   addCallLog('assistant', content);
   renderCall();
   speakText(content);
@@ -377,6 +401,8 @@ function buildCallMessages() {
     callState.character?.description ? `我的简介：${callState.character.description}` : '',
     callState.character?.speakingStyle ? `我说话的风格：${callState.character.speakingStyle}` : '',
     callState.character?.systemPrompt ? `我的核心人设：${String(callState.character.systemPrompt).slice(0, 300)}` : '',
+    buildWorldbookPrompt(callState.worldbookItems),
+    buildCallLockPrompt(callState.activeLock, callName),
     '',
     '我会：',
     '- 像真实电话一样简短自然地回应，不长篇大论',
@@ -396,6 +422,81 @@ function buildCallMessages() {
       content: item.content
     }))
   ];
+}
+
+// ═══════════════════════════════════════
+// 【世界书】对齐 thread-ai.js 的 buildWorldbookPrompt 格式
+// ═══════════════════════════════════════
+
+function buildWorldbookPrompt(items) {
+  const list = Array.isArray(items) ? items : [];
+  if (!list.length) return '';
+
+  return [
+    '世界书规则与背景：',
+    '以下内容是我所在世界和关系里的真实设定，我回应时会优先遵守：',
+    ...list.slice(0, 16).map((item) => `- ${item.title || item.name || '设定'}：${item.content || item.description || ''}`)
+  ].join('\n');
+}
+
+// ═══════════════════════════════════════
+// 【关系锁】对齐 thread-ai.js 私聊的降级判断
+// ═══════════════════════════════════════
+
+const STRICT_LOCK_TYPES = ['soft_block', 'cooldown', 'ultimatum'];
+
+function isStrictLockActive() {
+  const lock = callState.activeLock;
+  return Boolean(lock && lock.status === 'active' && STRICT_LOCK_TYPES.includes(lock.type));
+}
+
+function buildCallLockPrompt(lock, callName) {
+  if (!lock || lock.status !== 'active') return '';
+
+  const lines = ['当前关系状态：'];
+
+  if (lock.type === 'cooldown') {
+    lines.push(`我现在不想马上理${callName}，正在冷战几分钟。电话里我也会更克制、更短，不主动软下来。`);
+  } else if (lock.type === 'soft_block') {
+    lines.push(`我像是把联系方式藏起来了，现在不想真的出现。电话里我会保持距离感，不会像平时那样亲密。`);
+  } else if (lock.type === 'ultimatum') {
+    lines.push(`这是给${callName}的最后解释机会。我会认真听，但不会轻易软下来，除非对方真的说清楚了。`);
+  } else if (lock.reason) {
+    lines.push(`${lock.reason}`);
+  }
+
+  if (lock.title) lines.push(`当前状态：${lock.title}`);
+
+  return lines.join('\n');
+}
+
+// 读取当前角色的有效关系锁，逻辑与 thread-ai.js / list.js 一致
+async function getActiveRelationshipLock(characterId) {
+  const id = String(characterId || '').trim();
+  if (!id) return null;
+
+  const locks = normalizeArray(await getByIndexDB('relationship_locks', 'characterId', id).catch(() => []))
+    .filter((item) => item && item.status === 'active')
+    .sort(sortByUpdatedAtDesc);
+
+  const now = Date.now();
+
+  for (const lock of locks) {
+    const endsAt = new Date(lock.endsAt || 0).getTime();
+
+    if (endsAt && endsAt <= now) {
+      await setDB('relationship_locks', {
+        ...lock,
+        status: 'expired',
+        updatedAt: getNow()
+      }).catch(() => null);
+      continue;
+    }
+
+    return lock;
+  }
+
+  return null;
 }
 
 // ═══════════════════════════════════════
@@ -589,6 +690,14 @@ function similarText(a, b) {
   if (left.includes(right) || right.includes(left)) return true;
 
   return left.slice(0, 24) === right.slice(0, 24);
+}
+
+function normalizeArray(value) {
+  return Array.isArray(value) ? value.filter(Boolean) : [];
+}
+
+function sortByUpdatedAtDesc(a, b) {
+  return String(b?.updatedAt || b?.createdAt || '').localeCompare(String(a?.updatedAt || a?.createdAt || ''));
 }
 
 function trimText(text, max) {
@@ -885,3 +994,4 @@ function injectStyle() {
 }
 
 // 改了什么：rejectIncomingCall 在调 unmountThreadCall 之前先保存 characterId 和 character 到局部变量，回调时用保存的值，不再访问已清空的 callState。
+// 本轮：电话 AI 消息构建注入世界书（getWorldbookForCharacter + buildWorldbookPrompt，对齐 thread-ai.js）；新增关系锁/惩罚状态检查（getActiveRelationshipLock + isStrictLockActive + buildCallLockPrompt），严格锁状态下开场和回复降级，对齐私聊 thread-ai.js 的 soft_block/cooldown/ultimatum 处理。无世界书/无关系锁时电话正常。
