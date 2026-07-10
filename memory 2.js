@@ -743,17 +743,19 @@ function getRelativeDateText(offsetDays) {
 }
 
 function normalizeSource(source) {
-  const value = String(source || SOURCE_AUTO).trim();
+  if (source === null || source === undefined) return SOURCE_AUTO;
+  const value = String(source).trim();
+  if (!value) return SOURCE_AUTO;
 
   if (value === SOURCE_MANUAL) return SOURCE_MANUAL;
   if (value === SOURCE_SUMMARY) return SOURCE_SUMMARY;
   if (value === SOURCE_AUTO) return SOURCE_AUTO;
 
-  return SOURCE_AUTO;
+  return value;
 }
 
 function isAutoSource(source) {
-  return [SOURCE_AUTO, SOURCE_SUMMARY].includes(normalizeSource(source));
+  return normalizeSource(source) !== SOURCE_MANUAL;
 }
 
 function normalizeAction(action) {
