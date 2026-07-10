@@ -985,7 +985,16 @@ function fmtDate(iso) {
 function buildApiCfg(ch) {
   const settings = getData('app_settings') || {};
   if (ch?.apiConfig && !ch.apiConfig.useGlobal) {
-    return { provider: ch.apiConfig.provider || 'openai', endpoint: ch.apiConfig.endpoint || '', apiKey: ch.apiConfig.apiKey || '', model: ch.apiConfig.model || '' };
+    const cfg = ch.apiConfig;
+    // 优先通过 endpointId 在 settings.apiEndpoints 中查找端点（对齐 thread-ai/core/api 机制）
+    if (cfg.endpointId) {
+      const ep = (settings.apiEndpoints || []).find(e => e.id === cfg.endpointId);
+      if (ep) {
+        return { provider: ep.provider || cfg.provider || 'openai', endpoint: ep.endpoint || '', apiKey: ep.apiKey || '', model: cfg.model || ep.model || settings.defaultModel || '' };
+      }
+    }
+    // 兼容旧字段 endpoint/apiKey（无 endpointId 或端点未找到时兜底）
+    return { provider: cfg.provider || 'openai', endpoint: cfg.endpoint || '', apiKey: cfg.apiKey || '', model: cfg.model || '' };
   }
   const cc = getData(`chat_${ch.id}_config`) || {};
   const eid = cc.apiEndpointId || settings.defaultApiEndpointId;

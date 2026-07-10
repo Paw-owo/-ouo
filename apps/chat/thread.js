@@ -32,6 +32,7 @@ import { mountThreadSettings, unmountThreadSettings } from './thread-settings.js
 const STYLE_ID = 'chat-thread-style';
 const PAGE_SIZE = 50;
 const PROACTIVE_CHECK_INTERVAL = 10 * 60 * 1000;
+const DRAFT_KEY = 'chat_draft_map';
 
 const state = {
   rootEl: null,
@@ -68,6 +69,61 @@ const state = {
   wallpaperOpacity: 1
 };
 
+// ═══════════════════════════════════════
+// 【草稿持久化】私聊按 characterId，群聊按 groupId，互不串扰
+// ═══════════════════════════════════════
+
+function loadDraftMap() {
+  const saved = getData(DRAFT_KEY);
+  return saved && typeof saved === 'object' && !Array.isArray(saved) ? saved : {};
+}
+
+function saveDraftMap(map) {
+  setData(DRAFT_KEY, map);
+}
+
+function getDraftKey() {
+  if (state.mode === 'group') {
+    const id = String(state.groupId || '').trim();
+    return id ? `group:${id}` : '';
+  }
+  const id = String(state.characterId || '').trim();
+  return id ? `private:${id}` : '';
+}
+
+function restoreDraft() {
+  const key = getDraftKey();
+  if (!key) {
+    state.inputValue = '';
+    return;
+  }
+  const map = loadDraftMap();
+  state.inputValue = String(map[key] || '');
+}
+
+function persistDraft() {
+  const key = getDraftKey();
+  if (!key) return;
+  const map = loadDraftMap();
+  const text = String(state.inputValue || '');
+  if (text) {
+    map[key] = text;
+  } else if (Object.prototype.hasOwnProperty.call(map, key)) {
+    delete map[key];
+  }
+  saveDraftMap(map);
+}
+
+function clearDraft() {
+  const key = getDraftKey();
+  if (!key) return;
+  const map = loadDraftMap();
+  if (Object.prototype.hasOwnProperty.call(map, key)) {
+    delete map[key];
+    saveDraftMap(map);
+  }
+}
+
 export async function mountChatThread(containerEl, options = {}) {
   state.rootEl = containerEl;
   state.appState = options.appState || null;
@@ -95,6 +151,8 @@ export async function mountChatThread(containerEl, options = {}) {
   state.renderOnly = () => { if (state.rootEl && state.mounted) render(); };
   state.wallpaperImage = '';
   state.wallpaperOpacity = 1;
+
+  restoreDraft();
 
   injectStyle();
   setupKeyboardViewport();
@@ -430,6 +488,7 @@ function createInputBar() {
 
   input.addEventListener('input', () => {
     state.inputValue = input.value;
+    persistDraft();
     autoResize(input);
   });
 
@@ -480,6 +539,7 @@ async function handleSend(input) {
     state.inputValue = '';
     input.value = '';
     autoResize(input);
+    clearDraft();
 
     try {
       const { saveMessageOnly } = await import('./thread-actions.js').catch(() => ({}));
@@ -508,6 +568,7 @@ async function handleSend(input) {
   input.value = '';
   autoResize(input);
   blurActiveInput();
+  clearDraft();
 
   try {
     const { saveMessageOnly } = await import('./thread-actions.js').catch(() => ({}));

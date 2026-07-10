@@ -784,6 +784,9 @@ async function requestGroupReply(state, options = {}) {
 
         await safeSetMessage(GROUP_STORE, finalMessage);
 
+        // 群聊收到非当前用户（角色 AI）的新消息：若该群聊未打开则未读 +1
+        incrementGroupUnreadIfClosed(groupId, state);
+
         await runMemoryTasks(character.id, [...groupMessages, finalMessage], {
           character,
           userProfile,
@@ -2321,6 +2324,22 @@ async function updateUnreadCount(characterId, delta = 0) {
   const next = { ...counts, [characterId]: Math.max(0, current + Number(delta || 0)) };
 
   setData(key, next);
+
+  if (typeof window.refreshDesktopBadges === 'function') window.refreshDesktopBadges();
+}
+
+// 群聊未读 +1：仅当该群聊当前未处于打开状态时才递增（避免边看边加）
+function incrementGroupUnreadIfClosed(groupId, state) {
+  const id = String(groupId || '').trim();
+  if (!id) return;
+
+  // 该群聊正处于打开状态：不增加未读
+  if (state && state.mounted && state.mode === 'group' && String(state.groupId || '') === id) return;
+
+  const key = 'chat_group_unread_counts';
+  const counts = getData(key) || {};
+  const current = Number(counts[id] || 0);
+  setData(key, { ...counts, [id]: current + 1 });
 
   if (typeof window.refreshDesktopBadges === 'function') window.refreshDesktopBadges();
 }

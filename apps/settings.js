@@ -58,7 +58,9 @@ const DB_STORES = [
   'characters', 'messages', 'moments', 'memories', 'stickers',
   'worldbook', 'inventory', 'pet', 'groups', 'group_messages',
   'blobs', 'grudges', 'punishments', 'relationship_locks', 'api_pool', 'albums', 'memories_album', 'dreams',
-  'songs', 'playlists'
+  'songs', 'playlists',
+  'ai_phone_diaries', 'ai_phone_visits', 'ai_phone_chat_archives', 'ai_phone_memos',
+  'ai_phone_mailbox', 'ai_phone_app_locks', 'ai_phone_action_logs'
 ];
 
 const CHAT_LOCAL_KEYS = [

@@ -81,7 +81,14 @@ const INDEXED_DB_STORES = [
   'albums',
   'memories_album',
   'songs',
-  'playlists'
+  'playlists',
+  'ai_phone_diaries',
+  'ai_phone_visits',
+  'ai_phone_chat_archives',
+  'ai_phone_memos',
+  'ai_phone_mailbox',
+  'ai_phone_app_locks',
+  'ai_phone_action_logs'
 ];
 
 const DEFAULT_CLOUD_CONFIG = {

@@ -2275,8 +2275,12 @@
 
     function getUnreadMap() {
       const map = {};
+      let chatTotal = 0;
       const chatUnreadCounts = getData('chat_unread_counts');
-      if (chatUnreadCounts && typeof chatUnreadCounts === 'object') { const total = Object.values(chatUnreadCounts).reduce((sum, value) => sum + Number(value || 0), 0); if (total > 0) map.chat = total; }
+      if (chatUnreadCounts && typeof chatUnreadCounts === 'object') { chatTotal += Object.values(chatUnreadCounts).reduce((sum, value) => sum + Number(value || 0), 0); }
+      const chatGroupUnreadCounts = getData('chat_group_unread_counts');
+      if (chatGroupUnreadCounts && typeof chatGroupUnreadCounts === 'object') { chatTotal += Object.values(chatGroupUnreadCounts).reduce((sum, value) => sum + Number(value || 0), 0); }
+      if (chatTotal > 0) map.chat = chatTotal;
       const momentsUnread = getData('moments_unread_count');
       if (Number(momentsUnread) > 0) map.moments = Number(momentsUnread);
       const gamesUnread = getData('games_unread_count');
