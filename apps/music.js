@@ -15,6 +15,7 @@ import {
 } from '../core/storage.js';
 
 import { createIcon, showToast } from '../core/ui.js';
+import { emit } from '../core/app-bus.js';
 
 /* ═══════════════════════════════════════
    常量
@@ -39,6 +40,9 @@ const PRESET_FILM_WALLPAPERS = [
 /* ═══════════════════════════════════════
    全局状态
    ═══════════════════════════════════════ */
+
+// 防止 music:play 事件回环：外部请求播放时置 true，playSong 内不再 emit
+let suppressMusicEmit = false;
 
 let state = {
   mounted: false,
@@ -125,7 +129,9 @@ export async function mount(containerEl) {
     state.unsubscribeMusicPlay = window.AppBus?.on?.('music:play', (data) => {
       const songId = data?.songId;
       if (songId) {
-        playSong(songId).catch(() => {});
+        // 外部请求触发的播放不再回弹 music:play，避免事件循环
+        suppressMusicEmit = true;
+        playSong(songId).catch(() => {}).finally(() => { suppressMusicEmit = false; });
       } else {
         togglePlay();
       }
@@ -2764,6 +2770,14 @@ async function playSong(songId) {
   }
 
   saveCurrentSong();
+
+  // 通知其他模块当前播放的歌曲（监听 music:play 的链路自洽）
+  // 外部请求触发的播放不再回弹，避免事件循环
+  if (!suppressMusicEmit) {
+    try {
+      emit('music:play', { songId: song.id, title: song.title || '', artist: song.artist || '' });
+    } catch (_) {}
+  }
 
   render();
   ensureMiniPlayer();

@@ -24,6 +24,7 @@ let mounted = false;
 let activeView = '';
 let unsubscribeCharsUpdated = null;
 let unsubscribeChatExternalMessage = null;
+let unsubscribeAnniversaryReminder = null;
 let currentRoute = {
   name: 'list',
   params: {
@@ -66,6 +67,25 @@ export async function mount(containerEl, options = {}) {
       const text = data?.message?.content || '';
       if (text) window.showToast?.(text);
     });
+
+    // 纪念日提醒：anniversary-bridge 已直接落库，这里只做 UI 通知/刷新
+    unsubscribeAnniversaryReminder = window.AppBus.on('anniversary:reminder', (data) => {
+      const characterId = data?.characterId;
+      const isInThread = currentRoute.name === 'thread' && currentRoute.params?.characterId === characterId;
+
+      if (isInThread) {
+        // 正在该角色会话里：刷新 thread 展示新消息
+        renderRoute();
+        return;
+      }
+
+      // 不在该会话：toast 提示并刷新列表（展示新消息/未读）
+      const title = data?.title || '纪念日';
+      window.showToast?.(`收到一条纪念日提醒：${title}`);
+      if (currentRoute.name === 'list') {
+        renderRoute();
+      }
+    });
   }
 }
 
@@ -81,6 +101,10 @@ export function unmount() {
   if (unsubscribeChatExternalMessage) {
     try { unsubscribeChatExternalMessage(); } catch (_) {}
     unsubscribeChatExternalMessage = null;
+  }
+  if (unsubscribeAnniversaryReminder) {
+    try { unsubscribeAnniversaryReminder(); } catch (_) {}
+    unsubscribeAnniversaryReminder = null;
   }
 
   if (rootEl) {
