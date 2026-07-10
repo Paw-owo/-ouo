@@ -57,11 +57,11 @@ const API_POOL_GROUPS_KEY = 'app_api_pool_groups';
 const DB_STORES = [
   'characters', 'messages', 'moments', 'memories', 'stickers',
   'worldbook', 'inventory', 'pet', 'groups', 'group_messages',
-  'blobs', 'grudges', 'punishments', 'relationship_locks', 'api_pool', 'albums', 'memories_album'
+  'blobs', 'grudges', 'punishments', 'relationship_locks', 'api_pool', 'albums', 'memories_album', 'dreams'
 ];
 
 const CHAT_LOCAL_KEYS = [
-  'chat_unread_counts', 'chat_hidden_private_threads', 'chat_last_route',
+  'chat_unread_counts', 'chat_group_unread_counts', 'chat_hidden_private_threads', 'chat_last_route',
   'chat_active_thread', 'chat_draft_map', 'chat_pinned_threads', 'chat_archived_threads'
 ];
 
