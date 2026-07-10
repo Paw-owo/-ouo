@@ -24,6 +24,7 @@ import {
 } from '../../core/ui.js';
 
 import { checkThreadProactiveMessages } from './thread-ai.js';
+import { addMemory } from '../../core/memory.js';
 
 const LIST_STYLE_ID = 'chat-list-style';
 const HIDDEN_PRIVATE_KEY = 'chat_hidden_private_threads';
@@ -1083,15 +1084,8 @@ async function saveConversationMemory(item, messages) {
 
   if (!useful.length) return;
 
-  const now = getNow();
-  await setDB('memories', {
-    id: generateId('memory'),
-    characterId: item.id,
-    content: `开新对话前的小回忆：${useful.join(' / ').slice(0, 520)}`,
-    source: 'summary',
-    createdAt: now,
-    updatedAt: now
-  });
+  const content = `开新对话前的小回忆：${useful.join(' / ').slice(0, 520)}`;
+  await addMemory(item.id, content, 'summary', true, { importance: 3 });
 }
 
 // ═══════════════════════════════════════

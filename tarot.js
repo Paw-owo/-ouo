@@ -67,6 +67,7 @@ let spread = 'three';
 let currentReading = null;
 let history = [];
 let mounted = false;
+let unsubscribeCharsUpdated = null;
 
 export async function mount(container, options = {}) {
   hostEl = container;
@@ -77,11 +78,22 @@ export async function mount(container, options = {}) {
 
   await loadData();
   render();
+
+  unsubscribeCharsUpdated = window.AppBus?.on('characters:updated', async () => {
+    if (!mounted) return;
+    await loadData();
+    render();
+  });
 }
 
 export function unmount() {
   mounted = false;
   hideBottomSheet();
+
+  if (unsubscribeCharsUpdated) {
+    try { unsubscribeCharsUpdated(); } catch (_) {}
+    unsubscribeCharsUpdated = null;
+  }
 
   if (hostEl) {
     hostEl.innerHTML = '';

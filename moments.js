@@ -40,6 +40,7 @@ let moments = [];
 let characters = [];
 let injectedStyle = false;
 let longPressTimer = null;
+let unsubscribeCharsUpdated = null;
 
 export async function mount(containerEl) {
   mountedContainer = containerEl;
@@ -53,11 +54,22 @@ export async function mount(containerEl) {
   await markAllRead();
   render();
   await maybeAutoInteractLatest();
+
+  unsubscribeCharsUpdated = window.AppBus?.on('characters:updated', async () => {
+    if (!rootEl) return;
+    characters = normalizeArray(await getAllDB('characters')).filter((item) => item?.id);
+    render();
+  });
 }
 
 export function unmount() {
   hideBottomSheet();
   clearLongPress();
+
+  if (unsubscribeCharsUpdated) {
+    try { unsubscribeCharsUpdated(); } catch (_) {}
+    unsubscribeCharsUpdated = null;
+  }
 
   if (rootEl) rootEl.remove();
   if (mountedContainer) mountedContainer.innerHTML = '';

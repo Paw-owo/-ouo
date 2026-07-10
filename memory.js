@@ -20,6 +20,8 @@ import {
   showConfirm
 } from '../../core/ui.js';
 
+import { addMemory, editMemory, deleteMemory as coreDeleteMemory, getMemories } from '../../core/memory.js';
+
 const MEMORY_STYLE_ID = 'chat-memory-style';
 
 const SOURCE_LABELS = {
@@ -100,10 +102,7 @@ async function loadData() {
     return;
   }
 
-  state.memories = normalizeArray(await getByIndexDB('memories', 'characterId', state.characterId).catch(() => []))
-    .filter((item) => item?.id)
-    .map(normalizeMemory)
-    .sort(sortMemory);
+  state.memories = await getMemories(state.characterId);
 }
 
 function render() {
@@ -383,13 +382,24 @@ async function deleteMemory(memory) {
   const ok = await showConfirm('要删掉这条记忆吗？');
   if (!ok) return;
 
-  await deleteDB('memories', memory.id);
+  await coreDeleteMemory(state.characterId, memory.id);
   await refresh();
   showToast('删掉啦');
 }
 
 async function saveMemory(memory) {
-  await setDB('memories', normalizeMemory(memory));
+  const characterId = String(memory.characterId || state.characterId || '');
+  const content = String(memory.content || '').trim();
+  const source = normalizeSource(memory.source);
+
+  // 编辑已有记忆：memory.id 已存在于库中，走 editMemory 保留原字段
+  if (memory.id && await getDB('memories', memory.id).catch(() => null)) {
+    await editMemory(characterId, memory.id, content, { source });
+    return;
+  }
+
+  // 新增：走 addMemory，由 core 补齐 importance/keywords/mood 等字段
+  await addMemory(characterId, content, source, true, { importance: 3 });
 }
 
 async function refresh() {

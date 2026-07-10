@@ -24,6 +24,8 @@ import {
   createIcon
 } from '../core/ui.js';
 
+import { addMemory, editMemory, deleteMemory } from '../core/memory.js';
+
 const STYLE_ID = 'characters-style';
 const USER_PROFILES_KEY = 'user_profiles';
 const LEGACY_USER_PROFILES_KEY = 'app_user_profiles';
@@ -1014,17 +1016,7 @@ async function renderMemoryList(container, characterId) {
       return;
     }
 
-    const memoryId = generateId('memory');
-    const now = getNow();
-
-    await setDB('memories', memoryId, {
-      id: memoryId,
-      characterId,
-      content,
-      source: 'manual',
-      createdAt: now,
-      updatedAt: now
-    });
+    await addMemory(characterId, content, 'manual', true, { importance: 3 });
 
     addInput.value = '';
     showToast('记忆已经放好啦');
@@ -1065,7 +1057,7 @@ async function renderMemoryList(container, characterId) {
       const ok = await showConfirm('确定删除这条记忆吗？');
       if (!ok) return;
 
-      await deleteDB('memories', memory.id);
+      await deleteMemory(characterId, memory.id);
       showToast('记忆已删除');
       await renderMemoryList(container, characterId);
       emitCharacterUpdates();
@@ -1110,12 +1102,8 @@ function openMemoryEditSheet({ memory, characterId, container }) {
       return;
     }
 
-    await setDB('memories', memory.id, {
-      ...memory,
-      content,
-      source: ['auto', 'summary', 'manual'].includes(sourceSelect.value) ? sourceSelect.value : 'manual',
-      updatedAt: getNow()
-    });
+    const source = ['auto', 'summary', 'manual'].includes(sourceSelect.value) ? sourceSelect.value : 'manual';
+    await editMemory(characterId, memory.id, content, { source });
 
     hideBottomSheet();
     showToast('记忆改好啦');
@@ -1567,16 +1555,14 @@ async function importCharacterMemories(data, characterId) {
   for (const memory of memories) {
     if (!memory || !memory.content) continue;
 
-    const memoryId = generateId('memory');
-    const now = getNow();
-
-    await setDB('memories', memoryId, {
-      id: memoryId,
-      characterId,
-      content: String(memory.content || '').trim(),
-      source: ['auto', 'summary', 'manual'].includes(memory.source) ? memory.source : 'manual',
-      createdAt: memory.createdAt || now,
-      updatedAt: memory.updatedAt || memory.createdAt || now
+    const source = ['auto', 'summary', 'manual'].includes(memory.source) ? memory.source : 'manual';
+    await addMemory(characterId, String(memory.content || '').trim(), source, true, {
+      importance: memory.importance,
+      mood: memory.mood,
+      keywords: memory.keywords,
+      pinned: memory.pinned,
+      createdAt: memory.createdAt,
+      updatedAt: memory.updatedAt || memory.createdAt
     });
   }
 }

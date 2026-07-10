@@ -33,6 +33,7 @@ let dreamsCache = [];
 let filterCharId = 'all';
 let searchText = '';
 let pageView = 'list';
+let unsubscribeCharsUpdated = null;
 let currentDream = null;
 let wakeMessages = [];
 let generating = false;
@@ -208,9 +209,20 @@ export async function mount(containerEl) {
   await applyBg(screen);
   renderPage();
   await checkAndGenerate();
+
+  unsubscribeCharsUpdated = window.AppBus?.on('characters:updated', async () => {
+    if (!container) return;
+    charactersCache = await getAllDB('characters');
+    renderPage();
+  });
 }
 
 export function unmount() {
+  if (unsubscribeCharsUpdated) {
+    try { unsubscribeCharsUpdated(); } catch (_) {}
+    unsubscribeCharsUpdated = null;
+  }
+
   if (container) { container.innerHTML = ''; container = null; }
   charactersCache = [];
   dreamsCache = [];
