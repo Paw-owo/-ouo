@@ -57,6 +57,39 @@ export async function loadRelationshipState(state) {
   return activeLock;
 }
 
+// ═══════════════════════════════════════
+// 【公共读取】读取角色当前有效关系锁（过期则改 expired）
+// 供 thread-ai / thread-call / list 等复用，消除重复定义
+// ═══════════════════════════════════════
+
+export async function getActiveRelationshipLock(characterId) {
+  const id = String(characterId || '').trim();
+  if (!id) return null;
+
+  const locks = normalizeArray(await getByIndexDB('relationship_locks', 'characterId', id).catch(() => []))
+    .filter((item) => item?.status === 'active')
+    .sort(sortByUpdatedAtDesc);
+
+  const now = Date.now();
+
+  for (const lock of locks) {
+    const endsAt = new Date(lock.endsAt || 0).getTime();
+
+    if (endsAt && endsAt <= now) {
+      await setDB('relationship_locks', {
+        ...lock,
+        status: 'expired',
+        updatedAt: getNow()
+      }).catch(() => null);
+      continue;
+    }
+
+    return lock;
+  }
+
+  return null;
+}
+
 function setRelationshipState(state, lock, punishment) {
   if (!state) return;
   state.relationshipLock = lock || null;

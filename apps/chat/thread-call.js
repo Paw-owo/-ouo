@@ -18,6 +18,7 @@ import { playTTS, stopAll } from '../../core/tts.js';
 import { addMemory } from '../../core/memory.js';
 import { getWorldbookForCharacter } from '../worldbook.js';
 import { formatWorldbookPrompt } from '../../core/worldbook-prompt.js';
+import { getActiveRelationshipLock } from './thread-relationship.js';
 
 const CALL_STYLE_ID = 'chat-thread-call-style';
 
@@ -462,35 +463,6 @@ function buildCallLockPrompt(lock, callName) {
   if (lock.title) lines.push(`当前状态：${lock.title}`);
 
   return lines.join('\n');
-}
-
-// 读取当前角色的有效关系锁，逻辑与 thread-ai.js / list.js 一致
-async function getActiveRelationshipLock(characterId) {
-  const id = String(characterId || '').trim();
-  if (!id) return null;
-
-  const locks = normalizeArray(await getByIndexDB('relationship_locks', 'characterId', id).catch(() => []))
-    .filter((item) => item && item.status === 'active')
-    .sort(sortByUpdatedAtDesc);
-
-  const now = Date.now();
-
-  for (const lock of locks) {
-    const endsAt = new Date(lock.endsAt || 0).getTime();
-
-    if (endsAt && endsAt <= now) {
-      await setDB('relationship_locks', {
-        ...lock,
-        status: 'expired',
-        updatedAt: getNow()
-      }).catch(() => null);
-      continue;
-    }
-
-    return lock;
-  }
-
-  return null;
 }
 
 // ═══════════════════════════════════════

@@ -1,7 +1,10 @@
 // core/local-chat.js
 // 本地关键词匹配回复引擎，无API时的离线聊天核心
 // 默认人设"初一"，风格：树洞/暧昧/日常，有性格的活人
-// imports: none（纯本地逻辑，不依赖任何外部模块）
+// imports:
+//   from './storage.js': getData
+
+import { getData } from './storage.js';
 
 // ═══════════════════════════════════════
 // 【默认人设】初一的角色配置
@@ -922,11 +925,11 @@ export async function requestSiliconFlowReply(character, recentMessages, userNam
 
 function getSiliconFlowKey() {
   try {
-    const settings = JSON.parse(localStorage.getItem('app_settings') || '{}');
+    const settings = getData('app_settings') || {};
     return String(settings?.siliconflowKey || '').trim();
   } catch (_) {
     return '';
   }
 }
 
-// 依赖：无外部模块依赖，纯本地逻辑
+// 依赖：./storage.js(getData)

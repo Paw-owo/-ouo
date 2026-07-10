@@ -9,6 +9,7 @@ import { createIcon, showBottomSheet, hideBottomSheet, showToast } from '../core
 const STYLE_ID = 'grudge-book-style';
 
 let unsubscribeGrudgePunishment = null;
+let unsubscribeCharsUpdated = null;
 
 const state = {
   rootEl: null,
@@ -42,6 +43,17 @@ export async function mount(containerEl) {
       render();
     });
   } catch (_) {}
+
+  // 角色在别处被编辑时，刷新缓存并重渲染，避免打开期间角色数据陈旧
+  try {
+    if (window.AppBus && !unsubscribeCharsUpdated) {
+      unsubscribeCharsUpdated = window.AppBus.on('characters:updated', async () => {
+        if (!state.mounted) return;
+        await loadData();
+        render();
+      });
+    }
+  } catch (_) {}
 }
 
 export function unmount() {
@@ -52,6 +64,11 @@ export function unmount() {
   if (unsubscribeGrudgePunishment) {
     try { unsubscribeGrudgePunishment(); } catch (_) {}
     unsubscribeGrudgePunishment = null;
+  }
+
+  if (unsubscribeCharsUpdated) {
+    try { unsubscribeCharsUpdated(); } catch (_) {}
+    unsubscribeCharsUpdated = null;
   }
 
   if (state.rootEl) {

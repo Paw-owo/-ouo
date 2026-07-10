@@ -29,6 +29,7 @@ import {
 import { getIdentityCore } from './identity-core.js';
 import { getWorldbookForCharacter } from '../worldbook.js';
 import { formatWorldbookPrompt } from '../../core/worldbook-prompt.js';
+import { getActiveRelationshipLock } from './thread-relationship.js';
 
 import { tryLocalOrSiliconFlowReply } from './thread-ai-local.js';
 
@@ -2090,28 +2091,6 @@ async function loadGrudgeContext(characterId) {
   const punishment = lock?.punishmentId ? await getPunishment(lock.punishmentId) : await getLatestActivePunishment(characterId);
 
   return { score, entries: active, punishment, lock };
-}
-
-async function getActiveRelationshipLock(characterId) {
-  if (!characterId) return null;
-
-  const locks = await getByIndexDB(LOCK_STORE, 'characterId', characterId).catch(() => []);
-  const now = Date.now();
-
-  const active = normalizeList(locks).filter((item) => item.status === 'active').sort(sortByUpdatedAtDesc);
-
-  for (const lock of active) {
-    const endsAt = new Date(lock.endsAt || 0).getTime();
-
-    if (endsAt && endsAt <= now) {
-      await setDB(LOCK_STORE, { ...lock, status: 'expired', updatedAt: getNow() });
-      continue;
-    }
-
-    return lock;
-  }
-
-  return null;
 }
 
 async function getPunishment(id) {

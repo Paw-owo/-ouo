@@ -25,6 +25,7 @@ import {
 
 import { checkThreadProactiveMessages } from './thread-ai.js';
 import { addMemory } from '../../core/memory.js';
+import { getActiveRelationshipLock } from './thread-relationship.js';
 
 const LIST_STYLE_ID = 'chat-list-style';
 const HIDDEN_PRIVATE_KEY = 'chat_hidden_private_threads';
@@ -182,7 +183,7 @@ async function buildPrivateItem(character) {
 
   const latest = messages[messages.length - 1] || null;
   const matched = findMatchedMessage(messages, state.search);
-  const relationshipLock = await loadActiveRelationshipLock(character.id);
+  const relationshipLock = await getActiveRelationshipLock(character.id);
 
   const unreadMap = normalizeObject(getData(PRIVATE_UNREAD_KEY));
   const unread = relationshipLock?.type === 'soft_block'
@@ -229,34 +230,6 @@ async function buildGroupItem(group) {
     messageCount: messages.length,
     raw: group
   };
-}
-
-async function loadActiveRelationshipLock(characterId) {
-  const id = String(characterId || '').trim();
-  if (!id) return null;
-
-  const locks = normalizeArray(await getByIndexDB('relationship_locks', 'characterId', id).catch(() => []))
-    .filter((item) => item?.status === 'active')
-    .sort(sortByUpdatedAtDesc);
-
-  const now = Date.now();
-
-  for (const lock of locks) {
-    const endsAt = new Date(lock.endsAt || 0).getTime();
-
-    if (endsAt && endsAt <= now) {
-      await setDB('relationship_locks', {
-        ...lock,
-        status: 'expired',
-        updatedAt: getNow()
-      }).catch(() => null);
-      continue;
-    }
-
-    return lock;
-  }
-
-  return null;
 }
 
 // ═══════════════════════════════════════

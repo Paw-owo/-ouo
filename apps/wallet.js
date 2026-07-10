@@ -40,6 +40,7 @@ let currentFilter = 'all';
 let currentAiFilter = 'all';
 let currentAiPage = null;
 let allCharacters = [];
+let unsubscribeCharsUpdated = null;
 
 function injectStyles() {
   if (document.getElementById(STYLE_ID)) return;
@@ -1232,6 +1233,15 @@ export async function mount(containerEl) {
   currentAiPage = null;
   allCharacters = await getAllDB('characters');
 
+  // 角色在别处被编辑时，刷新缓存并重渲染，避免打开期间角色数据陈旧
+  if (window.AppBus && !unsubscribeCharsUpdated) {
+    unsubscribeCharsUpdated = window.AppBus.on('characters:updated', async () => {
+      if (!container) return;
+      allCharacters = await getAllDB('characters');
+      renderWallet();
+    });
+  }
+
   const screen = document.createElement('section');
   screen.className = 'wallet-screen';
   screen.dataset.imageKey = BG_KEY;
@@ -1286,6 +1296,11 @@ export function unmount() {
   walletCardBgCache = '';
   currentAiPage = null;
   allCharacters = [];
+
+  if (unsubscribeCharsUpdated) {
+    try { unsubscribeCharsUpdated(); } catch (_) {}
+    unsubscribeCharsUpdated = null;
+  }
 
   if (container) {
     container.innerHTML = '';

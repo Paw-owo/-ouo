@@ -49,6 +49,7 @@ let selectedChars = [];
 let allChars = [];
 let coverCache = new Map();
 let iconCache = new Map();
+let unsubscribeCharsUpdated = null;
 
 function injectStyles() {
   if (document.getElementById(STYLE_ID)) return;
@@ -144,6 +145,15 @@ export async function mount(containerEl) {
   iconCache = new Map();
   allChars = await getAllDB('characters');
 
+  // 角色在别处被编辑时，刷新缓存并重渲染，避免打开期间角色数据陈旧
+  if (window.AppBus && !unsubscribeCharsUpdated) {
+    unsubscribeCharsUpdated = window.AppBus.on('characters:updated', async () => {
+      if (!container) return;
+      allChars = await getAllDB('characters');
+      await renderList();
+    });
+  }
+
   const screen = document.createElement('section');
   screen.className = 'wb-screen';
 
@@ -226,6 +236,11 @@ export function unmount() {
   allChars = [];
   coverCache = new Map();
   iconCache = new Map();
+
+  if (unsubscribeCharsUpdated) {
+    try { unsubscribeCharsUpdated(); } catch (_) {}
+    unsubscribeCharsUpdated = null;
+  }
   // 注意：不注销 appBus API，其他 APP 在 worldbook 关闭后仍可能需要查询
 }
 
