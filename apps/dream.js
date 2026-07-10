@@ -13,6 +13,7 @@ import {
 } from '../core/ui.js';
 
 import { silentRequest } from '../core/api.js';
+import { loadWorldbookPromptForCharacter } from '../core/worldbook-prompt.js';
 
 const STYLE_ID = 'dream-styles';
 const BG_KEY = 'app_bg_dream';
@@ -828,7 +829,8 @@ async function doSend(input, body, ch) {
   body.scrollTop = body.scrollHeight;
 
   try {
-    const sysPrompt = `我是${ch.name || 'AI'}。我刚才做了一个梦，梦的内容是：${currentDream.content}\n\n现在用户把我从梦里叫醒了。我要用迷迷糊糊、半梦半醒的语气回应，可能会分不清梦境和现实，说话有点奇怪。我会保持我的人设性格，但在刚醒来的状态下会有些恍惚。称呼用户为${ch.nicknameForUser || '你'}。`;
+    const worldbookPrompt = await loadWorldbookPromptForCharacter(ch).catch(() => '');
+    const sysPrompt = `${worldbookPrompt ? worldbookPrompt + '\n\n' : ''}我是${ch.name || 'AI'}。我刚才做了一个梦，梦的内容是：${currentDream.content}\n\n现在用户把我从梦里叫醒了。我要用迷迷糊糊、半梦半醒的语气回应，可能会分不清梦境和现实，说话有点奇怪。我会保持我的人设性格，但在刚醒来的状态下会有些恍惚。称呼用户为${ch.nicknameForUser || '你'}。`;
     const msgs = [{ role: 'system', content: sysPrompt }, ...wakeMessages];
     const config = buildApiCfg(ch);
     const reply = await silentRequest(config, msgs);
@@ -876,7 +878,9 @@ async function doGenerate(ch) {
       .slice(0, 20).reverse();
     const recentText = msgs.map(m => `${m.role === 'user' ? '用户' : ch.name}：${m.content || ''}`).join('\n');
 
-    const prompt = `我是${ch.name || 'AI'}。
+    const worldbookPrompt = await loadWorldbookPromptForCharacter(ch).catch(() => '');
+
+    const prompt = `${worldbookPrompt ? worldbookPrompt + '\n\n' : ''}我是${ch.name || 'AI'}。
 请根据我和用户最近的对话内容，为我创作一个梦境。
 我的人设：${ch.systemPrompt || ch.description || ch.persona || '一个温柔的角色'}
 最近的对话：

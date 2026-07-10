@@ -17,6 +17,7 @@ import {
 } from '../core/storage.js';
 
 import { silentRequest } from '../core/api.js';
+import { loadWorldbookPromptForCharacter } from '../core/worldbook-prompt.js';
 
 import {
   showToast,
@@ -88,8 +89,10 @@ export async function maybeCreateAutoMoment(characterId, sourceText = '') {
   if (Date.now() - last < AUTO_MOMENT_COOLDOWN) return null;
   if (Math.random() > AUTO_MOMENT_CHANCE) return null;
 
+  const worldbookPrompt = await loadWorldbookPromptForCharacter(character).catch(() => '');
+
   const result = await silentRequest({
-    prompt: `你要判断这个角色是否适合发一条朋友圈。只返回 JSON：{"post":"朋友圈内容或null","mood":"happy|neutral|sad|excited"}。内容要像真实朋友圈，短一点，不要解释。\n\n角色名：${character.name || 'AI'}\n聊天内容：${sourceText || ''}`,
+    prompt: `${worldbookPrompt ? worldbookPrompt + '\n\n' : ''}你要判断这个角色是否适合发一条朋友圈。只返回 JSON：{"post":"朋友圈内容或null","mood":"happy|neutral|sad|excited"}。内容要像真实朋友圈，短一点，不要解释。\n\n角色名：${character.name || 'AI'}\n聊天内容：${sourceText || ''}`,
     endpointId: character.apiConfig?.useGlobal === false ? character.apiConfig.endpointId : '',
     model: character.apiConfig?.useGlobal === false ? character.apiConfig.model : '',
     json: true,
@@ -454,8 +457,10 @@ async function aiReplyToUserComment(post, userComment) {
   const character = characters.find((item) => item.id === post.authorId);
   if (!character) return;
 
+  const worldbookPrompt = await loadWorldbookPromptForCharacter(character).catch(() => '');
+
   const reply = await silentRequest({
-    prompt: `你是${character.name || 'AI'}。用户评论了你的朋友圈，请自然回复一句，不要太长。\n\n朋友圈：${post.content || '图片动态'}\n用户评论：${userComment}`,
+    prompt: `${worldbookPrompt ? worldbookPrompt + '\n\n' : ''}你是${character.name || 'AI'}。用户评论了你的朋友圈，请自然回复一句，不要太长。\n\n朋友圈：${post.content || '图片动态'}\n用户评论：${userComment}`,
     endpointId: character.apiConfig?.useGlobal === false ? character.apiConfig.endpointId : '',
     model: character.apiConfig?.useGlobal === false ? character.apiConfig.model : '',
     temperature: 0.8
@@ -513,8 +518,10 @@ async function maybeAiInteract(post) {
       continue;
     }
 
+    const worldbookPrompt = await loadWorldbookPromptForCharacter(character).catch(() => '');
+
     const content = await silentRequest({
-      prompt: `你是${character.name || 'AI'}。请给这条朋友圈写一句自然评论，短一点，不要解释。\n\n作者：${getAuthor(targetPost.authorId).name}\n内容：${targetPost.content || '图片动态'}`,
+      prompt: `${worldbookPrompt ? worldbookPrompt + '\n\n' : ''}你是${character.name || 'AI'}。请给这条朋友圈写一句自然评论，短一点，不要解释。\n\n作者：${getAuthor(targetPost.authorId).name}\n内容：${targetPost.content || '图片动态'}`,
       endpointId: character.apiConfig?.useGlobal === false ? character.apiConfig.endpointId : '',
       model: character.apiConfig?.useGlobal === false ? character.apiConfig.model : '',
       temperature: 0.85

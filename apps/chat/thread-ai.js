@@ -28,6 +28,7 @@ import {
 
 import { getIdentityCore } from './identity-core.js';
 import { getWorldbookForCharacter } from '../worldbook.js';
+import { formatWorldbookPrompt } from '../../core/worldbook-prompt.js';
 
 import { tryLocalOrSiliconFlowReply } from './thread-ai-local.js';
 
@@ -1276,13 +1277,7 @@ function buildUserProfilePrompt(user, userName, character) {
 }
 
 function buildWorldbookPrompt(items) {
-  if (!items.length) return '';
-
-  return [
-    '世界书规则与背景：',
-    '以下内容是我所在世界和关系里的真实设定，我回应时会优先遵守：',
-    ...items.slice(0, 16).map((item) => `- ${item.title || item.name || '设定'}：${item.content || item.description || ''}`)
-  ].join('\n');
+  return formatWorldbookPrompt(items);
 }
 
 function buildInventoryPrompt(items) {

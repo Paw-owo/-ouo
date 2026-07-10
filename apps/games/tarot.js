@@ -30,6 +30,7 @@ import {
 } from '../../core/api.js';
 
 import { recordExternalInteraction } from '../../core/app-bus.js';
+import { loadWorldbookPromptForCharacter } from '../../core/worldbook-prompt.js';
 
 const STYLE_ID = 'tarot-game-style';
 const STATE_KEY = 'tarot_game_state';
@@ -473,6 +474,8 @@ async function requestAiInterpretation(reader, reading) {
     reader?.speakingStyle
   ].filter(Boolean).join('\n');
 
+  const worldbookPrompt = await loadWorldbookPromptForCharacter(reader).catch(() => '');
+
   const cardsText = reading.cards
     .map((card) => `${card.position}：${card.name}（${card.meaning}）`)
     .join('\n');
@@ -483,6 +486,7 @@ async function requestAiInterpretation(reader, reading) {
       content: [
         `我现在就是${reader.name}本人。`,
         persona ? `我的人设：\n${persona}` : '',
+        worldbookPrompt,
         '我正在给用户读塔罗牌。',
         '牌面由前端随机抽取，我不能改变牌面，也不能说自己重新抽了牌。',
         '我必须使用第一人称"我"说话，像 ChatAI 私聊里的自然语气。',

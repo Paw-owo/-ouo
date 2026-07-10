@@ -17,6 +17,7 @@ import { silentRequest } from '../../core/api.js';
 import { playTTS, stopAll } from '../../core/tts.js';
 import { addMemory } from '../../core/memory.js';
 import { getWorldbookForCharacter } from '../worldbook.js';
+import { formatWorldbookPrompt } from '../../core/worldbook-prompt.js';
 
 const CALL_STYLE_ID = 'chat-thread-call-style';
 
@@ -425,18 +426,11 @@ function buildCallMessages() {
 }
 
 // ═══════════════════════════════════════
-// 【世界书】对齐 thread-ai.js 的 buildWorldbookPrompt 格式
+// 【世界书】复用 core/worldbook-prompt.js 的 formatWorldbookPrompt
 // ═══════════════════════════════════════
 
 function buildWorldbookPrompt(items) {
-  const list = Array.isArray(items) ? items : [];
-  if (!list.length) return '';
-
-  return [
-    '世界书规则与背景：',
-    '以下内容是我所在世界和关系里的真实设定，我回应时会优先遵守：',
-    ...list.slice(0, 16).map((item) => `- ${item.title || item.name || '设定'}：${item.content || item.description || ''}`)
-  ].join('\n');
+  return formatWorldbookPrompt(items);
 }
 
 // ═══════════════════════════════════════
