@@ -448,7 +448,8 @@ export function playTTS(text, configOverride) {
 
   let cleaned = cleanTextForSpeech(text || '');
   if (!cleaned) {
-    return instance;
+    // 空内容也返回 Promise，保证调用方 .catch 不报错
+    return Promise.resolve(instance);
   }
 
   if (cleaned.length > MAX_INPUT_LENGTH) {
@@ -457,58 +458,73 @@ export function playTTS(text, configOverride) {
 
   activeInstances.add(instance);
 
-  (async () => {
-    try {
-      const config = resolveConfig(configOverride);
-      const hasWebSpeech = canUseWebSpeech();
-      const hasRemote = Boolean(config.endpoint || config.apiKey);
+  // 始终返回 Promise：成功启动 resolve，失败安全 resolve + console.warn，
+  // 不让调用方的 .catch 报 "is not a function"，也不抛未捕获异常
+  return new Promise((resolve) => {
+    (async () => {
+      try {
+        const config = resolveConfig(configOverride);
+        const hasWebSpeech = canUseWebSpeech();
+        const hasRemote = Boolean(config.endpoint || config.apiKey);
 
-      if (!hasRemote) {
-        if (hasWebSpeech) {
+        if (!hasRemote) {
+          if (hasWebSpeech) {
+            speakWithWebSpeech(cleaned, config, state, instance);
+          } else {
+            activeInstances.delete(instance);
+          }
+          resolve(instance);
+          return;
+        }
+
+        state.abortController = new AbortController();
+        state.timer = setTimeout(() => {
+          instance.stop();
+        }, TTS_TIMEOUT);
+
+        const played = await playRemoteTTS(config, cleaned, state, instance);
+
+        if (state.stopped) {
+          resolve(instance);
+          return;
+        }
+
+        if (!played && hasWebSpeech) {
           speakWithWebSpeech(cleaned, config, state, instance);
-        } else {
+        } else if (!played) {
           activeInstances.delete(instance);
         }
-        return;
-      }
 
-      state.abortController = new AbortController();
-      state.timer = setTimeout(() => {
-        instance.stop();
-      }, TTS_TIMEOUT);
+        if (state.timer) {
+          clearTimeout(state.timer);
+          state.timer = null;
+        }
 
-      const played = await playRemoteTTS(config, cleaned, state, instance);
+        resolve(instance);
+      } catch (error) {
+        if (state.timer) {
+          clearTimeout(state.timer);
+          state.timer = null;
+        }
 
-      if (state.stopped) return;
+        if (error?.name === 'AbortError') {
+          resolve(instance);
+          return;
+        }
 
-      if (!played && hasWebSpeech) {
-        speakWithWebSpeech(cleaned, config, state, instance);
-      } else if (!played) {
+        if (canUseWebSpeech()) {
+          speakWithWebSpeech(cleaned, resolveConfig(configOverride), state, instance);
+          resolve(instance);
+          return;
+        }
+
         activeInstances.delete(instance);
+        // 播放失败：安全 resolve（不 reject，避免未处理 rejection），仅 console.warn
+        console.warn('[tts] play failed:', error?.message || error);
+        resolve(instance);
       }
-
-      if (state.timer) {
-        clearTimeout(state.timer);
-        state.timer = null;
-      }
-    } catch (error) {
-      if (state.timer) {
-        clearTimeout(state.timer);
-        state.timer = null;
-      }
-
-      if (error?.name === 'AbortError') return;
-
-      if (canUseWebSpeech()) {
-        speakWithWebSpeech(cleaned, resolveConfig(configOverride), state, instance);
-        return;
-      }
-
-      activeInstances.delete(instance);
-    }
-  })();
-
-  return instance;
+    })();
+  });
 }
 
 export function stopAll() {
