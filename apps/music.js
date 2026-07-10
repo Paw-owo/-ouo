@@ -120,11 +120,8 @@ export async function mount(containerEl) {
 
   window.musicPlayer = playerApi;
 
-  // 注册到 appBus，让其他 APP 可以控制播放
+  // 监听外部播放请求
   try {
-    window.AppBus?.registerAPI('music', playerApi);
-
-    // 监听外部播放请求
     state.unsubscribeMusicPlay = window.AppBus?.on?.('music:play', (data) => {
       const songId = data?.songId;
       if (songId) {

@@ -42,11 +42,6 @@ export async function mount(containerEl, options = {}) {
 
   await renderRoute();
 
-  // 注册到 appBus，让其他 APP 可以联动 chat
-  try {
-    window.AppBus?.registerAPI('chat', getAppApi());
-  } catch (_) {}
-
   // 监听全局事件
   if (window.AppBus) {
     unsubscribeCharsUpdated = window.AppBus.on('characters:updated', async () => {

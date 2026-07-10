@@ -213,21 +213,6 @@ export async function mount(containerEl) {
 
   await applyWorldbookBackground(screen);
   await renderList();
-
-  // 注册到 appBus，让其他 APP 可以查询世界书条目
-  try {
-    window.AppBus?.registerAPI('worldbook', {
-      getEntries: () => getWorldbookEntries(),
-      getEntry: async (entryId) => {
-        if (!entryId) return null;
-        const all = await getWorldbookEntries();
-        return all.find((item) => String(item.id) === String(entryId)) || null;
-      },
-      getAll: () => getWorldbookEntries(),
-      getVisual: (entryId) => getWorldbookVisual(entryId),
-      getWorldbookForCharacter: (character) => getWorldbookForCharacter(character)
-    });
-  } catch (_) {}
 }
 
 export function unmount() {

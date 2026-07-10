@@ -115,7 +115,8 @@ async function handleWalletTransfer(data) {
 
 // 把外部事件写入私聊消息库 + 写未读
 // 字段格式对齐 thread-actions.js 的 buildBaseMessage，保证渲染层正常显示
-async function appendExternalChatMessage(payload = {}) {
+// 导出供 anniversary-bridge 等常驻模块复用，不新建第二套消息系统
+export async function appendExternalChatMessage(payload = {}) {
   const characterId = String(payload.characterId || '').trim();
   if (!characterId) return null;
 

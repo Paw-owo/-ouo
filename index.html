@@ -1167,6 +1167,7 @@
     import { seedDefaultCharacter } from './apps/chat/thread-ai-local.js';
     import { registerAPI, getAPI, emit as busEmit, on as busOn, openApp as busOpenApp, recordExternalInteraction as busRecordExternalInteraction, subscribe as busSubscribe } from './core/app-bus.js';
     import { initChatEventBridge } from './core/chat-event-bridge.js';
+    import { initAnniversaryBridge } from './core/anniversary-bridge.js';
 
     const LOCK_PASSWORD = '0326';
     const CUSTOM_FONT_KEY = 'app_custom_font';
@@ -1301,6 +1302,7 @@
         bindLockScreen();
         setupAppEvents();
         initChatEventBridge();
+        initAnniversaryBridge();
         initWidgets();
         await applyAllImages();
         refreshBadges();
