@@ -2271,14 +2271,12 @@
 
     function getUnreadMap() {
       const map = {};
-      const direct = getData('app_badges');
-      if (direct && typeof direct === 'object') Object.assign(map, direct);
       const chatUnreadCounts = getData('chat_unread_counts');
       if (chatUnreadCounts && typeof chatUnreadCounts === 'object') { const total = Object.values(chatUnreadCounts).reduce((sum, value) => sum + Number(value || 0), 0); if (total > 0) map.chat = total; }
-      const chatUnread = getData('chat_unread_count');
-      if (Number(chatUnread) > 0) map.chat = Number(chatUnread);
       const momentsUnread = getData('moments_unread_count');
       if (Number(momentsUnread) > 0) map.moments = Number(momentsUnread);
+      const gamesUnread = getData('games_unread_count');
+      if (Number(gamesUnread) > 0) map.games = Number(gamesUnread);
       return map;
     }
   </script>

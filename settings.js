@@ -57,7 +57,8 @@ const API_POOL_GROUPS_KEY = 'app_api_pool_groups';
 const DB_STORES = [
   'characters', 'messages', 'moments', 'memories', 'stickers',
   'worldbook', 'inventory', 'pet', 'groups', 'group_messages',
-  'blobs', 'grudges', 'punishments', 'relationship_locks', 'api_pool', 'albums', 'memories_album', 'dreams'
+  'blobs', 'grudges', 'punishments', 'relationship_locks', 'api_pool', 'albums', 'memories_album', 'dreams',
+  'songs', 'playlists'
 ];
 
 const CHAT_LOCAL_KEYS = [
@@ -1447,7 +1448,8 @@ async function exportAll() {
   [
     SETTINGS_KEY, CLOUD_KEY, ICONS_KEY, HIDDEN_ICONS_KEY, WALLPAPER_OPACITY_KEY,
     WIDGET_BACKGROUNDS_KEY, DESKTOP_SCALE_KEY, CUSTOM_FONT_META_KEY, CUSTOM_WIDGETS_KEY,
-    'app_theme', 'app_theme_preset', 'app_theme_mode', ...CHAT_LOCAL_KEYS, API_POOL_GROUPS_KEY
+    'app_theme', 'app_theme_preset', 'app_theme_mode', ...CHAT_LOCAL_KEYS, API_POOL_GROUPS_KEY,
+    'moments_unread_count', 'games_unread_count'
   ].forEach((key) => {
     data.localStorage[key] = getData(key);
   });
@@ -1569,7 +1571,8 @@ async function clearAllData() {
     SETTINGS_KEY, CLOUD_KEY, ICONS_KEY, HIDDEN_ICONS_KEY, WALLPAPER_KEY,
     WALLPAPER_OPACITY_KEY, WIDGET_BACKGROUNDS_KEY, DESKTOP_SCALE_KEY,
     CUSTOM_FONT_META_KEY, CUSTOM_WIDGETS_KEY, API_POOL_GROUPS_KEY,
-    'app_theme', 'app_theme_preset', 'app_theme_mode', ...CHAT_LOCAL_KEYS
+    'app_theme', 'app_theme_preset', 'app_theme_mode', ...CHAT_LOCAL_KEYS,
+    'moments_unread_count', 'games_unread_count'
   ].forEach(removeData);
 
   for (const store of DB_STORES) {

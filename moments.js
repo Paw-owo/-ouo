@@ -32,6 +32,7 @@ const AUTO_MOMENT_COOLDOWN = 2 * 60 * 60 * 1000;
 const AI_INTERACT_CHANCE = 0.38;
 const AI_DAILY_LIMIT = 5;
 const INTERACTION_STATE_KEY = 'moment_interaction_state';
+const MOMENTS_UNREAD_KEY = 'moments_unread_count';
 
 let rootEl = null;
 let mountedContainer = null;
@@ -103,6 +104,7 @@ export async function maybeCreateAutoMoment(characterId, sourceText = '') {
   await setDB('characters', character.id, character);
   setData(`last_moment_${characterId}`, Date.now());
 
+  await syncMomentsUnreadCount();
   window.refreshDesktopBadges?.();
 
   return post;
@@ -119,6 +121,8 @@ async function loadData() {
     .filter((item) => item?.id && item.deleted !== true)
     .map(normalizeMoment)
     .sort((a, b) => String(b.timestamp || '').localeCompare(String(a.timestamp || '')));
+
+  writeMomentsUnreadCount(moments);
 }
 
 async function markAllRead() {
@@ -130,6 +134,7 @@ async function markAllRead() {
     return setDB('moments', item.id, item);
   }));
 
+  writeMomentsUnreadCount(moments);
   window.refreshDesktopBadges?.();
 }
 
@@ -465,6 +470,7 @@ async function aiReplyToUserComment(post, userComment) {
     window.AppBus?.emit('moments:interaction', { type: 'reply', characterId: character.id, postId: latest.id, content: reply });
   } catch (_) {}
 
+  await syncMomentsUnreadCount();
   window.refreshDesktopBadges?.();
 
   await loadData();
@@ -522,6 +528,7 @@ async function maybeAiInteract(post) {
   await setDB('moments', targetPost.id, targetPost);
 
   if (targetPost.authorId === 'user' && (targetPost.likes.length || targetPost.comments.length)) {
+    await syncMomentsUnreadCount();
     window.refreshDesktopBadges?.();
   }
 
@@ -776,6 +783,26 @@ function clearLongPress() {
 
 function normalizeArray(value) {
   return Array.isArray(value) ? value : [];
+}
+
+// 按未读朋友圈数同步 localStorage 角标键，供桌面 getUnreadMap 读取
+function writeMomentsUnreadCount(list) {
+  try {
+    const count = normalizeArray(list).filter((item) => item && item.isRead === false).length;
+    setData(MOMENTS_UNREAD_KEY, count);
+  } catch (error) {
+    console.warn('[moments] writeMomentsUnreadCount failed', error);
+  }
+}
+
+// moments 数组可能过期时（如外部新增朋友圈），从 DB 重读计数后写键
+async function syncMomentsUnreadCount() {
+  try {
+    const all = await getAllDB('moments');
+    writeMomentsUnreadCount(normalizeArray(all).filter((item) => item && item.deleted !== true));
+  } catch (error) {
+    console.warn('[moments] syncMomentsUnreadCount failed', error);
+  }
 }
 
 function shuffle(list) {

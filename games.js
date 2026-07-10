@@ -26,7 +26,7 @@ const HUB_HERO_IMAGE_KEY = 'app_game_hero_image';
 const HUB_PROFILE_KEY = 'app_game_hub_visual';
 const GAME_VISUALS_KEY = 'app_game_visuals';
 const CUSTOM_HTML_GAME_KEY = 'app_custom_html_game';
-const BADGE_KEY = 'chat_unread_counts';
+const BADGE_KEY = 'games_unread_count';
 
 const GAMES = [
   {
@@ -339,9 +339,7 @@ function bindHubEvents() {
   });
 
   rootEl.querySelector('[data-action="clear-badge"]')?.addEventListener('click', () => {
-    const unread = getData(BADGE_KEY) || {};
-    unread.games = 0;
-    setData(BADGE_KEY, unread);
+    setData(BADGE_KEY, 0);
     window.refreshDesktopBadges?.();
     showToast('提醒清掉啦');
   });
@@ -352,13 +350,13 @@ function bindHubEvents() {
 }
 
 function getHeroTitle() {
-  const unread = Number((getData(BADGE_KEY) || {}).games || 0);
+  const unread = Number(getData(BADGE_KEY) || 0);
   if (unread > 0) return '有个小世界在喊你';
   return '今晚想去哪里玩';
 }
 
 function getHeroText() {
-  const unread = Number((getData(BADGE_KEY) || {}).games || 0);
+  const unread = Number(getData(BADGE_KEY) || 0);
   if (unread > 0) return '宠物、牌桌或某个游戏可能留下了提醒。进去看看就好。';
   return '小游戏都收在这里。自己的 HTML 小游戏，也可以悄悄塞进来玩。';
 }

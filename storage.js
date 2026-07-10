@@ -2,7 +2,7 @@
 // imports: none
 
 const DB_NAME = 'ai_phone_db';
-const DB_VERSION = 6;
+const DB_VERSION = 7;
 
 const STORE_DEFINITIONS = [
   { name: 'characters', options: { keyPath: 'id' } },
@@ -119,7 +119,11 @@ const STORE_DEFINITIONS = [
       { name: 'createdAt', keyPath: 'createdAt' },
       { name: 'actionType', keyPath: 'actionType' }
     ]
-  }
+  },
+  { name: 'songs', options: { keyPath: 'id' } },
+  { name: 'playlists', options: { keyPath: 'id' } },
+  { name: 'albums', options: { keyPath: 'id' } },
+  { name: 'memories_album', options: { keyPath: 'id' } }
 ];
 
 let dbInstance = null;

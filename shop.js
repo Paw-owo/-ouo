@@ -23,6 +23,7 @@ import {
 
 import {
   getBalance,
+  addBalance,
   deductBalance,
   deductAiBalance
 } from './wallet.js';
@@ -1056,10 +1057,24 @@ async function buyItem(item) {
     return;
   }
 
-  await addToInventory(item, {
+  const inventoryId = await addToInventory(item, {
     owner: 'user',
     source: 'purchase'
   });
+
+  if (!inventoryId) {
+    // 入库失败，把已扣金额退回，避免扣钱无库存
+    const refunded = addBalance(item.price, `退款：购买 ${item.name} 失败`);
+    if (!refunded) {
+      console.error('[shop] buyItem 入库失败且退款失败，用户余额可能短缺', { itemId: item.id, price: item.price });
+      showToast('入库没成功，退款也出问题了，需要修一下');
+    } else {
+      console.warn('[shop] buyItem 入库失败，已退款', { itemId: item.id, price: item.price });
+      showToast('入库没成功，钱已经退回来啦');
+    }
+    await renderShop();
+    return;
+  }
 
   showToast('已经乖乖放进背包啦 ˶>ᗜ<˶');
   await renderShop();
@@ -1081,7 +1096,7 @@ async function addToInventory(item, extra = {}) {
   });
 
   if (existing) {
-    await setDB('inventory', existing.id, {
+    const updated = await setDB('inventory', existing.id, {
       ...existing,
       quantity: Number(existing.quantity || 0) + 1,
       itemName: item.name,
@@ -1089,6 +1104,7 @@ async function addToInventory(item, extra = {}) {
       itemPrice: Number(item.price) || 0,
       updatedAt: getNow()
     });
+    if (!updated) return null;
     return existing.id;
   }
 
@@ -1110,7 +1126,8 @@ async function addToInventory(item, extra = {}) {
     updatedAt: getNow()
   };
 
-  await setDB('inventory', record.id, record);
+  const saved = await setDB('inventory', record.id, record);
+  if (!saved) return null;
   return record.id;
 }
 

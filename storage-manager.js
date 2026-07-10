@@ -50,6 +50,8 @@ const LOCAL_STORAGE_KEYS = [
   'chat_draft_map',
   'chat_pinned_threads',
   'chat_archived_threads',
+  'moments_unread_count',
+  'games_unread_count',
   'app_lock_unlocked',
   'app_first_open_seed',
   'anniversaries',
