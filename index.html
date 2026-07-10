@@ -373,25 +373,40 @@
 
     .badge {
       position: absolute;
-      top: -4px;
-      right: 6px;
-      min-width: 18px;
-      height: 18px;
-      padding: 0 5px;
+      top: -6px;
+      right: -6px;
+      min-width: 22px;
+      height: 22px;
+      padding: 0 7px;
       display: flex;
       align-items: center;
       justify-content: center;
       border-radius: 999px;
-      background: var(--accent);
-      color: var(--bubble-user-text);
+      background: linear-gradient(135deg, var(--color-primary, var(--accent-dark)), var(--color-accent, var(--accent)));
+      color: var(--bg-surface, var(--bg-card));
+      border: 2px solid var(--bg-surface, var(--bg-card));
       font-size: 11px;
       font-weight: 600;
       line-height: 1;
-      box-shadow: var(--shadow-sm);
+      box-shadow: 0 2px 8px color-mix(in srgb, var(--accent) 45%, transparent);
+      transition: transform 280ms var(--ease-soft, cubic-bezier(0.34, 1.56, 0.64, 1));
     }
 
     .badge.hidden {
       display: none;
+    }
+
+    @keyframes badge-jelly {
+      0%, 100% { transform: scale(1, 1); }
+      25% { transform: scale(1.15, 0.85); }
+      50% { transform: scale(0.9, 1.1); }
+      75% { transform: scale(1.05, 0.95); }
+    }
+
+    .badge.badge-pop {
+      animation: badge-jelly 600ms cubic-bezier(0.34, 1.56, 0.64, 1);
+      animation-iteration-count: 1;
+      animation-fill-mode: forwards;
     }
 
     .desktop-widget {
@@ -2268,8 +2283,21 @@
       const unreadMap = getUnreadMap();
       document.querySelectorAll('[data-badge]').forEach((badgeEl) => {
         const count = Number(unreadMap[badgeEl.dataset.badge] || 0);
-        if (count > 0) { badgeEl.textContent = count > 99 ? '99+' : String(count); badgeEl.classList.remove('hidden'); }
-        else { badgeEl.textContent = ''; badgeEl.classList.add('hidden'); }
+        const wasHidden = badgeEl.classList.contains('hidden');
+        if (count > 0) {
+          badgeEl.textContent = count > 99 ? '99+' : String(count);
+          badgeEl.classList.remove('hidden');
+          if (wasHidden) {
+            badgeEl.classList.add('badge-pop');
+            badgeEl.addEventListener('animationend', function onEnd() {
+              badgeEl.classList.remove('badge-pop');
+            }, { once: true });
+          }
+        } else {
+          badgeEl.textContent = '';
+          badgeEl.classList.add('hidden');
+          badgeEl.classList.remove('badge-pop');
+        }
       });
     }
 
