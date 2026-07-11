@@ -1582,8 +1582,8 @@
     function getWidgetPositions() { const positions = getData('app_widget_positions'); return positions && typeof positions === 'object' ? positions : {}; }
     function saveWidgetPositions(positions) { setData('app_widget_positions', positions); }
 
-    function getDockOrder() { const saved = getData(DOCK_ORDER_KEY); const dockIds = APPS.filter((app) => app.dock).map((app) => app.id); const ordered = Array.isArray(saved) ? saved.filter((id) => dockIds.includes(id)) : []; const missing = dockIds.filter((id) => !ordered.includes(id)); return [...ordered, ...missing]; }
-    function saveDockOrder(order) { const dockIds = APPS.filter((app) => app.dock).map((app) => app.id); setData(DOCK_ORDER_KEY, order.filter((id) => dockIds.includes(id))); }
+    function getDockOrder() { const saved = getData(DOCK_ORDER_KEY); const dockIds = APPS.filter((app) => app.dock).map((app) => app.id); const ordered = Array.isArray(saved) ? saved.filter((id) => dockIds.includes(id)) : []; const missing = dockIds.filter((id) => !ordered.includes(id)); return [...new Set([...ordered, ...missing])]; }
+    function saveDockOrder(order) { const dockIds = APPS.filter((app) => app.dock).map((app) => app.id); setData(DOCK_ORDER_KEY, [...new Set(order.filter((id) => dockIds.includes(id)))]); }
 
     function getDesktopScale() { const saved = getData('desktop_layout_scale') || {}; return { iconScale: normalizeScale(saved.iconScale, 1), widgetScale: normalizeScale(saved.widgetScale, 1), dockScale: normalizeScale(saved.dockScale, 1) }; }
     function normalizeScale(value, fallback = 1) { const number = Number(value); if (!Number.isFinite(number)) return fallback; return Math.max(.62, Math.min(1.28, number)); }

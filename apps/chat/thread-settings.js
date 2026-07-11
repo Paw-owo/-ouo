@@ -1074,6 +1074,7 @@ async function clearCurrentMessages() {
   const counts = getData('chat_unread_counts') || {};
   delete counts[state.characterId];
   setData('chat_unread_counts', counts);
+  window.refreshDesktopBadges?.();
 
   showToast('聊天清空啦');
 }
