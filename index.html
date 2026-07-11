@@ -1918,18 +1918,40 @@
       const startPage = Number(element.closest('.desktop-page')?.dataset.page || currentPage) || 0;
       const startX = event.clientX;
       const startY = event.clientY;
-      const originLeft = parseFloat(element.style.left || '0');
-      const originTop = parseFloat(element.style.top || '0');
+      const itemW = element.offsetWidth || 72;
+      const itemH = element.offsetHeight || 72;
       let moved = false;
+      let holdTimer = null;
+      let holdFired = false;
 
       try { element.setPointerCapture?.(event.pointerId); } catch (_) {}
+
+      // 长按延时期间允许横向翻页，进入拖拽后改为禁用滚动
+      const prevTouchAction = element.style.touchAction || '';
+      element.style.touchAction = 'pan-x';
+
+      const cleanup = () => {
+        if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
+        element.style.touchAction = prevTouchAction;
+        window.removeEventListener('pointermove', onMove);
+        window.removeEventListener('pointerup', onUp);
+        window.removeEventListener('pointercancel', onUp);
+      };
 
       const onMove = (moveEvent) => {
         const deltaX = moveEvent.clientX - startX;
         const deltaY = moveEvent.clientY - startY;
-        if (!moved && Math.hypot(deltaX, deltaY) < 3) return;
-        moveEvent.preventDefault();
 
+        // 长按未触发前：横向轻滑优先翻页，不进入拖拽
+        if (!holdFired) {
+          if (Math.abs(deltaX) > 12 && Math.abs(deltaY) < Math.abs(deltaX)) {
+            cleanup();
+            return;
+          }
+          return;
+        }
+
+        moveEvent.preventDefault();
         if (!moved) {
           moved = true;
           editing = true;
@@ -1937,36 +1959,37 @@
           element.classList.add('dragging');
           pagesEl.classList.add('dragging');
           updateEditingClass();
+          // 进入拖拽后用 fixed 定位脱离页面容器，避免 scrollLeft 偏移和 overflow 裁切
+          element.style.position = 'fixed';
+          element.style.touchAction = 'none';
         }
 
-        const pagesRect = pagesEl.getBoundingClientRect();
-        const pageScroll = pagesEl.scrollLeft;
-        const globalX = pageScroll + (moveEvent.clientX - pagesRect.left) - (element.offsetWidth || 72) / 2;
-        const globalY = moveEvent.clientY - pagesRect.top - (element.offsetHeight || 72) / 2;
-
-        const layer0 = getLayer(0);
-        if (element.parentElement !== layer0) { layer0.appendChild(element); }
-        element.style.left = `${Math.max(0, globalX)}px`;
-        element.style.top = `${Math.max(0, Math.min((pagesRect.height - (element.offsetHeight || 72)), globalY))}px`;
+        // 始终用视口坐标定位，跟随手指/鼠标
+        const vx = moveEvent.clientX - itemW / 2;
+        const vy = moveEvent.clientY - itemH / 2;
+        element.style.left = `${Math.max(0, Math.min(window.innerWidth - itemW, vx))}px`;
+        element.style.top = `${Math.max(0, Math.min(window.innerHeight - itemH, vy))}px`;
       };
 
       const onUp = () => {
-        window.removeEventListener('pointermove', onMove);
-        window.removeEventListener('pointerup', onUp);
-        window.removeEventListener('pointercancel', onUp);
+        cleanup();
         if (!moved) return;
 
-        const pagesRect = pagesEl.getBoundingClientRect();
-        const pageWidth = pagesRect.width;
-        const centerX = parseFloat(element.style.left || '0') + (element.offsetWidth || 72) / 2;
-        const targetPage = centerX > pageWidth * 0.75 ? 1 : 0;
+        // 用手指松手时的视口 X 判断目标页
+        const lastCenterX = parseFloat(element.style.left || '0') + itemW / 2;
+        const pageWidth = pagesEl.clientWidth || window.innerWidth;
+        const targetPage = lastCenterX > pageWidth * 0.5 ? 1 : 0;
 
         const targetLayer = getLayer(targetPage);
+        // 恢复 absolute 定位
+        element.style.position = '';
         if (element.parentElement !== targetLayer) { targetLayer.appendChild(element); }
 
-        const localX = targetPage === 1 ? parseFloat(element.style.left || '0') - pageWidth : parseFloat(element.style.left || '0');
-        const localY = parseFloat(element.style.top || '0');
-        const position = clampPosition(element, Math.max(0, localX), localY);
+        // 将视口坐标转换为目标页 layer 的局部坐标
+        const layerRect = targetLayer.getBoundingClientRect();
+        const localX = lastCenterX - layerRect.left - itemW / 2;
+        const localY = parseFloat(element.style.top || '0') - layerRect.top;
+        const position = clampPosition(element, Math.max(0, localX), Math.max(0, localY));
 
         placeDesktopItem(element, position.x, position.y);
         saveDesktopItemPosition(element, targetPage, position.x, position.y);
@@ -1974,8 +1997,15 @@
         element.classList.remove('dragging');
         pagesEl.classList.remove('dragging');
 
+        // 退出编辑态，停止抖动
+        editing = false;
+        updateEditingClass();
+
         window.setTimeout(() => { dragState = null; }, 120);
       };
+
+      // 350ms 长按后才允许进入拖拽，避免横向轻滑误触发编辑态
+      holdTimer = window.setTimeout(() => { holdFired = true; }, 350);
 
       window.addEventListener('pointermove', onMove, { passive: false });
       window.addEventListener('pointerup', onUp, { passive: true });
@@ -1988,12 +2018,31 @@
       const startY = event.clientY;
       const appId = element.dataset.appId;
       let moved = false;
+      let holdTimer = null;
+      let holdFired = false;
       try { element.setPointerCapture?.(event.pointerId); } catch (_) {}
+
+      const cleanup = () => {
+        if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
+        window.removeEventListener('pointermove', onMove);
+        window.removeEventListener('pointerup', onUp);
+        window.removeEventListener('pointercancel', onUp);
+      };
 
       const onMove = (moveEvent) => {
         const deltaX = moveEvent.clientX - startX;
         const deltaY = moveEvent.clientY - startY;
-        if (!moved && Math.hypot(deltaX, deltaY) < 3) return;
+
+        // 长按未触发前：横向轻滑不进入拖拽
+        if (!holdFired) {
+          if (Math.hypot(deltaX, deltaY) > 12) {
+            if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
+            cleanup();
+            return;
+          }
+          return;
+        }
+
         moveEvent.preventDefault();
         if (!moved) { moved = true; editing = true; dockDragState = { appId }; element.classList.add('dock-dragging'); updateEditingClass(); }
         element.style.transform = `translate(${deltaX}px, ${deltaY}px) scale(1.035)`;
@@ -2005,15 +2054,21 @@
       };
 
       const onUp = () => {
-        window.removeEventListener('pointermove', onMove);
-        window.removeEventListener('pointerup', onUp);
-        window.removeEventListener('pointercancel', onUp);
+        cleanup();
         if (!moved) return;
         element.classList.remove('dock-dragging');
         element.style.transform = '';
         saveDockOrder([...dockEl.querySelectorAll('.desktop-icon[data-app-id]')].map((item) => item.dataset.appId));
+
+        // 退出编辑态，停止抖动
+        editing = false;
+        updateEditingClass();
+
         window.setTimeout(() => { dockDragState = null; }, 120);
       };
+
+      // 350ms 长按后才允许进入拖拽
+      holdTimer = window.setTimeout(() => { holdFired = true; }, 350);
 
       window.addEventListener('pointermove', onMove, { passive: false });
       window.addEventListener('pointerup', onUp, { passive: true });
