@@ -602,7 +602,11 @@ async function requestPrivateReply(state, options = {}) {
 
     if (options.proactive) {
       markProactiveSent(characterId);
-      await updateUnreadCount(characterId, options.incrementUnread === false ? 0 : 1);
+      // 用户当前正在该私聊会话时不递增未读（避免边看边加）
+      const isActivePrivate = state && state.mounted && state.mode === 'private' &&
+        String(state.characterId || '') === String(characterId || '');
+      const delta = (isActivePrivate || options.incrementUnread === false) ? 0 : 1;
+      await updateUnreadCount(characterId, delta);
     } else {
       await markUserReplyIfNeeded(characterId, getChatConfig(characterId), userMessage);
       await updateUnreadCount(characterId, 0);

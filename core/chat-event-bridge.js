@@ -179,12 +179,18 @@ export async function appendExternalChatMessage(payload = {}) {
   }
 
   // 写未读：私聊用 chat_unread_counts，群聊不动 chat_group_unread_counts
-  try {
-    const unreadMap = getData('chat_unread_counts') || {};
-    const next = Math.max(0, Number(unreadMap[characterId] || 0) + 1);
-    setData('chat_unread_counts', { ...unreadMap, [characterId]: next });
-    if (typeof window.refreshDesktopBadges === 'function') window.refreshDesktopBadges();
-  } catch (_) {}
+  // 若用户当前正在该私聊会话，不递增未读（chat.js 会 renderRoute 刷新显示）
+  const activeThread = window.__chatActiveThread;
+  const isActivePrivate = activeThread && activeThread.mode === 'private' &&
+    String(activeThread.characterId || '') === String(characterId || '');
+  if (!isActivePrivate) {
+    try {
+      const unreadMap = getData('chat_unread_counts') || {};
+      const next = Math.max(0, Number(unreadMap[characterId] || 0) + 1);
+      setData('chat_unread_counts', { ...unreadMap, [characterId]: next });
+      if (typeof window.refreshDesktopBadges === 'function') window.refreshDesktopBadges();
+    } catch (_) {}
+  }
 
   // 通知 chat.js 刷新 UI（chat.js 可选监听，不强制）
   try {

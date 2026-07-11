@@ -131,6 +131,8 @@ export async function mountChatThread(containerEl, options = {}) {
   state.mode = options.mode === 'group' ? 'group' : 'private';
   state.characterId = String(options.characterId || '').trim();
   state.groupId = String(options.groupId || '').trim();
+  // 全局活动会话标识：供 chat-event-bridge / 未读递增判断“用户是否正在该会话”
+  window.__chatActiveThread = { mode: state.mode, characterId: state.characterId, groupId: state.groupId };
   state.visibleCount = loadVisibleCount();
   state.quotedMessageId = '';
   state.inputValue = '';
@@ -173,6 +175,7 @@ export function unmountChatThread() {
   state.aiGenerating = false;
   state.stoppingAI = false;
   state.messageQueue = [];
+  window.__chatActiveThread = null;
 
   stopAll();
   stopProactiveChecks();
