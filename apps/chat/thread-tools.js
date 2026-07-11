@@ -77,8 +77,15 @@ function injectStyle() {
   var style = document.createElement('style');
   style.id = STYLE_ID;
   style.textContent = `
-    .tools-container{display:flex;flex-direction:column;min-height:0;max-height:62vh;overflow:hidden}
+    .tools-container{display:flex;flex-direction:column;min-height:0;max-height:min(52vh,420px);overflow:hidden}
     .tools-scroll{flex:1;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;padding:0 4px 8px}
+    .tools-pager-wrap{display:flex;flex-direction:column;min-height:0;flex:1;gap:4px}
+    .tools-pager{display:flex;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;flex:1;min-height:0;scrollbar-width:none}
+    .tools-pager::-webkit-scrollbar{display:none}
+    .tools-page{flex:0 0 100%;width:100%;scroll-snap-align:start;scroll-snap-stop:always;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:0 4px 4px}
+    .tools-dots{display:flex;justify-content:center;align-items:center;gap:6px;padding:8px 0 2px;flex:0 0 auto}
+    .tools-dot{width:6px;height:6px;border-radius:999px;background:var(--text-hint);opacity:0.4;transition:all 250ms ease;cursor:pointer;border:none;padding:0}
+    .tools-dot.active{width:18px;background:var(--accent);opacity:1}
     .tools-section-label{display:flex;align-items:center;gap:8px;margin:14px 0 10px;padding:0 4px;font-size:12px;font-weight:600;color:var(--text-hint);letter-spacing:0.04em}
     .tools-section-label::after{content:"";flex:1;height:1px;background:var(--surface-muted);border-radius:999px}
     .tools-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;padding:0 4px}
@@ -175,40 +182,88 @@ export function createThreadToolsGrid(state, options = {}) {
 }
 
 function buildGridView(state, options, showDetail) {
-  var scroll = document.createElement('div');
-  scroll.className = 'tools-scroll';
+  var wrap = document.createElement('div');
+  wrap.className = 'tools-pager-wrap';
 
-  TOOL_GROUPS.forEach(function(group) {
-    var label = document.createElement('div');
-    label.className = 'tools-section-label';
-    label.textContent = group.label;
-    scroll.appendChild(label);
+  var pager = document.createElement('div');
+  pager.className = 'tools-pager';
 
-    var grid = document.createElement('div');
-    grid.className = 'tools-grid';
+  // 两页：第一页=一起玩+日常（常用类），第二页=管理（代码类，GitHub 在此）
+  var pages = [
+    { groups: [TOOL_GROUPS[0], TOOL_GROUPS[1]] },
+    { groups: [TOOL_GROUPS[2]] }
+  ];
 
-    group.tools.forEach(function(tool) {
-      var cell = document.createElement('button');
-      cell.type = 'button';
-      cell.className = 'tool-cell';
-      cell.appendChild(createToolIcon(tool.icon));
+  pages.forEach(function(page) {
+    var pageEl = document.createElement('div');
+    pageEl.className = 'tools-page';
 
-      var name = document.createElement('div');
-      name.className = 'tool-name';
-      name.textContent = tool.title;
-      cell.appendChild(name);
+    page.groups.forEach(function(group) {
+      var label = document.createElement('div');
+      label.className = 'tools-section-label';
+      label.textContent = group.label;
+      pageEl.appendChild(label);
 
-      cell.addEventListener('click', async function() {
-        await handleToolClick(tool.id, state, options, showDetail);
+      var grid = document.createElement('div');
+      grid.className = 'tools-grid';
+
+      group.tools.forEach(function(tool) {
+        var cell = document.createElement('button');
+        cell.type = 'button';
+        cell.className = 'tool-cell';
+        cell.appendChild(createToolIcon(tool.icon));
+
+        var name = document.createElement('div');
+        name.className = 'tool-name';
+        name.textContent = tool.title;
+        cell.appendChild(name);
+
+        cell.addEventListener('click', async function() {
+          await handleToolClick(tool.id, state, options, showDetail);
+        });
+
+        grid.appendChild(cell);
       });
 
-      grid.appendChild(cell);
+      pageEl.appendChild(grid);
     });
 
-    scroll.appendChild(grid);
+    pager.appendChild(pageEl);
   });
 
-  return scroll;
+  wrap.appendChild(pager);
+
+  // 页码圆点指示器
+  var dots = document.createElement('div');
+  dots.className = 'tools-dots';
+  for (var i = 0; i < pages.length; i++) {
+    (function(idx) {
+      var dot = document.createElement('button');
+      dot.type = 'button';
+      dot.className = 'tools-dot' + (idx === 0 ? ' active' : '');
+      dot.setAttribute('aria-label', '第' + (idx + 1) + '页');
+      dot.addEventListener('click', function() {
+        pager.scrollTo({ left: idx * pager.clientWidth, behavior: 'smooth' });
+      });
+      dots.appendChild(dot);
+    })(i);
+  }
+  wrap.appendChild(dots);
+
+  // 滑动同步圆点
+  var dotEls = dots.querySelectorAll('.tools-dot');
+  var ticking = false;
+  pager.addEventListener('scroll', function() {
+    if (ticking) return;
+    ticking = true;
+    requestAnimationFrame(function() {
+      var idx = Math.round(pager.scrollLeft / pager.clientWidth);
+      dotEls.forEach(function(d, i) { d.classList.toggle('active', i === idx); });
+      ticking = false;
+    });
+  });
+
+  return wrap;
 }
 
 function buildDetailView(title, contentEl, onBack) {

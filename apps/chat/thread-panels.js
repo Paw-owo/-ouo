@@ -257,7 +257,7 @@ function injectStyle() {
   style.textContent = `
     .chat-thread-tools-sheet,
     .chat-settings-sheet{
-      padding:6px 20px 20px;
+      padding:4px 18px 16px;
       color:var(--text-primary);
     }
 
