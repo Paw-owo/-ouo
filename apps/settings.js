@@ -474,7 +474,7 @@ function renderApiTestPage() {
         renderModels();
         showToast(`拉到 ${draftModels.length} 个模型啦`);
       } catch (err) {
-        showToast(formatApiEditorError(err, '模型拉取失败，可以手填模型名'));
+        showToast(formatApiEditorError(err, '模型拉取失败，可以手填模型名继续使用'));
       }
     }),
 
@@ -1783,7 +1783,7 @@ function formatApiEditorError(error, fallback) {
   const message = String(error?.message || '').trim();
   if (!message) return fallback;
   if (/failed to fetch|load failed|networkerror|cors/i.test(message)) {
-    return '这个中转站被浏览器拦住啦，可能没开放网页直连';
+    return '这个中转站被浏览器拦住啦，可能没开放网页直连。可以手填模型名继续使用～';
   }
   return message
     .replace(/^HTTP\s*\d+\s*[｜|]\s*/i, '')

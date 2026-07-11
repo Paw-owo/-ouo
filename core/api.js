@@ -106,7 +106,8 @@ function notifyPoolHint(msg) {
 // ═══════════════════════════════════════
 
 function normalizeEndpointUrl(endpoint) {
-  return String(endpoint || '').trim().replace(/\/+$/, '');
+  // 去末尾斜杠，并去重末尾 /v1（避免 https://x.com/v1/v1 → /v1/v1/chat/completions）
+  return String(endpoint || '').trim().replace(/\/+$/, '').replace(/\/v1\/v1$/i, '/v1');
 }
 
 function urlHasPathKeyword(url, keyword) {
@@ -118,10 +119,12 @@ function urlHasPathKeyword(url, keyword) {
 }
 
 function urlHasV1(url) {
+  // 精确匹配 path 末尾为 /v1 或 /v1/ 后还有段（如 /v1/chat），避免 /myv1path /v1chat 误判
   try {
-    return new URL(url).pathname.toLowerCase().includes('/v1');
+    const path = new URL(url).pathname.toLowerCase();
+    return /(^|\/)v1(\/|$)/.test(path) || /\/v1$/.test(path);
   } catch {
-    return url.toLowerCase().includes('/v1');
+    return /(^|\/)v1(\/|$)/.test(String(url || '').toLowerCase());
   }
 }
 

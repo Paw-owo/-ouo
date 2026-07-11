@@ -131,8 +131,30 @@ const FRIENDLY_ERROR_MAP = {
   504: '上游睡死，喊不醒。'
 };
 
-function getFriendlyErrorMessage(status) {
-  return FRIENDLY_ERROR_MAP[Number(status)] || '我刚刚出了点小状况，再说一遍试试？';
+function getFriendlyErrorMessage(status, error) {
+  const code = Number(status);
+  // 有真实错误对象时，优先提取可读信息，区分 CORS / 模型不可用 / 权限
+  if (error) {
+    const raw = String(error.message || error.raw?.message || '').toLowerCase();
+    // CORS / 浏览器拦截
+    if (error.isNetworkError || /failed to fetch|load failed|networkerror|cors/.test(raw)) {
+      return '中转站被浏览器拦住啦，可能没开放网页直连。换支持跨域的中转站会更稳～';
+    }
+    // 模型不可用
+    if (/model .* is currently unavailable|model_not_found|does not exist/.test(raw)) {
+      const detail = String(error.message || '').replace(/^HTTP\s*\d+\s*[｜|]\s*/i, '').trim();
+      return '模型不可用：' + (detail || '当前中转不支持这个模型，去设置换个模型名试试');
+    }
+    // 带状态码且有对应可爱文案
+    if (FRIENDLY_ERROR_MAP[code]) {
+      const detail = String(error.message || '').replace(/^HTTP\s*\d+\s*[｜|]\s*/i, '').trim();
+      return detail ? FRIENDLY_ERROR_MAP[code] + '（' + detail + '）' : FRIENDLY_ERROR_MAP[code];
+    }
+    // 其他带 message 的错误
+    const msg = String(error.message || '').replace(/^HTTP\s*\d+\s*[｜|]\s*/i, '').replace(/^Error:\s*/i, '').trim();
+    if (msg) return msg;
+  }
+  return FRIENDLY_ERROR_MAP[code] || '我刚刚出了点小状况，再说一遍试试？';
 }
 
 // ═══════════════════════════════════════
@@ -515,7 +537,7 @@ async function requestPrivateReply(state, options = {}) {
       });
 
       if (!result) {
-        const friendlyMessage = getFriendlyErrorMessage(apiError?.status || 0);
+        const friendlyMessage = getFriendlyErrorMessage(apiError?.status || 0, apiError);
         await markMessageError(PRIVATE_STORE, placeholder.id, friendlyMessage);
         await syncPrivateState(state, characterId);
         state.renderOnly?.();
@@ -747,7 +769,7 @@ async function requestGroupReply(state, options = {}) {
           });
 
           if (!result) {
-            const friendlyMessage = getFriendlyErrorMessage(apiError?.status || 0);
+            const friendlyMessage = getFriendlyErrorMessage(apiError?.status || 0, apiError);
             await markMessageError(GROUP_STORE, placeholder.id, friendlyMessage);
             await syncGroupState(state, groupId);
             state.renderOnly?.();
@@ -1583,6 +1605,7 @@ async function requestAITextDirect(promptMessages, options = {}) {
       temperature,
       maxTokens,
       onChunk,
+      onError: (err) => { lastApiError = err; },
       signal
     });
 
@@ -1590,8 +1613,11 @@ async function requestAITextDirect(promptMessages, options = {}) {
       return result;
     }
 
-    lastApiError = new Error('接口没返回内容');
-    lastApiError.status = 0;
+    // callAPI 失败返回 null，真实错误通过 onError 回调捕获到 lastApiError
+    if (!lastApiError) {
+      lastApiError = new Error('接口没返回内容');
+      lastApiError.status = 0;
+    }
   } catch (error) {
     if (isAbortError(error) || signal?.aborted) {
       throw Object.assign(new Error('已取消'), { status: 408, isAbort: true });
