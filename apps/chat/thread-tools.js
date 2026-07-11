@@ -11,6 +11,7 @@ import { getData, setData } from '../../core/storage.js';
 import { openTransferSheet, openClearContextSheet, openMcpSheet } from './thread-sheets.js';
 import { openRelationshipLockSheet } from './thread-relationship.js';
 import { sendDiceMessage, sendRpsMessage } from './thread-actions.js';
+import { openGithubToolSheet } from './github-tool.js';
 
 const STYLE_ID = 'thread-tools-style-v2';
 
@@ -42,6 +43,7 @@ const TOOL_GROUPS = [
       { id: 'clearCtx', title: '清上下文', icon: 'clean' },
       { id: 'relLock', title: '关系锁', icon: 'lock' },
       { id: 'mcp', title: 'MCP', icon: 'mcp' },
+      { id: 'github', title: 'GitHub', icon: 'github' },
     ]
   }
 ];
@@ -61,6 +63,7 @@ const TOOL_ICONS = {
   clean: '<rect x="3" y="4" width="10" height="10.5" rx="3" fill="none" stroke="currentColor" stroke-width="2.5"/><line x1="2" y1="4.5" x2="14" y2="4.5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><path d="M6 4V2.5C6 1.8 6.8 1.5 8 1.5C9.2 1.5 10 1.8 10 2.5V4" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><circle cx="6" cy="8.5" r="0.6" fill="currentColor"/><circle cx="10" cy="8.5" r="0.6" fill="currentColor"/><path d="M6.5 10.5C7 11.2 7.5 11.2 8 10.5C8.5 11.2 9 11.2 9.5 10.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>',
   lock: '<path d="M8 3L5.5 5.5C4 7 4 9.5 5.5 11L8 13.5L10.5 11C12 9.5 12 7 10.5 5.5L8 3Z" fill="currentColor" opacity="0.1" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"/><circle cx="8" cy="8.5" r="1.5" fill="currentColor"/>',
   mcp: '<rect x="1.5" y="3" width="13" height="10" rx="3" fill="none" stroke="currentColor" stroke-width="2.5"/><path d="M5 6.5L3.5 8L5 9.5" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><line x1="7" y1="9.5" x2="11" y2="9.5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>',
+  github: '<circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="2.5"/><path d="M5.5 10.5C5.5 10.5 6.2 11.5 8 11.5C9.8 11.5 10.5 10.5 10.5 10.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="6" cy="7" r="0.8" fill="currentColor"/><circle cx="10" cy="7" r="0.8" fill="currentColor"/><path d="M5.5 5.5L4.5 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M10.5 5.5L11.5 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>',
 };
 
 // ═══════════════════════════════════════
@@ -276,6 +279,10 @@ async function handleToolClick(toolId, state, options, showDetail) {
     case 'mcp':
       closeToolsSheet(options);
       openMcpSheet(state, options);
+      break;
+    case 'github':
+      closeToolsSheet(options);
+      openGithubToolSheet();
       break;
     default:
       break;
