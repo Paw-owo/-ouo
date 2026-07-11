@@ -296,6 +296,11 @@
       animation: icon-wiggle 180ms ease-in-out infinite;
     }
 
+    .phone-desktop.silent-edit .desktop-icon.editing,
+    .phone-desktop.silent-edit .desktop-widget.editing {
+      animation: none;
+    }
+
     .desktop-icon-art {
       width: calc(58px * var(--desktop-icon-scale));
       height: calc(58px * var(--desktop-icon-scale));
@@ -1254,6 +1259,7 @@
     let currentAppId = '';
     let currentPage = 0;
     let editing = false;
+    let silentEdit = false;
     let dragState = null;
     let dockDragState = null;
     let clockTimer = null;
@@ -1862,9 +1868,6 @@
         const hiddenIcons = getHiddenIcons();
         hiddenIcons.push(app.id);
         saveHiddenIcons(hiddenIcons);
-        const positions = getIconPositions();
-        delete positions[app.id];
-        saveIconPositions(positions);
         renderDesktop();
         showToast('已隐藏，可在设置中恢复');
       });
@@ -2000,8 +2003,15 @@
         element.classList.remove('dragging');
         pagesEl.classList.remove('dragging');
 
-        // 退出编辑态，停止抖动
-        editing = false;
+        // 跨页落位后滚动到目标页，让图标可见
+        if (targetPage !== startPage) {
+          pagesEl.scrollTo({ left: targetPage * (pagesEl.clientWidth || window.innerWidth), behavior: 'instant' });
+          currentPage = targetPage;
+          updatePageDots();
+        }
+
+        // 保留编辑态可见删除圆点，但进入静默态停止抖动
+        silentEdit = true;
         updateEditingClass();
 
         window.setTimeout(() => { dragState = null; }, 120);
@@ -2063,8 +2073,8 @@
         element.style.transform = '';
         saveDockOrder([...dockEl.querySelectorAll('.desktop-icon[data-app-id]')].map((item) => item.dataset.appId));
 
-        // 退出编辑态，停止抖动
-        editing = false;
+        // 保留编辑态但停止抖动，与桌面拖拽一致
+        silentEdit = true;
         updateEditingClass();
 
         window.setTimeout(() => { dockDragState = null; }, 120);
@@ -2087,11 +2097,12 @@
       document.querySelectorAll('.desktop-icon').forEach((iconEl) => { iconEl.classList.toggle('editing', editing && iconEl.dataset.kind !== 'dock'); });
       document.querySelectorAll('.dock .desktop-icon').forEach((iconEl) => { iconEl.classList.toggle('editing', editing); });
       document.querySelectorAll('.desktop-widget').forEach((widgetEl) => { widgetEl.classList.toggle('editing', editing); });
+      desktopEl.classList.toggle('silent-edit', silentEdit);
     }
 
     function bindDesktopEvents() {
       pagesEl.addEventListener('scroll', () => { currentPage = Math.round(pagesEl.scrollLeft / (pagesEl.clientWidth || 1)); updatePageDots(); }, { passive: true });
-      desktopEl.addEventListener('click', (event) => { if (!editing) return; if (event.target.closest('.desktop-icon, .desktop-widget, .dock')) return; editing = false; updateEditingClass(); });
+      desktopEl.addEventListener('click', (event) => { if (!editing) return; if (event.target.closest('.desktop-icon, .desktop-widget, .dock')) return; editing = false; silentEdit = false; updateEditingClass(); });
       window.addEventListener('resize', handleWindowResize);
       window.addEventListener('storage', async () => { await applyAllImages(); refreshBadges(); });
       window.addEventListener('desktop:refresh', async () => { loadTheme(); applyDesktopScale(); await applyCustomFontFromStorage(); await refreshDesktop(); });
@@ -2233,6 +2244,7 @@
       const app = APPS.find((item) => item.id === appId);
       if (!app) return;
       editing = false;
+      silentEdit = false;
       updateEditingClass();
       if (!app.ready || !app.module) { openPlaceholderApp(app); return; }
       try {
