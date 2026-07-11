@@ -45,7 +45,7 @@ function saveConfig(config) {
 
 const API_BASE = 'https://api.github.com';
 
-async function githubRequest(path, config) {
+async function githubRequest(path, config, options) {
   const headers = {
     'Accept': 'application/vnd.github+json',
     'X-GitHub-Api-Version': '2022-11-28'
@@ -54,9 +54,18 @@ async function githubRequest(path, config) {
     headers['Authorization'] = 'Bearer ' + config.token;
   }
 
+  const fetchOpts = { headers };
+  if (options && options.method) {
+    fetchOpts.method = options.method;
+    if (options.body) {
+      headers['Content-Type'] = 'application/json';
+      fetchOpts.body = JSON.stringify(options.body);
+    }
+  }
+
   let resp;
   try {
-    resp = await fetch(API_BASE + path, { headers });
+    resp = await fetch(API_BASE + path, fetchOpts);
   } catch (err) {
     throw new Error('网络请求失败，请检查网络连接');
   }
@@ -74,6 +83,14 @@ async function githubRequest(path, config) {
   if (resp.status === 404) {
     throw new Error('仓库或分支不存在，请检查 owner/repo/branch');
   }
+  if (resp.status === 409) {
+    throw new Error('提交冲突：文件已被修改，请刷新文件树后重试');
+  }
+  if (resp.status === 422) {
+    let detail = '';
+    try { const b = await resp.json(); detail = b && b.message ? b.message : ''; } catch (_) {}
+    throw new Error('请求参数有误' + (detail ? '：' + detail : ''));
+  }
   if (!resp.ok) {
     let msg = '请求失败 (HTTP ' + resp.status + ')';
     try {
@@ -83,7 +100,16 @@ async function githubRequest(path, config) {
     throw new Error(msg);
   }
 
-  return resp.json();
+  // 204 No Content 等无 body 场景
+  if (resp.status === 204) return null;
+  const text = await resp.text();
+  if (!text) return null;
+  try { return JSON.parse(text); } catch (_) { return null; }
+}
+
+// 路径按 / 分段编码，避免 / 被整体编码成 %2F
+function encodePathSegments(p) {
+  return String(p || '').split('/').map(function(seg) { return encodeURIComponent(seg); }).join('/');
 }
 
 // 读取文件树
@@ -97,11 +123,9 @@ async function fetchTree(config) {
 }
 
 // 读取文件内容
-async function fetchFile(config, fileSha) {
-  // 用 contents API 拿 base64
-  // fileSha 这里传 { path, sha }
+async function fetchFile(config, fileItem) {
   const path = '/repos/' + encodeURIComponent(config.owner) + '/' + encodeURIComponent(config.repo) +
-    '/contents/' + encodeURIComponent(fileSha.path) + '?ref=' + encodeURIComponent(config.branch);
+    '/contents/' + encodePathSegments(fileItem.path) + '?ref=' + encodeURIComponent(config.branch);
   const data = await githubRequest(path, config);
   return data;
 }
@@ -126,6 +150,80 @@ function decodeBase64Utf8(b64) {
   } catch (err) {
     return null;
   }
+}
+
+// 中文安全 base64 编码：先 UTF-8 字节再 base64，避免 btoa(plainText) 损坏中文
+function encodeBase64Utf8(text) {
+  const bytes = new TextEncoder().encode(text);
+  let bin = '';
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  return btoa(bin);
+}
+
+// ═══════════════════════════════════════
+// 【提交相关 API】分支创建 / 文件提交 / PR
+// ═══════════════════════════════════════
+
+// 生成安全的分支名：ai-phone/<safe-file-name>-<timestamp>
+function buildBranchName(filePath) {
+  const baseName = String(filePath || 'file').split('/').pop() || 'file';
+  const safe = baseName.replace(/[^a-zA-Z0-9._-]/g, '-').replace(/-+/g, '-').replace(/^[.-]+|[.-]+$/g, '') || 'file';
+  const ts = Date.now().toString(36);
+  return 'ai-phone/' + safe + '-' + ts;
+}
+
+// 读取 base branch 最新 sha
+async function fetchBaseBranchSha(config) {
+  const path = '/repos/' + encodeURIComponent(config.owner) + '/' + encodeURIComponent(config.repo) +
+    '/git/ref/heads/' + encodeURIComponent(config.branch);
+  const data = await githubRequest(path, config);
+  if (!data || !data.object || !data.object.sha) {
+    throw new Error('无法读取分支 ' + config.branch + ' 的最新提交');
+  }
+  return data.object.sha;
+}
+
+// 创建新分支，基于 baseSha
+async function createBranch(config, branchName, baseSha) {
+  const path = '/repos/' + encodeURIComponent(config.owner) + '/' + encodeURIComponent(config.repo) + '/git/refs';
+  const data = await githubRequest(path, config, {
+    method: 'POST',
+    body: { ref: 'refs/heads/' + branchName, sha: baseSha }
+  });
+  return data;
+}
+
+// PUT 文件内容到指定分支
+async function putFileContent(config, filePath, params) {
+  // params: { message, content(base64), branch, sha }
+  const path = '/repos/' + encodeURIComponent(config.owner) + '/' + encodeURIComponent(config.repo) +
+    '/contents/' + encodePathSegments(filePath);
+  const data = await githubRequest(path, config, {
+    method: 'PUT',
+    body: {
+      message: params.message,
+      content: params.content,
+      branch: params.branch,
+      sha: params.sha
+    }
+  });
+  return data;
+}
+
+// 创建 Pull Request
+async function createPullRequest(config, params) {
+  // params: { title, head, base, body }
+  const path = '/repos/' + encodeURIComponent(config.owner) + '/' + encodeURIComponent(config.repo) + '/pulls';
+  const data = await githubRequest(path, config, {
+    method: 'POST',
+    body: {
+      title: params.title,
+      head: params.head,
+      base: params.base,
+      body: params.body || '由小手机 GitHub 工具创建'
+    }
+  });
+  return data;
 }
 
 // ═══════════════════════════════════════
@@ -162,10 +260,24 @@ const STYLE_CSS = `
 .gh-viewer-sha { font-size: 11px; color: var(--text-tertiary, var(--text-secondary)); font-family: var(--font-mono, monospace); }
 .gh-viewer textarea { width: 100%; flex: 1; min-height: 200px; max-height: 50vh; padding: 12px; border-radius: 12px; background: var(--bg-card); color: var(--text-primary); font-family: var(--font-mono, monospace); font-size: 12px; line-height: 1.5; resize: none; border: 1px solid transparent; }
 .gh-viewer textarea:focus { border-color: var(--accent); }
+.gh-edit-textarea { min-height: 240px; max-height: 40vh; }
 .gh-back-row { display: flex; align-items: center; gap: 8px; }
 .gh-back-btn { background: var(--bg-card); color: var(--text-primary); padding: 6px 14px; border-radius: 10px; font-size: 13px; font-weight: 500; cursor: pointer; }
 .gh-back-btn:active { transform: scale(0.97); }
 .gh-hint { font-size: 11px; color: var(--text-tertiary, var(--text-secondary)); line-height: 1.4; }
+.gh-commit-field { display: flex; flex-direction: column; gap: 5px; }
+.gh-commit-field label { font-size: 12px; color: var(--text-secondary); font-weight: 500; }
+.gh-commit-field input { width: 100%; height: 38px; padding: 0 12px; border-radius: 10px; background: var(--bg-card); color: var(--text-primary); font-size: 13px; border: 1px solid transparent; }
+.gh-commit-field input:focus { border-color: var(--accent); }
+.gh-submit-btn { width: 100%; height: 44px; border-radius: 12px; font-size: 14px; font-weight: 600; display: flex; align-items: center; justify-content: center; cursor: pointer; background: var(--accent); color: var(--bubble-user-text); }
+.gh-submit-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.gh-submit-btn:active:not(:disabled) { transform: scale(0.97); }
+.gh-status { font-size: 12px; color: var(--text-secondary); padding: 8px 12px; border-radius: 10px; background: var(--bg-card); line-height: 1.5; }
+.gh-status-error { color: var(--accent); }
+.gh-status-success { color: var(--success, #34c759); }
+.gh-pr-link { display: inline-block; padding: 10px 14px; border-radius: 10px; background: var(--accent); color: var(--bubble-user-text); font-size: 13px; font-weight: 600; text-decoration: none; margin-top: 4px; word-break: break-all; }
+.gh-pr-link:active { transform: scale(0.97); }
+.gh-branch-info { font-size: 11px; color: var(--text-tertiary, var(--text-secondary)); font-family: var(--font-mono, monospace); word-break: break-all; }
 `;
 
 function injectStyle() {
@@ -233,7 +345,7 @@ function buildConfigView(config, onSave, onContinue) {
 
   const hint = document.createElement('div');
   hint.className = 'gh-hint';
-  hint.textContent = '不创建分支、不提交、不开 PR，仅读取。';
+  hint.textContent = '编辑文件后提交到新分支并自动创建 PR，不直接推 main。';
   wrap.appendChild(hint);
 
   saveBtn.addEventListener('click', function() {
@@ -378,22 +490,30 @@ function showFileViewer(config, fileItem, onBack) {
   hideBottomSheet();
   showBottomSheet(wrap);
 
+  // 文件状态：保留 path/sha/原始内容/编辑后内容
+  const fileState = {
+    path: fileItem.path,
+    sha: null,
+    originalText: '',
+    binary: isBinaryPath(fileItem.path)
+  };
+
   fetchFile(config, { path: fileItem.path }).then(function(data) {
     viewer.replaceChildren();
+    fileState.sha = data && data.sha ? data.sha : null;
 
-    // 记录 sha（后续提交会用，本轮不提交）
-    if (data && data.sha) {
+    if (fileState.sha) {
       const shaEl = document.createElement('div');
       shaEl.className = 'gh-viewer-sha';
-      shaEl.textContent = 'sha: ' + data.sha;
+      shaEl.textContent = 'sha: ' + fileState.sha;
       viewer.appendChild(shaEl);
     }
 
-    // 二进制文件不预览
-    if (isBinaryPath(fileItem.path)) {
+    // 二进制文件不预览也不可编辑
+    if (fileState.binary) {
       const hint = document.createElement('div');
       hint.className = 'gh-empty';
-      hint.textContent = '这是二进制文件，不适合预览～';
+      hint.textContent = '这是二进制文件，不适合预览和编辑～';
       viewer.appendChild(hint);
       return;
     }
@@ -422,10 +542,52 @@ function showFileViewer(config, fileItem, onBack) {
       return;
     }
 
+    fileState.originalText = text;
+
+    // 可编辑 textarea
     const ta = document.createElement('textarea');
-    ta.readOnly = true;
+    ta.className = 'gh-edit-textarea';
     ta.value = text;
     viewer.appendChild(ta);
+
+    // commit message 输入
+    const commitField = document.createElement('div');
+    commitField.className = 'gh-commit-field';
+    const commitLabel = document.createElement('label');
+    commitLabel.textContent = '提交说明';
+    const commitInput = document.createElement('input');
+    commitInput.type = 'text';
+    commitInput.placeholder = '留空将使用可爱默认说明～';
+    commitField.append(commitLabel, commitInput);
+    viewer.appendChild(commitField);
+
+    // 状态区
+    const statusEl = document.createElement('div');
+    statusEl.className = 'gh-status';
+    statusEl.style.display = 'none';
+    viewer.appendChild(statusEl);
+
+    // 提交按钮
+    const submitBtn = document.createElement('button');
+    submitBtn.type = 'button';
+    submitBtn.className = 'gh-submit-btn';
+    submitBtn.textContent = '提交到新分支并创建 PR';
+    submitBtn.disabled = true;
+    viewer.appendChild(submitBtn);
+
+    // 内容改动时启用提交按钮
+    function updateSubmitState() {
+      const changed = ta.value !== fileState.originalText;
+      submitBtn.disabled = !changed;
+    }
+    ta.addEventListener('input', updateSubmitState);
+
+    submitBtn.addEventListener('click', function() {
+      if (submitBtn.disabled) return;
+      const message = commitInput.value.trim() || ('更新 ' + fileState.path.split('/').pop() + ' ～');
+      commitAndCreatePR(config, fileState, ta.value, message, submitBtn, statusEl, commitInput);
+    });
+
   }).catch(function(err) {
     viewer.replaceChildren();
     const errEl = document.createElement('div');
@@ -433,6 +595,115 @@ function showFileViewer(config, fileItem, onBack) {
     errEl.textContent = err.message || '读取失败';
     viewer.appendChild(errEl);
   });
+}
+
+// ═══════════════════════════════════════
+// 【提交流程】创建分支 → 提交文件 → 创建 PR
+// ═══════════════════════════════════════
+
+async function commitAndCreatePR(config, fileState, newText, message, submitBtn, statusEl, commitInput) {
+  // 防重复提交
+  submitBtn.disabled = true;
+  commitInput.disabled = true;
+
+  function showStatus(text, type) {
+    statusEl.style.display = 'block';
+    statusEl.className = 'gh-status' + (type === 'error' ? ' gh-status-error' : type === 'success' ? ' gh-status-success' : '');
+    statusEl.textContent = text;
+  }
+
+  function fail(err) {
+    showStatus(err.message || '提交失败', 'error');
+    submitBtn.disabled = false;
+    commitInput.disabled = false;
+  }
+
+  try {
+    // 步骤 1: 读取 base branch 最新 sha
+    showStatus('正在读取分支信息…');
+    const baseSha = await fetchBaseBranchSha(config);
+
+    // 步骤 2: 创建新分支
+    showStatus('正在创建新分支…');
+    let branchName = buildBranchName(fileState.path);
+    let branchCreated = false;
+    try {
+      await createBranch(config, branchName, baseSha);
+      branchCreated = true;
+    } catch (err) {
+      // 分支已存在，加随机后缀重试一次
+      if (String(err.message).indexOf('already exists') !== -1 || String(err.message).indexOf('422') !== -1) {
+        branchName = branchName + '-' + Math.random().toString(36).slice(2, 6);
+        await createBranch(config, branchName, baseSha);
+        branchCreated = true;
+      } else {
+        throw err;
+      }
+    }
+
+    // 步骤 3: PUT 文件内容到新分支
+    showStatus('正在提交文件…');
+    const contentBase64 = encodeBase64Utf8(newText);
+    const putResult = await putFileContent(config, fileState.path, {
+      message: message,
+      content: contentBase64,
+      branch: branchName,
+      sha: fileState.sha
+    });
+
+    // 更新 sha
+    if (putResult && putResult.content && putResult.content.sha) {
+      fileState.sha = putResult.content.sha;
+    }
+
+    // 步骤 4: 创建 PR
+    showStatus('正在创建 Pull Request…');
+    let prUrl = null;
+    let prFailed = false;
+    try {
+      const pr = await createPullRequest(config, {
+        title: message,
+        head: branchName,
+        base: config.branch,
+        body: '由小手机 GitHub 工具创建'
+      });
+      prUrl = pr && pr.html_url ? pr.html_url : null;
+    } catch (prErr) {
+      prFailed = true;
+      // PR 创建失败但提交成功，提示用户手动开 PR
+      showStatus('文件已提交到分支 ' + branchName + '，但 PR 创建失败：' + (prErr.message || '未知错误') + '。请去 GitHub 手动创建 PR。', 'error');
+      const branchInfo = document.createElement('div');
+      branchInfo.className = 'gh-branch-info';
+      branchInfo.textContent = '分支: ' + branchName;
+      statusEl.appendChild(branchInfo);
+      // 提交成功后更新原始内容，允许继续编辑
+      fileState.originalText = newText;
+      commitInput.disabled = false;
+      return;
+    }
+
+    // 成功
+    if (prUrl) {
+      showStatus('提交成功！PR 已创建：', 'success');
+      const link = document.createElement('a');
+      link.className = 'gh-pr-link';
+      link.href = prUrl;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      link.textContent = prUrl;
+      statusEl.appendChild(link);
+    } else {
+      showStatus('提交成功，但未获取到 PR 链接。分支: ' + branchName, 'success');
+    }
+
+    // 提交成功后更新原始内容，禁用提交按钮直到再次修改
+    fileState.originalText = newText;
+    submitBtn.disabled = true;
+    commitInput.disabled = false;
+
+  } catch (err) {
+    fail(err);
+  }
 }
 
 // ═══════════════════════════════════════
