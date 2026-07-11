@@ -1975,10 +1975,13 @@
         cleanup();
         if (!moved) return;
 
-        // 用手指松手时的视口 X 判断目标页
+        // 滞回判断目标页：startPage 为 pointerdown 时记录的起始页
+        // 从第一页拖出需 > 0.6 才落第二页；从第二页拖回需 < 0.4 才落第一页；否则回原页
         const lastCenterX = parseFloat(element.style.left || '0') + itemW / 2;
         const pageWidth = pagesEl.clientWidth || window.innerWidth;
-        const targetPage = lastCenterX > pageWidth * 0.5 ? 1 : 0;
+        let targetPage = startPage;
+        if (startPage === 0 && lastCenterX > pageWidth * 0.6) targetPage = 1;
+        else if (startPage === 1 && lastCenterX < pageWidth * 0.4) targetPage = 0;
 
         const targetLayer = getLayer(targetPage);
         // 恢复 absolute 定位
